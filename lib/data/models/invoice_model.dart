@@ -14,6 +14,7 @@ class InvoiceModel extends InvoiceEntity {
     required super.issuedDate,
     required super.createdAt,
     required super.updatedAt,
+    required super.type,
     super.imagePath,
     super.ocrConfidence,
   });

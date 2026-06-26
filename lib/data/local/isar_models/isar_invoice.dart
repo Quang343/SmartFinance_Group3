@@ -31,6 +31,9 @@ class IsarInvoice {
   double? ocrConfidence;
 
   @Index()
+  late String type;
+
+  @Index()
   late DateTime issuedDate;
 
   late DateTime createdAt;

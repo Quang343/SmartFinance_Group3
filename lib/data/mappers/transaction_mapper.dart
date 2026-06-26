@@ -6,10 +6,16 @@ class TransactionMapper {
     return TransactionEntity(
       id: model.uid,
       amount: model.amount,
-      type: TransactionType.values.byName(model.type),
+      type: TransactionType.values.firstWhere(
+        (e) => e.name == model.type,
+        orElse: () => TransactionType.expense,
+      ),
       categoryId: model.categoryId,
       transactionDate: model.transactionDate,
-      status: TransactionStatus.values.byName(model.status),
+      status: TransactionStatus.values.firstWhere(
+        (e) => e.name == model.status,
+        orElse: () => TransactionStatus.draft,
+      ),
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
       note: model.note,

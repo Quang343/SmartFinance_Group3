@@ -12,10 +12,17 @@ class InvoiceMapper {
       vatRate: model.vatRate,
       vatAmount: model.vatAmount,
       totalAmount: model.totalAmount,
-      ocrStatus: OcrStatus.values.byName(model.ocrStatus),
+      ocrStatus: OcrStatus.values.firstWhere(
+        (e) => e.name == model.ocrStatus,
+        orElse: () => OcrStatus.notStarted,
+      ),
       issuedDate: model.issuedDate,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
+      type: InvoiceType.values.firstWhere(
+        (e) => e.name == model.type,
+        orElse: () => InvoiceType.incoming,
+      ),
       imagePath: model.imagePath,
       ocrConfidence: model.ocrConfidence,
     );
@@ -34,6 +41,7 @@ class InvoiceMapper {
       ..imagePath = entity.imagePath
       ..ocrStatus = entity.ocrStatus.name
       ..ocrConfidence = entity.ocrConfidence
+      ..type = entity.type.name
       ..issuedDate = entity.issuedDate
       ..createdAt = entity.createdAt
       ..updatedAt = entity.updatedAt;

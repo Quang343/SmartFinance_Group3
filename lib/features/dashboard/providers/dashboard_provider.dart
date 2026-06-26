@@ -1,15 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/providers/app_providers.dart';
-import '../../domain/entities/report_summary_entity.dart';
+import '../../../core/providers/app_providers.dart';
+import '../../../domain/entities/report_summary_entity.dart';
+import '../../../domain/entities/transaction_entity.dart';
 
 final dashboardProvider = FutureProvider<ReportSummaryEntity>((ref) async {
   final repo = ref.watch(transactionRepositoryProvider);
-  final transactions = await repo.getConfirmed();
+  final List<TransactionEntity> transactions = await repo.getConfirmed();
   
   int income = 0;
   int expense = 0;
   for (final t in transactions) {
-    if (t.type.name == 'income') {
+    if (t.type == TransactionType.income) {
       income += t.amount;
     } else {
       expense += t.amount;

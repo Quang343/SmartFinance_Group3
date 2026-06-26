@@ -67,23 +67,28 @@ const IsarInvoiceSchema = CollectionSchema(
       name: r'totalAmount',
       type: IsarType.long,
     ),
-    r'uid': PropertySchema(
+    r'type': PropertySchema(
       id: 10,
+      name: r'type',
+      type: IsarType.string,
+    ),
+    r'uid': PropertySchema(
+      id: 11,
       name: r'uid',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'vatAmount': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'vatAmount',
       type: IsarType.long,
     ),
     r'vatRate': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'vatRate',
       type: IsarType.long,
     )
@@ -146,6 +151,19 @@ const IsarInvoiceSchema = CollectionSchema(
         )
       ],
     ),
+    r'type': IndexSchema(
+      id: 5117122708147080838,
+      name: r'type',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'type',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
     r'issuedDate': IndexSchema(
       id: 5154051486524315182,
       name: r'issuedDate',
@@ -184,6 +202,7 @@ int _isarInvoiceEstimateSize(
   bytesCount += 3 + object.ocrStatus.length * 3;
   bytesCount += 3 + object.partnerName.length * 3;
   bytesCount += 3 + object.partnerTaxCode.length * 3;
+  bytesCount += 3 + object.type.length * 3;
   bytesCount += 3 + object.uid.length * 3;
   return bytesCount;
 }
@@ -204,10 +223,11 @@ void _isarInvoiceSerialize(
   writer.writeString(offsets[7], object.partnerTaxCode);
   writer.writeLong(offsets[8], object.subtotal);
   writer.writeLong(offsets[9], object.totalAmount);
-  writer.writeString(offsets[10], object.uid);
-  writer.writeDateTime(offsets[11], object.updatedAt);
-  writer.writeLong(offsets[12], object.vatAmount);
-  writer.writeLong(offsets[13], object.vatRate);
+  writer.writeString(offsets[10], object.type);
+  writer.writeString(offsets[11], object.uid);
+  writer.writeDateTime(offsets[12], object.updatedAt);
+  writer.writeLong(offsets[13], object.vatAmount);
+  writer.writeLong(offsets[14], object.vatRate);
 }
 
 IsarInvoice _isarInvoiceDeserialize(
@@ -228,10 +248,11 @@ IsarInvoice _isarInvoiceDeserialize(
   object.partnerTaxCode = reader.readString(offsets[7]);
   object.subtotal = reader.readLong(offsets[8]);
   object.totalAmount = reader.readLong(offsets[9]);
-  object.uid = reader.readString(offsets[10]);
-  object.updatedAt = reader.readDateTime(offsets[11]);
-  object.vatAmount = reader.readLong(offsets[12]);
-  object.vatRate = reader.readLong(offsets[13]);
+  object.type = reader.readString(offsets[10]);
+  object.uid = reader.readString(offsets[11]);
+  object.updatedAt = reader.readDateTime(offsets[12]);
+  object.vatAmount = reader.readLong(offsets[13]);
+  object.vatRate = reader.readLong(offsets[14]);
   return object;
 }
 
@@ -265,10 +286,12 @@ P _isarInvoiceDeserializeProp<P>(
     case 10:
       return (reader.readString(offset)) as P;
     case 11:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 12:
-      return (reader.readLong(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 13:
+      return (reader.readLong(offset)) as P;
+    case 14:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -656,6 +679,51 @@ extension IsarInvoiceQueryWhere
               indexName: r'ocrStatus',
               lower: [],
               upper: [ocrStatus],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterWhereClause> typeEqualTo(
+      String type) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'type',
+        value: [type],
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterWhereClause> typeNotEqualTo(
+      String type) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'type',
+              lower: [],
+              upper: [type],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'type',
+              lower: [type],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'type',
+              lower: [type],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'type',
+              lower: [],
+              upper: [type],
               includeUpper: false,
             ));
       }
@@ -1814,6 +1882,137 @@ extension IsarInvoiceQueryFilter
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'type',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'type',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'type',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> typeIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'type',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      typeIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'type',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> uidEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -2243,6 +2442,18 @@ extension IsarInvoiceQuerySortBy
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> sortByType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'type', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> sortByTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'type', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> sortByUid() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'uid', Sort.asc);
@@ -2429,6 +2640,18 @@ extension IsarInvoiceQuerySortThenBy
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> thenByType() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'type', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> thenByTypeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'type', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> thenByUid() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'uid', Sort.asc);
@@ -2547,6 +2770,13 @@ extension IsarInvoiceQueryWhereDistinct
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QDistinct> distinctByType(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'type', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QDistinct> distinctByUid(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2638,6 +2868,12 @@ extension IsarInvoiceQueryProperty
   QueryBuilder<IsarInvoice, int, QQueryOperations> totalAmountProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'totalAmount');
+    });
+  }
+
+  QueryBuilder<IsarInvoice, String, QQueryOperations> typeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'type');
     });
   }
 

@@ -92,6 +92,7 @@ class IsarSeedService {
         ..totalAmount = 2750000
         ..ocrStatus = 'extracted'
         ..ocrConfidence = 0.95
+        ..type = 'incoming'
         ..issuedDate = DateTime.now()
         ..createdAt = DateTime.now()
         ..updatedAt = DateTime.now(),
@@ -106,6 +107,7 @@ class IsarSeedService {
         ..totalAmount = 540000
         ..ocrStatus = 'extracted'
         ..ocrConfidence = 0.88
+        ..type = 'outgoing'
         ..issuedDate = DateTime.now()
         ..createdAt = DateTime.now()
         ..updatedAt = DateTime.now(),

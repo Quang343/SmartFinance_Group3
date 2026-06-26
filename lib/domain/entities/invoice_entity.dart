@@ -1,5 +1,7 @@
 enum OcrStatus { notStarted, imageSelected, scanning, extracted, failed }
 
+enum InvoiceType { incoming, outgoing }
+
 class InvoiceEntity {
   final String id;
   final String invoiceNumber;
@@ -15,6 +17,7 @@ class InvoiceEntity {
   final DateTime issuedDate;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final InvoiceType type;
 
   const InvoiceEntity({
     required this.id,
@@ -29,7 +32,9 @@ class InvoiceEntity {
     required this.issuedDate,
     required this.createdAt,
     required this.updatedAt,
+    required this.type,
     this.imagePath,
     this.ocrConfidence,
   });
 }
+

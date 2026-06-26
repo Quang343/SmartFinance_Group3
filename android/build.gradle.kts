@@ -19,6 +19,26 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    if (!state.executed) {
+        afterEvaluate {
+            val android = extensions.findByName("android") as? com.android.build.gradle.BaseExtension
+            if (android != null) {
+                android.compileSdkVersion(34)
+                if (android.namespace == null) {
+                    android.namespace = "dev.isar." + name.replace("-", "_").replace(".", "_")
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
