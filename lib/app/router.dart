@@ -22,6 +22,7 @@ import '../features/reports/presentation/report_detail_screen.dart';
 import '../features/categories/presentation/category_management_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
+import '../features/notifications/presentation/notification_screen.dart';
 import '../core/widgets/responsive_layout.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -62,6 +63,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        name: RouteNames.notifications,
+        builder: (context, state) => const NotificationScreen(),
       ),
       ShellRoute(
         navigatorKey: shellNavigatorKey,

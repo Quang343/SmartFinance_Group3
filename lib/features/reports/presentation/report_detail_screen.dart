@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
+import 'package:smart_finance/domain/entities/category_entity.dart';
+import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 
 class ReportDetailScreen extends ConsumerWidget {
   final String reportType; // 'income' or 'expense'
@@ -12,91 +15,293 @@ class ReportDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final isIncome = reportType == 'income';
-    final transactionsAsync = ref.watch(transactionRepositoryProvider);
+    final transactionsRepo = ref.watch(transactionRepositoryProvider);
+    final categoriesRepo = ref.watch(categoryRepositoryProvider);
+
+    // Fetch transactions and categories in parallel to map UUIDs
+    final dataFuture = Future.wait([
+      transactionsRepo.getAll(),
+      categoriesRepo.getAll(),
+    ]);
+
+    // Curated color palette for sections
+    final incomeColors = [
+      const Color(0xFF00D09E),
+      const Color(0xFF34D399),
+      const Color(0xFF059669),
+      const Color(0xFF10B981),
+      const Color(0xFF0284C7),
+    ];
+
+    final expenseColors = [
+      const Color(0xFFEF4444),
+      const Color(0xFFF87171),
+      const Color(0xFFDC2626),
+      const Color(0xFFB91C1C),
+      const Color(0xFFF97316),
+    ];
+
+    final colors = isIncome ? incomeColors : expenseColors;
 
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
       appBar: AppBar(
-        title: Text(isIncome ? 'Breakdown Doanh thu' : 'Breakdown Chi phí'),
+        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+        elevation: 0,
+        centerTitle: false,
+        titleSpacing: 0,
+        leading: Center(
+          child: ScaleOnTap(
+            onTap: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                context.go('/reports');
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0D281E) : Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  if (!isDark)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
+                border: Border.all(
+                  color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+        title: ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            colors: isIncome ? [const Color(0xFF00D09E), const Color(0xFF34D399)] : [const Color(0xFFEF4444), const Color(0xFFF87171)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(bounds),
+          child: Text(
+            isIncome ? 'Chi tiết Doanh thu' : 'Chi tiết Chi phí',
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              fontSize: 22,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
       ),
-      body: FutureBuilder<List<TransactionEntity>>(
-        future: transactionsAsync.getAll(),
+      body: FutureBuilder<List<dynamic>>(
+        future: dataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator(color: isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444)));
           }
           if (snapshot.hasError || !snapshot.hasData) {
-            return const Center(child: Text('Đã xảy ra lỗi khi tải dữ liệu.'));
+            return Center(
+              child: Text(
+                'Đã xảy ra lỗi khi tải dữ liệu.',
+                style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
+              ),
+            );
           }
 
-          final list = snapshot.data!
+          final allTxs = snapshot.data![0] as List<TransactionEntity>;
+          final allCats = snapshot.data![1] as List<CategoryEntity>;
+          
+          final categoryMap = {for (var c in allCats) c.id: c.name};
+
+          final list = allTxs
               .where((tx) =>
                   tx.type == (isIncome ? TransactionType.income : TransactionType.expense) &&
                   tx.status == TransactionStatus.confirmed)
               .toList();
 
           if (list.isEmpty) {
-            return const Center(child: Text('Không có dữ liệu giao dịch.'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.bar_chart_rounded,
+                    size: 64,
+                    color: isDark ? Colors.white24 : Colors.black12,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Không có dữ liệu giao dịch.',
+                    style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: 15),
+                  ),
+                ],
+              ),
+            );
           }
 
           // Calculate totals per category
           final Map<String, int> categoryTotals = {};
           int totalSum = 0;
           for (var tx in list) {
-            categoryTotals[tx.categoryId] = (categoryTotals[tx.categoryId] ?? 0) + tx.amount;
-            totalSum += tx.amount;
+            categoryTotals[tx.categoryId] = (categoryTotals[tx.categoryId] ?? 0) + tx.amount.toInt();
+            totalSum += tx.amount.toInt();
           }
 
-          final pieSections = categoryTotals.entries.map((entry) {
-            final percentage = totalSum > 0 ? (entry.value / totalSum * 100) : 0;
-            return PieChartSectionData(
-              value: entry.value.toDouble(),
-              title: '${percentage.toStringAsFixed(1)}%',
-              color: isIncome
-                  ? Colors.greenAccent.shade700.withBlue(100 + entry.key.hashCode % 100)
-                  : Colors.redAccent.withGreen(100 + entry.key.hashCode % 100),
-              radius: 60,
-              titleStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+          int colorIndex = 0;
+          final List<PieChartSectionData> pieSections = [];
+          
+          categoryTotals.forEach((catId, amount) {
+            final percentage = totalSum > 0 ? (amount / totalSum * 100) : 0;
+            final color = colors[colorIndex % colors.length];
+            colorIndex++;
+
+            pieSections.add(
+              PieChartSectionData(
+                value: amount.toDouble(),
+                title: '${percentage.toStringAsFixed(1)}%',
+                color: color,
+                radius: 50,
+                titleStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             );
-          }).toList();
+          });
 
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(20),
             children: [
-              SizedBox(
-                height: 220,
-                child: PieChart(
-                  PieChartData(
-                    sections: pieSections,
-                    centerSpaceRadius: 40,
-                    sectionsSpace: 2,
+              // Chart Card
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 180,
+                      child: PieChart(
+                        PieChartData(
+                          sections: pieSections,
+                          centerSpaceRadius: 44,
+                          sectionsSpace: 3,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Tổng ${isIncome ? "doanh thu" : "chi phí"}: ${currencyFormatter.format(totalSum)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: isDark ? Colors.white : const Color(0xFF093021),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
+              
               Text(
                 'Tổng quan theo Danh mục',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: isDark ? Colors.white : const Color(0xFF093021),
+                ),
               ),
-              const Divider(height: 24),
+              const SizedBox(height: 8),
+              Divider(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
+              const SizedBox(height: 8),
+
+              // Category item lists in styled containers
               ...categoryTotals.entries.map((entry) {
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isIncome ? Colors.green.shade50 : Colors.red.shade50,
-                    child: Icon(
-                      isIncome ? Icons.trending_up : Icons.trending_down,
-                      color: isIncome ? Colors.green : Colors.red,
+                final catName = categoryMap[entry.key] ?? 'Chưa phân loại';
+                final percentage = totalSum > 0 ? (entry.value / totalSum * 100) : 0.0;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  title: Text(entry.key.replaceAll('cat_', '').toUpperCase()),
-                  trailing: Text(
-                    currencyFormatter.format(entry.value),
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: (isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444)).withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                          color: isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              catName,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF093021),
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Chiếm ${percentage.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                color: isDark ? Colors.white38 : Colors.black45,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        currencyFormatter.format(entry.value),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }),

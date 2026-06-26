@@ -1,192 +1,330 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
+import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
   final String invoiceId;
 
   const InvoiceDetailScreen({super.key, required this.invoiceId});
 
+  String _getOcrStatusText(OcrStatus status) {
+    switch (status) {
+      case OcrStatus.notStarted:
+        return 'Chưa bắt đầu';
+      case OcrStatus.imageSelected:
+        return 'Đã chọn ảnh';
+      case OcrStatus.scanning:
+        return 'Đang quét';
+      case OcrStatus.extracted:
+        return 'Đã trích xuất';
+      case OcrStatus.failed:
+        return 'Quét thất bại';
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
     final invoiceRepository = ref.watch(invoiceRepositoryProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chi tiết hóa đơn'),
-      ),
-      body: FutureBuilder<InvoiceEntity?>(
-        future: invoiceRepository.getById(invoiceId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
-            return const Center(
-              child: Text('Không tìm thấy hóa đơn hoặc có lỗi xảy ra.'),
-            );
-          }
+    return FutureBuilder<InvoiceEntity?>(
+      future: invoiceRepository.getById(invoiceId),
+      builder: (context, snapshot) {
+        final invoice = snapshot.data;
+        final isIncoming = invoice?.type != InvoiceType.outgoing; // default to true if loading
 
-          final invoice = snapshot.data!;
-          final isIncoming = invoice.type == InvoiceType.incoming;
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header card
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            elevation: 0,
+            centerTitle: false,
+            titleSpacing: 0,
+            leading: Center(
+              child: ScaleOnTap(
+                onTap: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    context.go(isIncoming ? '/invoices/incoming' : '/invoices/outgoing');
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0D281E) : Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      if (!isDark)
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                    ],
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                      width: 1,
+                    ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                    size: 16,
+                  ),
+                ),
+              ),
+            ),
+            title: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFF00D09E), Color(0xFF34D399)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: const Text(
+                'Chi tiết hóa đơn',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  fontSize: 22,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            actions: [
+              if (invoice != null && invoice.type == InvoiceType.outgoing)
+                Center(
+                  child: ScaleOnTap(
+                    onTap: () => context.push('/invoices/outgoing/preview'),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 20),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D281E) : Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          if (!isDark)
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                        ],
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.picture_as_pdf_rounded,
+                        color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          body: snapshot.connectionState == ConnectionState.waiting
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E)))
+              : invoice == null
+                  ? Center(
+                      child: Text(
+                        'Không tìm thấy hóa đơn hoặc có lỗi xảy ra.',
+                        style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Header Receipt Card
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        isIncoming ? 'Hóa đơn đầu vào' : 'Hóa đơn đầu ra',
+                                        style: TextStyle(
+                                          color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isDark 
+                                            ? (isIncoming ? const Color(0xFF431407) : const Color(0xFF064E3B)) 
+                                            : (isIncoming ? const Color(0xFFFFF7ED) : const Color(0xFFECFDF5)),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        _getOcrStatusText(invoice.ocrStatus).toUpperCase(),
+                                        style: TextStyle(
+                                          color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Số: ${invoice.invoiceNumber}',
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white : const Color(0xFF093021),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  currencyFormatter.format(invoice.totalAmount),
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w800,
+                                    color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Detail Fields Card
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Thông tin chung',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                    color: isDark ? Colors.white : const Color(0xFF093021),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Divider(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
+                                const SizedBox(height: 8),
+                                _DetailRow(
+                                  label: 'Đối tác',
+                                  value: invoice.partnerName,
+                                ),
+                                _DetailRow(
+                                  label: 'Mã số thuế đối tác',
+                                  value: invoice.partnerTaxCode,
+                                ),
+                                _DetailRow(
+                                  label: 'Ngày phát hành',
+                                  value: dateFormatter.format(invoice.issuedDate),
+                                ),
+                                _DetailRow(
+                                  label: 'Tiền trước thuế',
+                                  value: currencyFormatter.format(invoice.subtotal),
+                                ),
+                                _DetailRow(
+                                  label: 'Thuế suất VAT',
+                                  value: '${invoice.vatRate}%',
+                                ),
+                                _DetailRow(
+                                  label: 'Tiền thuế VAT',
+                                  value: currencyFormatter.format(invoice.vatAmount),
+                                ),
+                                if (invoice.ocrConfidence != null)
+                                  _DetailRow(
+                                    label: 'Độ tin cậy OCR',
+                                    value: '${(invoice.ocrConfidence! * 100).toStringAsFixed(1)}%',
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Image View Section
+                          if (invoice.imagePath != null && invoice.imagePath!.isNotEmpty) ...[
                             Text(
-                              isIncoming ? 'Hóa đơn đầu vào (Incoming)' : 'Hóa đơn đầu ra (Outgoing)',
+                              'Ảnh hóa đơn đính kèm',
                               style: TextStyle(
-                                color: isIncoming ? Colors.orange : Colors.green,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
+                                color: isDark ? Colors.white : const Color(0xFF093021),
                               ),
                             ),
+                            const SizedBox(height: 12),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
+                              height: 280,
                               decoration: BoxDecoration(
-                                color: isIncoming ? Colors.orange.shade50 : Colors.green.shade50,
+                                color: isDark ? const Color(0xFF0D251C) : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                                ),
                               ),
-                              child: Text(
-                                invoice.ocrStatus.name.toUpperCase(),
-                                style: TextStyle(
-                                  color: isIncoming ? Colors.orange : Colors.green,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(20),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.image_outlined,
+                                    size: 64,
+                                    color: Colors.grey,
+                                  ),
                                 ),
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          invoice.invoiceNumber,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          currencyFormatter.format(invoice.totalAmount),
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blueAccent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Detail fields
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Thông tin chung',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                        const Divider(height: 24),
-                        _DetailRow(
-                          label: 'Đối tác',
-                          value: invoice.partnerName,
-                        ),
-                        _DetailRow(
-                          label: 'Mã số thuế đối tác',
-                          value: invoice.partnerTaxCode,
-                        ),
-                        _DetailRow(
-                          label: 'Ngày phát hành',
-                          value: dateFormatter.format(invoice.issuedDate),
-                        ),
-                        _DetailRow(
-                          label: 'Tiền trước thuế',
-                          value: currencyFormatter.format(invoice.subtotal),
-                        ),
-                        _DetailRow(
-                          label: 'Thuế suất VAT',
-                          value: '${invoice.vatRate}%',
-                        ),
-                        _DetailRow(
-                          label: 'Tiền thuế VAT',
-                          value: currencyFormatter.format(invoice.vatAmount),
-                        ),
-                        if (invoice.ocrConfidence != null)
-                          _DetailRow(
-                            label: 'Độ tin cậy OCR',
-                            value: '${(invoice.ocrConfidence! * 100).toStringAsFixed(1)}%',
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Image view if available
-                if (invoice.imagePath != null && invoice.imagePath!.isNotEmpty) ...[
-                  const Text(
-                    'Ảnh hóa đơn đã chụp / tải lên',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      height: 250,
-                      color: Colors.grey.shade100,
-                      child: const Center(
-                        child: Icon(
-                          Icons.image,
-                          size: 64,
-                          color: Colors.grey,
-                        ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
+        );
+      },
     );
   }
 }
@@ -199,6 +337,8 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -209,15 +349,24 @@ class _DetailRow extends StatelessWidget {
             flex: 2,
             child: Text(
               label,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+              style: TextStyle(
+                color: isDark ? Colors.white60 : Colors.black54, 
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 3,
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+              style: TextStyle(
+                fontWeight: FontWeight.bold, 
+                fontSize: 15,
+                color: isDark ? Colors.white : const Color(0xFF093021),
+              ),
             ),
           ),
         ],

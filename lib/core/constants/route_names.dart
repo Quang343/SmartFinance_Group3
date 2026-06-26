@@ -16,4 +16,5 @@ class RouteNames {
   static const String settings = 'settings';
   static const String profile = 'profile';
   static const String register = 'register';
+  static const String notifications = 'notifications';
 }
