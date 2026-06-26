@@ -20,7 +20,7 @@ class _SplashScreenState extends State<SplashScreen> {
     // Wait for splash timeout
     await Future.delayed(const Duration(milliseconds: 2200));
     if (mounted) {
-      context.go('/welcome');
+      context.go('/onboarding');
     }
   }
 

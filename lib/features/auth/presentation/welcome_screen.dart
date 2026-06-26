@@ -12,10 +12,14 @@ class WelcomeScreen extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     // Harmonious Spendly Green palette colors
-    final Color primaryColor = theme.colorScheme.primary; 
-    final Color bgWelcomeColor = isDark ? const Color(0xFF06150F) : const Color(0xFFF4FBF7);
+    final Color primaryColor = theme.colorScheme.primary;
+    final Color bgWelcomeColor = isDark
+        ? const Color(0xFF06150F)
+        : const Color(0xFFF4FBF7);
     final Color textColor = isDark ? Colors.white : const Color(0xFF0A231A);
-    final Color buttonRegisterBg = isDark ? const Color(0xFF0C251C) : const Color(0xFFE2F6EE);
+    final Color buttonRegisterBg = isDark
+        ? const Color(0xFF0C251C)
+        : const Color(0xFFE2F6EE);
 
     return Scaffold(
       backgroundColor: bgWelcomeColor,
@@ -23,18 +27,16 @@ class WelcomeScreen extends StatelessWidget {
         child: SingleChildScrollView(
           child: Container(
             constraints: const BoxConstraints(maxWidth: 450),
-            padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 48.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 32.0,
+              vertical: 48.0,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 1. App Logo (Custom Painted FinSmart Logo)
-                Center(
-                  child: FinSmartLogo(
-                    size: 130,
-                    color: primaryColor,
-                  ),
-                ),
+                Center(child: FinSmartLogo(size: 130, color: primaryColor)),
                 const SizedBox(height: 20),
 
                 // 2. App Name
@@ -86,7 +88,7 @@ class WelcomeScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Colors.black,
                         ),
                       ),
                     ),
@@ -105,13 +107,13 @@ class WelcomeScreen extends StatelessWidget {
                       color: buttonRegisterBg,
                       borderRadius: BorderRadius.circular(30),
                     ),
-                    child: Center(
+                    child: const Center(
                       child: Text(
                         'Đăng ký tài khoản',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: primaryColor,
+                          color: Colors.black,
                         ),
                       ),
                     ),
@@ -125,7 +127,9 @@ class WelcomeScreen extends StatelessWidget {
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: const Text('Tính năng khôi phục mật khẩu đang được phát triển.'),
+                          content: const Text(
+                            'Tính năng khôi phục mật khẩu đang được phát triển.',
+                          ),
                           backgroundColor: primaryColor,
                         ),
                       );
@@ -133,7 +137,9 @@ class WelcomeScreen extends StatelessWidget {
                     child: Text(
                       'Quên mật khẩu?',
                       style: TextStyle(
-                        color: isDark ? Colors.white60 : Colors.grey.shade600,
+                        color: isDark
+                            ? const Color.fromARGB(153, 18, 12, 12)
+                            : Colors.grey.shade600,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
