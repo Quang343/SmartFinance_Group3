@@ -1,58 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/providers/role_provider.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
-class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({super.key});
 
   @override
-  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'manager@smartfinance.com');
-  final _passwordController = TextEditingController(text: '******');
-  UserRole _selectedRole = UserRole.financeManager;
-  bool _obscurePassword = true;
+  final _emailController = TextEditingController();
 
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
-  void _onRoleChanged(UserRole role) {
-    setState(() {
-      _selectedRole = role;
-      switch (role) {
-        case UserRole.financeManager:
-          _emailController.text = 'manager@smartfinance.com';
-          break;
-        case UserRole.expenseAccountant:
-          _emailController.text = 'expense@smartfinance.com';
-          break;
-        case UserRole.revenueAccountant:
-          _emailController.text = 'revenue@smartfinance.com';
-          break;
-      }
-    });
-  }
-
-  void _handleLogin() {
+  void _handleResetPassword() {
     if (_formKey.currentState!.validate()) {
-      ref.read(roleProvider.notifier).state = _selectedRole;
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Đăng nhập thành công với vai trò: ${_selectedRole.nameVi}'),
+          content: Text('Yêu cầu khôi phục mật khẩu đã được gửi đến: ${_emailController.text}'),
           backgroundColor: Colors.green,
         ),
       );
-      context.go('/dashboard');
+      context.go('/login');
     }
   }
 
@@ -96,13 +71,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
-                          Icons.analytics_outlined,
+                          Icons.lock_reset,
                           size: 96,
                           color: primaryColor,
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          'Hệ thống quản lý tài chính doanh nghiệp B2B',
+                          'Khôi phục tài khoản của bạn',
                           style: theme.textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: isDark ? Colors.white : const Color(0xFF1A1A2E),
@@ -110,7 +85,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Theo dõi dòng tiền, quét hóa đơn thông minh bằng công nghệ OCR và lập báo cáo tài chính chuyên nghiệp.',
+                          'Nhập email đã đăng ký của bạn để bắt đầu quá trình khôi phục mật khẩu nhanh chóng và an toàn.',
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: isDark ? Colors.white60 : Colors.black54,
                             height: 1.5,
@@ -123,7 +98,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
 
-          // Main Login UI Frame (Desktop gets standard width, Mobile gets full screen)
+          // Main Forgot Password UI Frame
           Expanded(
             flex: size.width >= 900 ? 0 : 1,
             child: Container(
@@ -131,7 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               color: topBgColor,
               child: Column(
                 children: [
-                  // Top Header ("Welcome" text)
+                  // Top Header ("Quên mật khẩu" text)
                   Container(
                     height: size.height * 0.25,
                     width: double.infinity,
@@ -139,11 +114,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: SafeArea(
                       bottom: false,
                       child: Text(
-                        'Chào mừng',
+                        'Quên mật khẩu',
                         style: theme.textTheme.headlineLarge?.copyWith(
                           color: textColorDark,
                           fontWeight: FontWeight.w800,
-                          fontSize: 36,
+                          fontSize: 32,
                         ),
                       ),
                     ),
@@ -167,86 +142,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // 1. Vai trò Label & Dropdown
+                              // Subtitle & Instruction text
                               Text(
-                                'Vai trò truy cập',
-                                style: TextStyle(
+                                'Đặt lại mật khẩu?',
+                                style: theme.textTheme.headlineSmall?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: labelColor,
-                                  fontSize: 15,
+                                  color: isDark ? Colors.white : textColorDark,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              PopupMenuButton<UserRole>(
-                                position: PopupMenuPosition.under,
-                                offset: const Offset(0, 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                color: bottomCardColor,
-                                elevation: 8,
-                                onSelected: _onRoleChanged,
-                                constraints: BoxConstraints(
-                                  minWidth: MediaQuery.of(context).size.width >= 900 ? 436 : MediaQuery.of(context).size.width - 64,
-                                ),
-                                itemBuilder: (context) {
-                                  return UserRole.values.map((role) {
-                                    return PopupMenuItem<UserRole>(
-                                      value: role,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            role == UserRole.financeManager
-                                                ? Icons.account_balance_wallet
-                                                : role == UserRole.expenseAccountant
-                                                    ? Icons.receipt_long
-                                                    : Icons.payments,
-                                            color: labelColor,
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            role.nameVi,
-                                            style: TextStyle(
-                                              color: isDark ? Colors.white : Colors.black87,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                  decoration: BoxDecoration(
-                                    color: inputFillColor,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.badge_outlined, color: labelColor),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          _selectedRole.nameVi,
-                                          style: TextStyle(
-                                            color: isDark ? Colors.white : Colors.black87,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 15,
-                                          ),
-                                        ),
-                                      ),
-                                      Icon(Icons.keyboard_arrow_down_rounded, color: labelColor),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-
-                              // 2. Email/Username Label & Textfield
+                              const SizedBox(height: 12),
                               Text(
-                                'Tên đăng nhập hoặc Email',
+                                'Vui lòng nhập địa chỉ email đã đăng ký của bạn. Chúng tôi sẽ gửi hướng dẫn khôi phục mật khẩu qua email.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isDark ? Colors.white60 : Colors.black54,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 36),
+
+                              // Email Input field
+                              Text(
+                                'Nhập địa chỉ Email',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: labelColor,
@@ -256,6 +173,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               const SizedBox(height: 8),
                               TextFormField(
                                 controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
                                 decoration: InputDecoration(
                                   hintText: 'example@example.com',
                                   hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black38),
@@ -270,59 +188,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 style: TextStyle(color: isDark ? Colors.white : Colors.black),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
-                                    return 'Vui lòng nhập tên đăng nhập hoặc email';
+                                    return 'Vui lòng nhập địa chỉ email';
                                   }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 20),
-
-                              // 3. Password Label & Textfield
-                              Text(
-                                'Mật khẩu',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: labelColor,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                decoration: InputDecoration(
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  filled: true,
-                                  fillColor: inputFillColor,
-                                  prefixIcon: Icon(Icons.lock_outlined, color: labelColor),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                      color: labelColor,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Vui lòng nhập mật khẩu';
+                                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                                    return 'Định dạng email không hợp lệ';
                                   }
                                   return null;
                                 },
                               ),
                               const SizedBox(height: 24),
 
-                              // 4. Log In Button (Solid Green Pill)
+                              // Next Step Button
                               ScaleOnTap(
-                                onTap: _handleLogin,
+                                onTap: _handleResetPassword,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 16),
                                   decoration: BoxDecoration(
@@ -331,7 +209,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                   child: const Center(
                                     child: Text(
-                                      'Đăng nhập',
+                                      'Tiếp theo',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -341,26 +219,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
 
-                              // 5. Forgot Password Button
-                              Center(
-                                child: TextButton(
-                                  onPressed: () {
-                                    context.go('/forgot-password');
-                                  },
-                                  child: Text(
-                                    'Quên mật khẩu?',
-                                    style: TextStyle(
-                                      color: textButtonColor,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-
-                              // 6. Sign Up Button (Light Green Pill)
+                              // Sign Up Button
                               ScaleOnTap(
                                 onTap: () => context.go('/register'),
                                 child: Container(
@@ -383,31 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                               const SizedBox(height: 24),
 
-                              // 7. Fingerprint option
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.fingerprint, color: primaryColor, size: 28),
-                                  const SizedBox(width: 8),
-                                  GestureDetector(
-                                    onTap: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Đang quét vân tay...')),
-                                      );
-                                    },
-                                    child: Text(
-                                      'Sử dụng Vân tay để truy cập',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: textButtonColor,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-
-                              // 8. Social Login
+                              // Social options
                               Center(
                                 child: Text(
                                   'hoặc đăng ký bằng',
@@ -421,7 +258,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // Facebook Icon Button
                                   GestureDetector(
                                     onTap: () {},
                                     child: Container(
@@ -451,7 +287,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 24),
-                                  // Google Icon Button
                                   GestureDetector(
                                     onTap: () {},
                                     child: Container(
@@ -471,6 +306,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       ),
                                       child: const CustomPaint(
                                         painter: GoogleLogoPainter(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Link to back to login
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Quay lại ',
+                                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      context.go('/login');
+                                    },
+                                    child: Text(
+                                      'Đăng nhập ngay',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: textButtonColor,
                                       ),
                                     ),
                                   ),

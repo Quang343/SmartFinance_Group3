@@ -125,14 +125,7 @@ class WelcomeScreen extends StatelessWidget {
                 Center(
                   child: TextButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text(
-                            'Tính năng khôi phục mật khẩu đang được phát triển.',
-                          ),
-                          backgroundColor: primaryColor,
-                        ),
-                      );
+                      context.go('/forgot-password');
                     },
                     child: Text(
                       'Quên mật khẩu?',
