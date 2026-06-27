@@ -328,13 +328,17 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                       color: isDark ? primaryColor.withOpacity(0.7) : primaryColor.withOpacity(0.8),
                                     ),
                                     const SizedBox(width: 4),
-                                    Text(
-                                      _getPeriodTitle(isIncoming ? 'Tổng Mua Vào' : 'Tổng Bán Ra'),
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white70 : Colors.black54,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        letterSpacing: 0.2,
+                                    Expanded(
+                                      child: Text(
+                                        _getPeriodTitle(isIncoming ? 'Tổng Mua Vào' : 'Tổng Bán Ra'),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white70 : Colors.black54,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          letterSpacing: 0.2,
+                                        ),
                                       ),
                                     ),
                                   ],
