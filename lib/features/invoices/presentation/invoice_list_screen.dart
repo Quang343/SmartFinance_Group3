@@ -18,6 +18,8 @@ class InvoiceListScreen extends ConsumerStatefulWidget {
 
 class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _searchQuery = '';
+  String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
+  DateTimeRange? _customDateRange;
   late Future<List<InvoiceEntity>> _invoicesFuture;
 
   @override
@@ -143,8 +145,11 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           }
 
           var list = snapshot.data ?? [];
-          // Filter by invoice type
+           // Filter by invoice type
           list = list.where((inv) => inv.type == (isIncoming ? InvoiceType.incoming : InvoiceType.outgoing)).toList();
+
+          // Filter by time period
+          list = list.where((inv) => _isWithinPeriod(inv.issuedDate)).toList();
 
           // Filter by search query
           if (_searchQuery.isNotEmpty) {
@@ -162,15 +167,135 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
 
           return Column(
             children: [
-              // Header balance layout matching the transaction screen style
+              // Period Filter Tabs
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildPeriodTab('all', 'Tất cả'),
+                      _buildPeriodTab('today', 'Hôm nay'),
+                      _buildPeriodTab('month', 'Tháng này'),
+                      _buildPeriodTab('year', 'Năm nay'),
+                      Container(
+                        height: 20,
+                        width: 1,
+                        color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          final picked = await showDateRangePicker(
+                            context: context,
+                            locale: const Locale('vi', 'VN'),
+                            initialDateRange: _customDateRange ?? DateTimeRange(
+                              start: DateTime.now().subtract(const Duration(days: 7)),
+                              end: DateTime.now(),
+                            ),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                            builder: (context, child) {
+                              return Theme(
+                                data: ThemeData(
+                                  useMaterial3: true,
+                                  brightness: isDark ? Brightness.dark : Brightness.light,
+                                  colorScheme: isDark
+                                      ? ColorScheme.dark(
+                                          primary: primaryColor,
+                                          onPrimary: Colors.white,
+                                          surface: const Color(0xFF0D251C),
+                                          onSurface: Colors.white,
+                                        )
+                                      : ColorScheme.light(
+                                          primary: primaryColor,
+                                          onPrimary: Colors.white,
+                                          surface: Colors.white,
+                                          onSurface: const Color(0xFF1E293B),
+                                        ),
+                                  appBarTheme: AppBarTheme(
+                                    backgroundColor: isDark ? const Color(0xFF0C2C1F) : primaryColor,
+                                    foregroundColor: Colors.white,
+                                    iconTheme: const IconThemeData(color: Colors.white),
+                                    actionsIconTheme: const IconThemeData(color: Colors.white),
+                                    titleTextStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                    toolbarTextStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  textButtonTheme: TextButtonThemeData(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    ),
+                                  ),
+                                  datePickerTheme: DatePickerThemeData(
+                                    headerBackgroundColor: isDark ? const Color(0xFF0C2C1F) : primaryColor,
+                                    headerForegroundColor: Colors.white,
+                                    backgroundColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                                    headerHeadlineStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                    headerHelpStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _customDateRange = picked;
+                              _selectedPeriod = 'custom';
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _selectedPeriod == 'custom' ? primaryColor : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.calendar_today_rounded,
+                            size: 16,
+                            color: _selectedPeriod == 'custom' 
+                                ? Colors.white 
+                                : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Header balance layout matching the transaction screen style
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Column(
                   children: [
-                    // Total Invoice Amount Card
+                    // Consolidated Compact Card
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF0D251C) : Colors.white,
                         borderRadius: BorderRadius.circular(16),
@@ -187,180 +312,90 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                           color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
                         ),
                       ),
-                      child: Column(
+                      child: Row(
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.receipt_long_rounded,
-                                size: 16,
-                                color: isDark ? primaryColor.withOpacity(0.7) : primaryColor.withOpacity(0.8),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                isIncoming ? 'Tổng Tiền Mua Vào' : 'Tổng Tiền Bán Ra',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.black54,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.5,
+                          // Left side: Total amount
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.receipt_long_rounded,
+                                      size: 14,
+                                      color: isDark ? primaryColor.withOpacity(0.7) : primaryColor.withOpacity(0.8),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _getPeriodTitle(isIncoming ? 'Tổng Mua Vào' : 'Tổng Bán Ra'),
+                                      style: TextStyle(
+                                        color: isDark ? Colors.white70 : Colors.black54,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 4),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    currencyFormatter.format(totalAmount),
+                                    style: TextStyle(
+                                      color: isDark ? primaryColor : const Color(0xFF093021),
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              currencyFormatter.format(totalAmount),
-                              style: TextStyle(
-                                color: isDark ? primaryColor : const Color(0xFF093021),
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
+                          // Vertical divider
+                          Container(
+                            height: 36,
+                            width: 1,
+                            color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
+                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                          ),
+                          // Right side: Subtotal & VAT (Compact)
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Chưa thuế: ${currencyFormatter.format(totalSubtotal)}',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white70 : Colors.black87,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Thuế VAT: ${currencyFormatter.format(totalVat)}',
+                                    style: const TextStyle(
+                                      color: Colors.blue,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    // Subtotal & VAT Side by Side Cards
-                    Row(
-                      children: [
-                        // Subtotal Card
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0D251C) : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: isDark 
-                                      ? Colors.black.withOpacity(0.15) 
-                                      : Colors.black.withOpacity(0.03),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: primaryColor.withOpacity(0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.attach_money_rounded,
-                                        color: primaryColor,
-                                        size: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Chưa thuế',
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white70 : Colors.black54,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    currencyFormatter.format(totalSubtotal),
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: isDark ? primaryColor : const Color(0xFF093021),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // VAT Card
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0D251C) : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: isDark 
-                                      ? Colors.black.withOpacity(0.15) 
-                                      : Colors.black.withOpacity(0.03),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.withOpacity(0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.percent_rounded,
-                                        color: Colors.blue,
-                                        size: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Thuế VAT',
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white70 : Colors.black54,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    currencyFormatter.format(totalVat),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.blue,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -368,7 +403,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
 
               // Search Bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: TextField(
                   style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                   decoration: InputDecoration(
@@ -378,7 +413,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                     filled: true,
                     fillColor: isDark ? const Color(0xFF0D251C) : Colors.white,
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
@@ -548,6 +583,84 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ),
             )
           : null,
+    );
+  }
+
+  bool _isWithinPeriod(DateTime date) {
+    final now = DateTime.now();
+    switch (_selectedPeriod) {
+      case 'today':
+        return date.year == now.year && date.month == now.month && date.day == now.day;
+      case 'month':
+        return date.year == now.year && date.month == now.month;
+      case 'year':
+        return date.year == now.year;
+      case 'custom':
+        if (_customDateRange == null) return true;
+        final start = DateTime(_customDateRange!.start.year, _customDateRange!.start.month, _customDateRange!.start.day);
+        final end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
+        return date.isAfter(start.subtract(const Duration(seconds: 1))) && date.isBefore(end.add(const Duration(seconds: 1)));
+      case 'all':
+      default:
+        return true;
+    }
+  }
+
+  String _getPeriodTitle(String prefix) {
+    switch (_selectedPeriod) {
+      case 'today':
+        return '$prefix Hôm Nay';
+      case 'month':
+        return '$prefix Tháng Này';
+      case 'year':
+        return '$prefix Năm Nay';
+      case 'custom':
+        if (_customDateRange != null) {
+          final df = DateFormat('dd/MM');
+          return '$prefix (${df.format(_customDateRange!.start)} - ${df.format(_customDateRange!.end)})';
+        }
+        return '$prefix Tùy Chọn';
+      case 'all':
+      default:
+        return prefix;
+    }
+  }
+
+  Widget _buildPeriodTab(String id, String label) {
+    final isSelected = _selectedPeriod == id;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isIncoming = widget.type == 'incoming';
+    final primaryColor = isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedPeriod = id;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? primaryColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.center,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

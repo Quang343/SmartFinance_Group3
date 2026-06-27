@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
+import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class ReportScreen extends ConsumerStatefulWidget {
@@ -15,7 +16,8 @@ class ReportScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportScreenState extends ConsumerState<ReportScreen> {
-  String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year'
+  String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
+  DateTimeRange? _customDateRange;
 
   bool _isWithinPeriod(DateTime date) {
     final now = DateTime.now();
@@ -26,6 +28,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
         return date.year == now.year && date.month == now.month;
       case 'year':
         return date.year == now.year;
+      case 'custom':
+        if (_customDateRange == null) return true;
+        final start = DateTime(_customDateRange!.start.year, _customDateRange!.start.month, _customDateRange!.start.day);
+        final end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
+        return date.isAfter(start.subtract(const Duration(seconds: 1))) && date.isBefore(end.add(const Duration(seconds: 1)));
       case 'all':
       default:
         return true;
@@ -68,8 +75,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           ),
         ),
       ),
-      body: FutureBuilder<List<TransactionEntity>>(
-        future: transactionsAsync.getAll(),
+      body: FutureBuilder<List<dynamic>>(
+        future: Future.wait([
+          transactionsAsync.getAll(),
+          ref.read(categoryRepositoryProvider).getAll(),
+        ]),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E)));
@@ -83,7 +93,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
             );
           }
 
-          final list = snapshot.data ?? [];
+          final list = snapshot.data![0] as List<TransactionEntity>;
+          final categories = snapshot.data![1] as List<CategoryEntity>;
+          final catMap = {for (var c in categories) c.id: c};
           
           // Apply time period filter & confirmed status filter
           final filtered = list.where((tx) => 
@@ -101,12 +113,97 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
               .map((tx) => tx.amount)
               .fold(0, (sum, val) => sum + val);
 
-          final netBalance = totalIncome - totalExpense;
+           final netBalance = totalIncome - totalExpense;
           final double totalSum = (totalIncome + totalExpense).toDouble();
           
           final double incomeRatio = totalSum > 0 ? totalIncome / totalSum : 0.5;
           final double expenseRatio = totalSum > 0 ? totalExpense / totalSum : 0.5;
           final double savingRate = totalIncome > 0 ? (netBalance / totalIncome) * 100 : 0.0;
+
+          // Calculate itemized sums based on transaction notes (with category fallback)
+          final Map<String, double> categorySums = {};
+          if (currentRole == UserRole.expenseAccountant) {
+            final expenses = filtered.where((tx) => tx.type == TransactionType.expense);
+            for (var tx in expenses) {
+              final cat = catMap[tx.categoryId];
+              final label = (tx.note != null && tx.note!.trim().isNotEmpty)
+                  ? tx.note!.trim()
+                  : (cat?.name ?? 'Khác');
+              categorySums[label] = (categorySums[label] ?? 0.0) + tx.amount;
+            }
+          } else if (currentRole == UserRole.revenueAccountant) {
+            final incomes = filtered.where((tx) => tx.type == TransactionType.income);
+            for (var tx in incomes) {
+              final cat = catMap[tx.categoryId];
+              final label = (tx.note != null && tx.note!.trim().isNotEmpty)
+                  ? tx.note!.trim()
+                  : (cat?.name ?? 'Khác');
+              categorySums[label] = (categorySums[label] ?? 0.0) + tx.amount;
+            }
+          }
+
+          final sortedCategories = categorySums.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
+
+          final double roleTotal = currentRole == UserRole.expenseAccountant 
+              ? totalExpense.toDouble() 
+              : totalIncome.toDouble();
+
+          final List<MapEntry<String, double>> displayCategories = [];
+          double otherSum = 0.0;
+          for (int i = 0; i < sortedCategories.length; i++) {
+            if (i < 3) {
+              displayCategories.add(sortedCategories[i]);
+            } else {
+              otherSum += sortedCategories[i].value;
+            }
+          }
+          if (otherSum > 0) {
+            displayCategories.add(MapEntry('Khác', otherSum));
+          }
+
+          final bool hasData = currentRole == UserRole.financeManager 
+              ? (totalIncome + totalExpense > 0)
+              : currentRole == UserRole.expenseAccountant 
+                  ? (totalExpense > 0)
+                  : (totalIncome > 0);
+
+          // Get chart colors and segments
+          final List<double> segmentRatios = [];
+          final List<Color> segmentColors = [];
+          
+          final List<Color> expenseColors = [
+            const Color(0xFFEF4444),
+            const Color(0xFFF97316),
+            const Color(0xFFF59E0B),
+            const Color(0xFFEC4899),
+            const Color(0xFF8B5CF6),
+          ];
+          
+          final List<Color> incomeColors = [
+            const Color(0xFF00D09E),
+            const Color(0xFF3B82F6),
+            const Color(0xFF06B6D4),
+            const Color(0xFF8B5CF6),
+            const Color(0xFF10B981),
+          ];
+
+          if (currentRole == UserRole.financeManager) {
+            segmentRatios.add(totalIncome.toDouble());
+            segmentRatios.add(totalExpense.toDouble());
+            segmentColors.add(const Color(0xFF00D09E));
+            segmentColors.add(const Color(0xFFEF4444));
+          } else if (currentRole == UserRole.expenseAccountant) {
+            for (int i = 0; i < displayCategories.length; i++) {
+              segmentRatios.add(displayCategories[i].value);
+              segmentColors.add(expenseColors[i % expenseColors.length]);
+            }
+          } else {
+            for (int i = 0; i < displayCategories.length; i++) {
+              segmentRatios.add(displayCategories[i].value);
+              segmentColors.add(incomeColors[i % incomeColors.length]);
+            }
+          }
 
           return Column(
             children: [
@@ -128,6 +225,105 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       _buildPeriodTab('today', 'Hôm nay'),
                       _buildPeriodTab('month', 'Tháng này'),
                       _buildPeriodTab('year', 'Năm nay'),
+                      Container(
+                        height: 20,
+                        width: 1,
+                        color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          final picked = await showDateRangePicker(
+                            context: context,
+                            locale: const Locale('vi', 'VN'),
+                            initialDateRange: _customDateRange ?? DateTimeRange(
+                              start: DateTime.now().subtract(const Duration(days: 7)),
+                              end: DateTime.now(),
+                            ),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                            builder: (context, child) {
+                              const primaryColor = Color(0xFF00D09E);
+                              return Theme(
+                                data: ThemeData(
+                                  useMaterial3: true,
+                                  brightness: isDark ? Brightness.dark : Brightness.light,
+                                  colorScheme: isDark
+                                      ? const ColorScheme.dark(
+                                          primary: primaryColor,
+                                          onPrimary: Colors.white,
+                                          surface: Color(0xFF0D251C),
+                                          onSurface: Colors.white,
+                                        )
+                                      : const ColorScheme.light(
+                                          primary: primaryColor,
+                                          onPrimary: Colors.white,
+                                          surface: Colors.white,
+                                          onSurface: Color(0xFF1E293B),
+                                        ),
+                                  appBarTheme: AppBarTheme(
+                                    backgroundColor: isDark ? const Color(0xFF0C2C1F) : primaryColor,
+                                    foregroundColor: Colors.white,
+                                    iconTheme: const IconThemeData(color: Colors.white),
+                                    actionsIconTheme: const IconThemeData(color: Colors.white),
+                                    titleTextStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                    toolbarTextStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  textButtonTheme: TextButtonThemeData(
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    ),
+                                  ),
+                                  datePickerTheme: DatePickerThemeData(
+                                    headerBackgroundColor: isDark ? const Color(0xFF0C2C1F) : primaryColor,
+                                    headerForegroundColor: Colors.white,
+                                    backgroundColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                                    headerHeadlineStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                    headerHelpStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _customDateRange = picked;
+                              _selectedPeriod = 'custom';
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _selectedPeriod == 'custom' ? const Color(0xFF00D09E) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.calendar_today_rounded,
+                            size: 16,
+                            color: _selectedPeriod == 'custom' 
+                                ? Colors.white 
+                                : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -138,7 +334,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   children: [
-                    if (totalSum > 0) ...[
+                    if (hasData) ...[
                       // Modern Chart Card
                       Container(
                         padding: const EdgeInsets.all(20),
@@ -160,11 +356,15 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Cơ cấu dòng tiền',
+                              currentRole == UserRole.financeManager 
+                                  ? 'Cơ cấu dòng tiền'
+                                  : currentRole == UserRole.expenseAccountant
+                                      ? 'Cơ cấu chi phí'
+                                      : 'Cơ cấu doanh thu',
                               style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: isDark ? Colors.white : const Color(0xFF093021),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: isDark ? Colors.white : const Color(0xFF093021),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -178,9 +378,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                     children: [
                                       CustomPaint(
                                         size: const Size(110, 110),
-                                        painter: FinancialRatioPainter(
-                                          incomeRatio: incomeRatio,
-                                          expenseRatio: expenseRatio,
+                                        painter: MultiSegmentDonutPainter(
+                                          ratios: segmentRatios,
+                                          colors: segmentColors,
                                           isDark: isDark,
                                         ),
                                       ),
@@ -188,23 +388,55 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                         child: Column(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            Text(
-                                              savingRate >= 0 ? 'Thặng dư' : 'Thâm hụt',
-                                              style: TextStyle(
-                                                fontSize: 9,
-                                                color: isDark ? Colors.white60 : Colors.black45,
-                                                fontWeight: FontWeight.w500,
+                                            if (currentRole == UserRole.financeManager) ...[
+                                              Text(
+                                                savingRate >= 0 ? 'Thặng dư' : 'Thâm hụt',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  color: isDark ? Colors.white60 : Colors.black45,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '${savingRate.abs().toStringAsFixed(0)}%',
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: savingRate >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${savingRate.abs().toStringAsFixed(0)}%',
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: savingRate >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                                ),
                                               ),
-                                            ),
+                                            ] else if (currentRole == UserRole.expenseAccountant) ...[
+                                              const Icon(
+                                                Icons.arrow_upward_rounded,
+                                                color: Color(0xFFEF4444),
+                                                size: 20,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Chi phí',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? Colors.white : const Color(0xFF093021),
+                                                ),
+                                              ),
+                                            ] else ...[
+                                              const Icon(
+                                                Icons.arrow_downward_rounded,
+                                                color: Color(0xFF00D09E),
+                                                size: 20,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Doanh thu',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? Colors.white : const Color(0xFF093021),
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),
@@ -217,21 +449,34 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      _buildLegendItem(
-                                        label: 'Doanh thu',
-                                        percentage: '${(incomeRatio * 100).toStringAsFixed(0)}%',
-                                        value: currencyFormatter.format(totalIncome),
-                                        color: const Color(0xFF00D09E),
-                                        isDark: isDark,
-                                      ),
-                                      const SizedBox(height: 14),
-                                      _buildLegendItem(
-                                        label: 'Chi phí',
-                                        percentage: '${(expenseRatio * 100).toStringAsFixed(0)}%',
-                                        value: currencyFormatter.format(totalExpense),
-                                        color: const Color(0xFFEF4444),
-                                        isDark: isDark,
-                                      ),
+                                      if (currentRole == UserRole.financeManager) ...[
+                                        _buildLegendItem(
+                                          label: 'Doanh thu',
+                                          percentage: '${(incomeRatio * 100).toStringAsFixed(0)}%',
+                                          value: currencyFormatter.format(totalIncome),
+                                          color: const Color(0xFF00D09E),
+                                          isDark: isDark,
+                                        ),
+                                        const SizedBox(height: 14),
+                                        _buildLegendItem(
+                                          label: 'Chi phí',
+                                          percentage: '${(expenseRatio * 100).toStringAsFixed(0)}%',
+                                          value: currencyFormatter.format(totalExpense),
+                                          color: const Color(0xFFEF4444),
+                                          isDark: isDark,
+                                        ),
+                                      ] else ...[
+                                        for (int i = 0; i < displayCategories.length; i++) ...[
+                                          if (i > 0) const SizedBox(height: 10),
+                                          _buildLegendItem(
+                                            label: displayCategories[i].key,
+                                            percentage: '${(displayCategories[i].value / roleTotal * 100).toStringAsFixed(0)}%',
+                                            value: currencyFormatter.format(displayCategories[i].value),
+                                            color: segmentColors[i],
+                                            isDark: isDark,
+                                          ),
+                                        ],
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -447,15 +692,17 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? Colors.white60 : Colors.black54,
-                fontWeight: FontWeight.w500,
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             Text(
               percentage,
               style: TextStyle(
@@ -558,14 +805,14 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
   }
 }
 
-class FinancialRatioPainter extends CustomPainter {
-  final double incomeRatio;
-  final double expenseRatio;
+class MultiSegmentDonutPainter extends CustomPainter {
+  final List<double> ratios;
+  final List<Color> colors;
   final bool isDark;
 
-  FinancialRatioPainter({
-    required this.incomeRatio,
-    required this.expenseRatio,
+  MultiSegmentDonutPainter({
+    required this.ratios,
+    required this.colors,
     required this.isDark,
   });
 
@@ -582,44 +829,27 @@ class FinancialRatioPainter extends CustomPainter {
 
     canvas.drawCircle(center, radius, basePaint);
 
-    if (incomeRatio + expenseRatio == 0) return;
+    final double sum = ratios.fold(0, (s, r) => s + r);
+    if (sum == 0) return;
 
-    const double startAngle = -3.14159 / 2; // Start at top
-    final double incomeSweep = incomeRatio * 2 * 3.14159;
-    final double expenseSweep = expenseRatio * 2 * 3.14159;
+    double startAngle = -3.14159 / 2;
+    for (int i = 0; i < ratios.length; i++) {
+      if (ratios[i] <= 0) continue;
+      final sweepAngle = (ratios[i] / sum) * 2 * 3.14159;
+      final paint = Paint()
+        ..color = colors[i % colors.length]
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
 
-    // Draw Income (Teal/Green)
-    final incomePaint = Paint()
-      ..color = const Color(0xFF00D09E)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    if (incomeRatio > 0) {
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         startAngle,
-        incomeSweep - (expenseRatio > 0 ? 0.12 : 0),
+        sweepAngle - 0.08,
         false,
-        incomePaint,
+        paint,
       );
-    }
-
-    // Draw Expense (Red)
-    final expensePaint = Paint()
-      ..color = const Color(0xFFEF4444)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    if (expenseRatio > 0) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle + incomeSweep + (incomeRatio > 0 ? 0.06 : 0),
-        expenseSweep - (incomeRatio > 0 ? 0.12 : 0),
-        false,
-        expensePaint,
-      );
+      startAngle += sweepAngle;
     }
   }
 

@@ -146,47 +146,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Chào mừng trở lại',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(
-                                    0xFF1E293B,
-                                  ), // Professional dark slate/black
-                                  letterSpacing: -0.5,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Chào mừng trở lại',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(
+                                      0xFF1E293B,
+                                    ), // Professional dark slate/black
+                                    letterSpacing: -0.5,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: currentRole.nameVi,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(
-                                          0xFF064E3B,
-                                        ), // Dark green highlight for readability on green background
+                                const SizedBox(height: 2),
+                                Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: currentRole.nameVi,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(
+                                            0xFF064E3B,
+                                          ), // Dark green highlight for readability on green background
+                                        ),
                                       ),
-                                    ),
-                                    const TextSpan(
-                                      text: ' • Buổi sáng tốt lành',
-                                      style: TextStyle(
-                                        color: Color(
-                                          0xFF334155,
-                                        ), // Muted dark slate
+                                      const TextSpan(
+                                        text: ' • Buổi sáng tốt lành',
+                                        style: TextStyle(
+                                          color: Color(
+                                            0xFF334155,
+                                          ), // Muted dark slate
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  maxLines: 1,
                                 ),
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 12),
                           ScaleOnTap(
                             onTap: () => context.push('/notifications'),
                             child: Container(
@@ -228,190 +235,241 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Dòng tiền thuần (Net Cash Flow)
-                            Text(
-                              'DÒNG TIỀN THUẦN (Net Cash Flow)',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isDark ? Colors.white70 : Colors.black87,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                currencyFormatter.format(totalBalance),
+                            if (currentRole == UserRole.financeManager) ...[
+                              // Dòng tiền thuần (Net Cash Flow)
+                              Text(
+                                'DÒNG TIỀN THUẦN (Net Cash Flow)',
                                 style: TextStyle(
-                                  fontSize: 26,
+                                  fontSize: 10,
+                                  color: isDark ? Colors.white70 : Colors.black87,
                                   fontWeight: FontWeight.bold,
-                                  color: totalBalance >= 0 
-                                      ? (isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060))
-                                      : (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F)),
+                                  letterSpacing: 0.5,
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            Divider(
-                              color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
-                              height: 1,
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.arrow_upward_rounded,
-                                            size: 14,
-                                            color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Tổng thu',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark ? Colors.white : Colors.black,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          currencyFormatter.format(incomeSum),
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  currencyFormatter.format(totalBalance),
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    color: totalBalance >= 0 
+                                        ? (isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060))
+                                        : (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F)),
                                   ),
                                 ),
-                                Container(
-                                  height: 28,
-                                  width: 1,
-                                  color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.arrow_downward_rounded,
-                                            size: 14,
-                                            color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Tổng chi',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark ? Colors.white : Colors.black,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          currencyFormatter.format(expenseSum),
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Custom split progress bar (Stadium pill style)
-                            Container(
-                              height: 28,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                color: isDark ? const Color(0xFF06150F) : const Color(0xFFF1F5F9),
-                                border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.04)),
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Row(
-                                  children: [
-                                    if (expensePercentInt > 0)
-                                      Expanded(
-                                        flex: expensePercentInt,
-                                        child: Container(
-                                          color: const Color(0xFF1E293B), // Dark slate
-                                          alignment: Alignment.center,
+                              const SizedBox(height: 10),
+                              Divider(
+                                color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
+                                height: 1,
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.arrow_upward_rounded,
+                                              size: 14,
+                                              color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tổng thu',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark ? Colors.white : Colors.black,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
                                           child: Text(
-                                            '$expensePercentInt%',
-                                            style: const TextStyle(
-                                              color: Colors.white,
+                                            currencyFormatter.format(incomeSum),
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    height: 28,
+                                    width: 1,
+                                    color: isDark ? Colors.white12 : Colors.black.withOpacity(0.08),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.arrow_downward_rounded,
+                                              size: 14,
+                                              color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tổng chi',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark ? Colors.white : Colors.black,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            currencyFormatter.format(expenseSum),
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ] else if (currentRole == UserRole.expenseAccountant) ...[
+                              // Tổng chi tiêu
+                              Text(
+                                'TỔNG CHI TIÊU HÀNG THÁNG',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  currencyFormatter.format(expenseSum),
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFD32F2F),
+                                  ),
+                                ),
+                              ),
+                            ] else if (currentRole == UserRole.revenueAccountant) ...[
+                              // Tổng doanh thu
+                              Text(
+                                'TỔNG DOANH THU HÀNG THÁNG',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  currencyFormatter.format(incomeSum),
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
+                                  ),
+                                ),
+                              ),
+                            ],
+
+                            // Budget progress bar (Only show for FM and EA roles, as RA doesn't manage expense budgets)
+                            if (currentRole == UserRole.financeManager || currentRole == UserRole.expenseAccountant) ...[
+                              const SizedBox(height: 12),
+                              // Custom split progress bar (Stadium pill style)
+                              Container(
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  color: isDark ? const Color(0xFF06150F) : const Color(0xFFF1F5F9),
+                                  border: Border.all(color: isDark ? Colors.white10 : Colors.black.withOpacity(0.04)),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Row(
+                                    children: [
+                                      if (expensePercentInt > 0)
+                                        Expanded(
+                                          flex: expensePercentInt,
+                                          child: Container(
+                                            color: const Color(0xFF1E293B), // Dark slate
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              '$expensePercentInt%',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      Expanded(
+                                        flex: (100 - expensePercentInt).clamp(1, 100),
+                                        child: Container(
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.only(right: 12),
+                                          child: Text(
+                                            currencyFormatter.format(budgetLimit),
+                                            style: TextStyle(
+                                              color: isDark ? Colors.white70 : const Color(0xFF1E293B),
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
                                         ),
                                       ),
-                                    Expanded(
-                                      flex: (100 - expensePercentInt).clamp(1, 100),
-                                      child: Container(
-                                        alignment: Alignment.centerRight,
-                                        padding: const EdgeInsets.only(right: 12),
-                                        child: Text(
-                                          currencyFormatter.format(budgetLimit),
-                                          style: TextStyle(
-                                            color: isDark ? Colors.white70 : const Color(0xFF1E293B),
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.check_circle_rounded,
-                                  color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
-                                  size: 15,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Đã sử dụng $expensePercentInt% ngân sách tháng, trạng thái tốt.',
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white70 : Colors.black87,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF008060),
+                                    size: 15,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Đã sử dụng $expensePercentInt% ngân sách tháng, trạng thái tốt.',
+                                      style: TextStyle(
+                                        color: isDark ? Colors.white70 : Colors.black87,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -428,6 +486,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
+                    // Quick Action Row / Shortcuts
+                    _buildQuickActions(context, currentRole, isDark, const Color(0xFF00D09E)),
+                    const SizedBox(height: 24),
+
                     // Savings & Goal progress card
                     Container(
                       padding: const EdgeInsets.all(18),
@@ -792,6 +854,188 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               fontSize: 13,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context, UserRole role, bool isDark, Color primaryColor) {
+    final cardBgColor = isDark ? const Color(0xFF0C2C1F) : Colors.white;
+    final borderColor = isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100;
+    final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
+
+    List<Widget> actions = [];
+
+    if (role == UserRole.expenseAccountant) {
+      actions = [
+        _buildShortcutCard(
+          context: context,
+          icon: Icons.qr_code_scanner_rounded,
+          title: 'Quét hóa đơn OCR',
+          subtitle: 'Nhập tự động',
+          color: const Color(0xFF00D09E),
+          onTap: () => context.go('/invoices/scan'),
+          cardBgColor: cardBgColor,
+          borderColor: borderColor,
+          textColor: textColor,
+        ),
+        _buildShortcutCard(
+          context: context,
+          icon: Icons.add_circle_outline_rounded,
+          title: 'Ghi nhận chi phí',
+          subtitle: 'Nhập thủ công',
+          color: Colors.redAccent,
+          onTap: () => context.go('/transactions/form'),
+          cardBgColor: cardBgColor,
+          borderColor: borderColor,
+          textColor: textColor,
+        ),
+      ];
+    } else if (role == UserRole.revenueAccountant) {
+      actions = [
+        _buildShortcutCard(
+          context: context,
+          icon: Icons.add_box_rounded,
+          title: 'Tạo hóa đơn đầu ra',
+          subtitle: 'Xuất PDF nhanh',
+          color: const Color(0xFF00D09E),
+          onTap: () => context.go('/invoices/outgoing/new'),
+          cardBgColor: cardBgColor,
+          borderColor: borderColor,
+          textColor: textColor,
+        ),
+        _buildShortcutCard(
+          context: context,
+          icon: Icons.add_circle_outline_rounded,
+          title: 'Ghi nhận doanh thu',
+          subtitle: 'Nhập thủ công',
+          color: Colors.blueAccent,
+          onTap: () => context.go('/transactions/form'),
+          cardBgColor: cardBgColor,
+          borderColor: borderColor,
+          textColor: textColor,
+        ),
+      ];
+    } else if (role == UserRole.financeManager) {
+      actions = [
+        _buildShortcutCard(
+          context: context,
+          icon: Icons.bar_chart_rounded,
+          title: 'Báo cáo cơ cấu',
+          subtitle: 'Xem phân tích sâu',
+          color: const Color(0xFF00D09E),
+          onTap: () => context.go('/reports'),
+          cardBgColor: cardBgColor,
+          borderColor: borderColor,
+          textColor: textColor,
+        ),
+        _buildShortcutCard(
+          context: context,
+          icon: Icons.compare_arrows_rounded,
+          title: 'Dòng tiền chi tiết',
+          subtitle: 'Lịch sử giao dịch',
+          color: Colors.orangeAccent,
+          onTap: () => context.go('/transactions'),
+          cardBgColor: cardBgColor,
+          borderColor: borderColor,
+          textColor: textColor,
+        ),
+      ];
+    }
+
+    if (actions.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PHÍM TẮT NHANH',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+            letterSpacing: 1.1,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: actions[0]),
+            const SizedBox(width: 12),
+            Expanded(child: actions[1]),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShortcutCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    required Color cardBgColor,
+    required Color borderColor,
+    required Color textColor,
+  }) {
+    return ScaleOnTap(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: cardBgColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

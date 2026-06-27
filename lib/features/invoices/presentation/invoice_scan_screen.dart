@@ -93,13 +93,105 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
   }
 
   @override
+  Widget _buildScannerTarget(Widget child, bool isDark) {
+    final borderColor = const Color(0xFF00D09E);
+    return Stack(
+      children: [
+        child,
+        // Top Left
+        Positioned(
+          top: 0,
+          left: 0,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: borderColor, width: 3),
+                left: BorderSide(color: borderColor, width: 3),
+              ),
+            ),
+          ),
+        ),
+        // Top Right
+        Positioned(
+          top: 0,
+          right: 0,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: borderColor, width: 3),
+                right: BorderSide(color: borderColor, width: 3),
+              ),
+            ),
+          ),
+        ),
+        // Bottom Left
+        Positioned(
+          bottom: 0,
+          left: 0,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderColor, width: 3),
+                left: BorderSide(color: borderColor, width: 3),
+              ),
+            ),
+          ),
+        ),
+        // Bottom Right
+        Positioned(
+          bottom: 0,
+          right: 0,
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderColor, width: 3),
+                right: BorderSide(color: borderColor, width: 3),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = const Color(0xFF00D09E);
 
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
       appBar: AppBar(
-        title: const Text('Smart OCR Scan'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          'Smart OCR Scan',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: isDark ? Colors.white : Colors.black87,
+          ),
+        ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: 20),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/invoices/incoming');
+            }
+          },
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -107,12 +199,24 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: _buildMainContent(isDark),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F1E15) : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF1E382B) : Colors.grey.shade200,
+                    width: 1.5,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: _buildScannerTarget(
+                    Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: _buildMainContent(isDark),
+                    ),
+                    isDark,
+                  ),
                 ),
               ),
             ),
@@ -120,46 +224,94 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
             if (_status == OcrStatus.notStarted)
               ScaleOnTap(
                 onTap: _simulateScan,
-                child: ElevatedButton.icon(
-                  onPressed: null, // set to null to let ScaleOnTap handle tap and prevent double trigger
-                  icon: const Icon(Icons.photo_camera),
-                  label: const Text('Chụp / Chọn ảnh hóa đơn', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: theme.colorScheme.primary,
-                    disabledForegroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.photo_camera_rounded, color: Color(0xFF060E0A)),
+                      SizedBox(width: 8),
+                      Text(
+                        'Chụp / Chọn ảnh hóa đơn',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF060E0A),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             if (_status == OcrStatus.extracted) ...[
               ScaleOnTap(
                 onTap: _saveExtractedInvoice,
-                child: ElevatedButton.icon(
-                  onPressed: null,
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Xác nhận & Lưu hóa đơn', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.green,
-                    disabledForegroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_outline_rounded, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Xác nhận & Lưu hóa đơn',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
               const SizedBox(height: 12),
               ScaleOnTap(
                 onTap: () => setState(() => _status = OcrStatus.notStarted),
-                child: OutlinedButton(
-                  onPressed: null,
-                  child: const Text('Quét lại', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E382B) : Colors.grey.shade400,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Quét lại',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -171,34 +323,67 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
   }
 
   Widget _buildMainContent(bool isDark) {
-    final theme = Theme.of(context);
+    final primaryColor = const Color(0xFF00D09E);
     switch (_status) {
       case OcrStatus.notStarted:
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            const Text(
-              'Chưa chọn hóa đơn',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF060E0A) : Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark ? const Color(0xFF1E382B) : Colors.grey.shade100,
+                  width: 2,
+                ),
+              ),
+              child: Icon(
+                Icons.receipt_long_rounded,
+                size: 64,
+                color: primaryColor.withOpacity(0.8),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
             Text(
-              'Tải lên hoặc chụp ảnh hóa đơn đầu vào để trích xuất thông tin tự động.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600),
+              'Chưa chọn hóa đơn',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Tải lên hoặc chụp ảnh hóa đơn đầu vào để trích xuất thông tin tự động.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white60 : Colors.black54,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
             ),
           ],
         );
       case OcrStatus.imageSelected:
-        return const Center(
+        return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Đang tải ảnh lên...', style: TextStyle(fontWeight: FontWeight.bold)),
+              CircularProgressIndicator(color: primaryColor),
+              const SizedBox(height: 20),
+              Text(
+                'Đang tải ảnh lên...',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
             ],
           ),
         );
@@ -207,35 +392,68 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.document_scanner_outlined, size: 72, color: theme.colorScheme.primary),
-              const SizedBox(height: 16),
-              const Text('Đang quét OCR & Phân tích cấu trúc...', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              LinearProgressIndicator(value: _progress, color: theme.colorScheme.primary),
+              Icon(Icons.document_scanner_rounded, size: 72, color: primaryColor),
+              const SizedBox(height: 20),
+              Text(
+                'Đang quét OCR & Phân tích...',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: _progress,
+                    color: primaryColor,
+                    backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.grey.shade200,
+                    minHeight: 6,
+                  ),
+                ),
+              ),
             ],
           ),
         );
       case OcrStatus.extracted:
         return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.done_all, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text(
-                    'Đã trích xuất thông tin thành công (Độ tin cậy 94%)',
-                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0x1500D09E),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0x3000D09E)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.check_circle_rounded, color: Color(0xFF00D09E), size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Đã trích xuất thành công (Độ tin cậy 94%)',
+                        style: TextStyle(
+                          color: Color(0xFF00D09E),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Divider(height: 24),
-              _buildExtractedField('Tên đối tác', _partnerName, (val) => _partnerName = val),
-              _buildExtractedField('Mã số thuế', _partnerTaxCode, (val) => _partnerTaxCode = val),
-              _buildExtractedField('Tiền trước thuế (VND)', _subtotal.toString(), (val) => _subtotal = int.tryParse(val) ?? 0),
-              _buildExtractedField('Thuế suất (%)', _vatRate.toString(), (val) => _vatRate = int.tryParse(val) ?? 0),
-              _buildExtractedField('Tổng thanh toán (VND)', _totalAmount.toString(), (val) => _totalAmount = int.tryParse(val) ?? 0),
+              const SizedBox(height: 20),
+              _buildExtractedField('Tên đối tác', _partnerName, isDark, (val) => _partnerName = val),
+              _buildExtractedField('Mã số thuế', _partnerTaxCode, isDark, (val) => _partnerTaxCode = val),
+              _buildExtractedField('Tiền trước thuế (VND)', _subtotal.toString(), isDark, (val) => _subtotal = int.tryParse(val) ?? 0),
+              _buildExtractedField('Thuế suất (%)', _vatRate.toString(), isDark, (val) => _vatRate = int.tryParse(val) ?? 0),
+              _buildExtractedField('Tổng thanh toán (VND)', _totalAmount.toString(), isDark, (val) => _totalAmount = int.tryParse(val) ?? 0),
             ],
           ),
         );
@@ -244,19 +462,43 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     }
   }
 
-  Widget _buildExtractedField(String label, String value, Function(String) onChanged) {
+  Widget _buildExtractedField(String label, String value, bool isDark, Function(String) onChanged) {
+    final primaryColor = const Color(0xFF00D09E);
+    final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
+    final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 6),
           TextFormField(
             initialValue: value,
+            style: TextStyle(
+              fontSize: 15,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
             decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              filled: true,
+              fillColor: inputFillColor,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: primaryColor, width: 2),
+              ),
             ),
             onChanged: onChanged,
           ),
