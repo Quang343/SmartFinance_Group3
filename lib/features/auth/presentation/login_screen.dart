@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/role_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../data/repositories/auth_repository.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -13,11 +15,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(
-    text: 'manager@smartfinance.com',
-  );
-  final _passwordController = TextEditingController(text: '******');
-  UserRole _selectedRole = UserRole.financeManager;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
@@ -27,37 +26,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _onRoleChanged(UserRole role) {
-    setState(() {
-      _selectedRole = role;
-      switch (role) {
-        case UserRole.financeManager:
-          _emailController.text = 'manager@smartfinance.com';
-          break;
-        case UserRole.expenseAccountant:
-          _emailController.text = 'expense@smartfinance.com';
-          break;
-        case UserRole.revenueAccountant:
-          _emailController.text = 'revenue@smartfinance.com';
-          break;
+  Future<void> _handleLogin() async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        final email = _emailController.text.trim();
+        final password = _passwordController.text;
+
+        final user = await ref.read(authRepositoryProvider).login(email, password);
+
+        if (user != null) {
+          ref.read(currentUserProvider.notifier).state = user;
+          
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đăng nhập thành công!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.go('/dashboard');
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Email hoặc mật khẩu không chính xác'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-    });
+    }
   }
 
-  void _handleLogin() {
-    if (_formKey.currentState!.validate()) {
-      ref.read(roleProvider.notifier).state = _selectedRole;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Đăng nhập thành công với vai trò: ${_selectedRole.nameVi}',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-      context.go('/dashboard');
-    }
+  Widget _buildMockAccountChip(String label, String username, String password, Color primaryColor) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+      backgroundColor: primaryColor.withOpacity(0.2),
+      side: BorderSide.none,
+      onPressed: () {
+        _emailController.text = username;
+        _passwordController.text = password;
+      },
+    );
   }
 
   @override
@@ -182,99 +200,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // 1. Vai trò Label & Dropdown
-                              Text(
-                                'Vai trò truy cập',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: labelColor,
-                                  fontSize: 15,
+                              // MOCK TEST ACCOUNTS (TO BE REMOVED)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 24),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: primaryColor.withOpacity(0.3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Tài khoản Test (Bấm để điền):',
+                                      style: TextStyle(
+                                        color: isDark ? Colors.white70 : Colors.black87,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        _buildMockAccountChip('Quản lý', 'manager', '123', primaryColor),
+                                        _buildMockAccountChip('KT Chi phí', 'expense', '123', primaryColor),
+                                        _buildMockAccountChip('KT Doanh thu', 'revenue', '123', primaryColor),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              PopupMenuButton<UserRole>(
-                                position: PopupMenuPosition.under,
-                                offset: const Offset(0, 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                color: bottomCardColor,
-                                elevation: 8,
-                                onSelected: _onRoleChanged,
-                                constraints: BoxConstraints(
-                                  minWidth:
-                                      MediaQuery.of(context).size.width >= 900
-                                      ? 436
-                                      : MediaQuery.of(context).size.width - 64,
-                                ),
-                                itemBuilder: (context) {
-                                  return UserRole.values.map((role) {
-                                    return PopupMenuItem<UserRole>(
-                                      value: role,
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            role == UserRole.financeManager
-                                                ? Icons.account_balance_wallet
-                                                : role ==
-                                                      UserRole.expenseAccountant
-                                                ? Icons.receipt_long
-                                                : Icons.payments,
-                                            color: labelColor,
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            role.nameVi,
-                                            style: TextStyle(
-                                              color: isDark
-                                                  ? Colors.white
-                                                  : Colors.black87,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: inputFillColor,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.badge_outlined,
-                                        color: labelColor,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          _selectedRole.nameVi,
-                                          style: TextStyle(
-                                            color: isDark
-                                                ? Colors.white
-                                                : Colors.black87,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 15,
-                                          ),
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: labelColor,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
 
                               // 2. Email/Username Label & Textfield
                               Text(

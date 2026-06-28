@@ -140,17 +140,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ),
                           ),
 
-                          // Action Button
                           ScaleOnTap(
                             onTap: _onNextPage,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(30),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: primaryColor.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
                               child: Text(
                                 data['buttonText']!,
                                 style: theme.textTheme.titleLarge?.copyWith(
-                                  color: textButtonColor,
+                                  color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 22,
+                                  fontSize: 20,
                                 ),
                               ),
                             ),
@@ -193,11 +203,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             right: 20,
             child: GestureDetector(
               onTap: () => context.go('/welcome'),
-              child: Text(
-                'Bỏ qua',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF0A231A).withOpacity(0.8),
-                  fontWeight: FontWeight.w600,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Bỏ qua',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: textColorLight,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

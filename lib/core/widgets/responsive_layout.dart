@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
+import '../providers/auth_provider.dart';
+import 'scale_on_tap.dart';
 
 class NavigationItem {
   final String path;
@@ -74,14 +76,14 @@ class ResponsiveLayout extends ConsumerWidget {
   }
 }
 
-class _MobileScaffold extends StatelessWidget {
+class _MobileScaffold extends ConsumerWidget {
   final Widget child;
   final List<NavigationItem> items;
 
   const _MobileScaffold({required this.child, required this.items});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scaffoldKey = GlobalKey<ScaffoldState>();
     final primaryColor = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -248,6 +250,41 @@ class _MobileScaffold extends StatelessWidget {
                             ),
                           );
                         }).toList(),
+                      ),
+                    ),
+                    const Divider(height: 1, color: Colors.black12),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: InkWell(
+                        onTap: () {
+                          ref.read(currentUserProvider.notifier).state = null;
+                          Navigator.pop(context); // close drawer
+                          context.go('/welcome');
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.logout_rounded, color: Colors.red, size: 20),
+                              SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  'Đăng xuất',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     // Drawer Footer
