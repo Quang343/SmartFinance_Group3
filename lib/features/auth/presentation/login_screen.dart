@@ -161,20 +161,63 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               color: topBgColor,
               child: Column(
                 children: [
-                  // Top Header ("Welcome" text)
+                  // Top Header (Animated Logo and Welcome text)
                   Container(
-                    height: size.height * 0.25,
+                    height: size.height * 0.3,
                     width: double.infinity,
                     alignment: Alignment.center,
                     child: SafeArea(
                       bottom: false,
-                      child: Text(
-                        'Đăng nhập',
-                        style: theme.textTheme.headlineLarge?.copyWith(
-                          color: textColorDark,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 36,
-                        ),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 1000),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) {
+                          return Transform.translate(
+                            offset: Offset(0, 40 * (1 - value)),
+                            child: Opacity(
+                              opacity: value,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Financial Logo
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: textColorDark.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.auto_graph_rounded,
+                                      size: 56,
+                                      color: textColorDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // App Name
+                                  Text(
+                                    'FinSmart',
+                                    style: theme.textTheme.headlineLarge?.copyWith(
+                                      color: textColorDark,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 32,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Subtitle
+                                  Text(
+                                    'Đăng nhập để tiếp tục',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: textColorDark.withOpacity(0.8),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
