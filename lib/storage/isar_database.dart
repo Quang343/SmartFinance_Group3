@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../data/local/isar_models/isar_category.dart';
@@ -17,14 +18,19 @@ class IsarDatabase {
   static Future<void> open() async {
     if (_instance != null) return;
     
-    final dir = await getApplicationDocumentsDirectory();
+    String dir = '';
+    if (!kIsWeb) {
+      final appDir = await getApplicationDocumentsDirectory();
+      dir = appDir.path;
+    }
+
     _instance = await Isar.open(
       [
         IsarCategorySchema,
         IsarTransactionSchema,
         IsarInvoiceSchema,
       ],
-      directory: dir.path,
+      directory: dir,
     );
   }
 
