@@ -72,7 +72,12 @@ class SettingsScreen extends ConsumerWidget {
 
                       return GestureDetector(
                         onTap: () {
-                          ref.read(roleProvider.notifier).state = role;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Vai trò hiện được quản lý cố định theo tài khoản đăng nhập.'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),

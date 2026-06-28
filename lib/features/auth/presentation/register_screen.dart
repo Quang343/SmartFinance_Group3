@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../data/local/isar_models/isar_user.dart';
+import '../../../data/repositories/auth_repository.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -35,7 +37,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
-  void _handleRegister() {
+  Future<void> _handleRegister() async {
     if (_formKey.currentState!.validate()) {
       if (!_agreeToTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -47,16 +49,35 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return;
       }
       
-      ref.read(roleProvider.notifier).state = _selectedRole;
+      try {
+        final newUser = IsarUser()
+          ..fullName = _fullNameController.text
+          ..company = _companyController.text
+          ..taxCode = _taxCodeController.text
+          ..email = _emailController.text
+          ..password = _passwordController.text
+          ..role = _selectedRole.name;
+          
+        await ref.read(authRepositoryProvider).register(newUser);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đăng ký tài khoản thành công với vai trò: ${_selectedRole.nameVi}'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      
-      context.go('/dashboard');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đăng ký tài khoản thành công! Vui lòng đăng nhập.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        context.go('/login');
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
