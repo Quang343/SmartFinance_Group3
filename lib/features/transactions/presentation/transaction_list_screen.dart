@@ -33,6 +33,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     _dataFuture = Future.wait([
       transactionsAsync.getAll(),
       categoriesAsync.getAll(),
+      Future.delayed(const Duration(seconds: 1)),
     ]);
   }
 
@@ -154,9 +155,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
         future: _dataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF00D09E),
+            return Center(
+              child: Image.asset(
+                'assets/images/loadingGif.gif',
+                width: 80,
+                fit: BoxFit.contain,
               ),
             );
           }

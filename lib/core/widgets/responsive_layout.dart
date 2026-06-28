@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
+import '../providers/auth_provider.dart';
+import 'scale_on_tap.dart';
 
 class NavigationItem {
   final String path;
@@ -74,17 +76,22 @@ class ResponsiveLayout extends ConsumerWidget {
   }
 }
 
-class _MobileScaffold extends StatelessWidget {
+class _MobileScaffold extends ConsumerWidget {
   final Widget child;
   final List<NavigationItem> items;
 
   const _MobileScaffold({required this.child, required this.items});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scaffoldKey = GlobalKey<ScaffoldState>();
     final primaryColor = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    final user = ref.watch(currentUserProvider);
+    final currentRole = ref.watch(roleProvider);
+    final userName = user?.fullName ?? 'Người dùng';
+    final roleName = currentRole.nameVi;
     
     // Bottom bar items: show at most 4 primary items, and 1 'More' item
     final primaryItems = items.length > 5 ? items.sublist(0, 4) : items;
@@ -113,67 +120,83 @@ class _MobileScaffold extends StatelessWidget {
               child: SafeArea(
                 child: Column(
                   children: [
-                    // Custom Gradient Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                      margin: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isDark
-                              ? [const Color(0xFF0C2C1F), const Color(0xFF06150F)]
-                              : [const Color(0xFF00D09E), const Color(0xFF008B6B)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                    // Custom Gradient Header with User Info
+                    InkWell(
+                      onTap: () {
+                        Navigator.pop(context);
+                        context.go('/profile');
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                        margin: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isDark
+                                ? [const Color(0xFF0C2C1F), const Color(0xFF06150F)]
+                                : [const Color(0xFF00D09E), const Color(0xFF008B6B)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withOpacity(0.25),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primaryColor.withOpacity(0.25),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              shape: BoxShape.circle,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.person_rounded,
+                                size: 28,
+                                color: Colors.white,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.account_balance_wallet,
-                              size: 28,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'SmartFinance',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    userName,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Hệ thống quản trị',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 11,
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    roleName,
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white70,
+                              size: 20,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const Padding(
@@ -248,6 +271,41 @@ class _MobileScaffold extends StatelessWidget {
                             ),
                           );
                         }).toList(),
+                      ),
+                    ),
+                    const Divider(height: 1, color: Colors.black12),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: InkWell(
+                        onTap: () {
+                          ref.read(currentUserProvider.notifier).state = null;
+                          Navigator.pop(context); // close drawer
+                          context.go('/welcome');
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.logout_rounded, color: Colors.red, size: 20),
+                              SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  'Đăng xuất',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     // Drawer Footer

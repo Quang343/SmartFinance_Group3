@@ -33,10 +33,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final transactionsAsync = ref.watch(transactionRepositoryProvider);
     final categoriesAsync = ref.watch(categoryRepositoryProvider);
 
-    // Fetch transactions and categories in parallel
+    // Fetch transactions and categories in parallel, with artificial 1s delay for the loading animation
     final dataFuture = Future.wait([
       transactionsAsync.getAll(),
       categoriesAsync.getAll(),
+      Future.delayed(const Duration(seconds: 1)),
     ]);
 
     return Scaffold(
@@ -47,8 +48,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         future: dataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00D09E)),
+            return Center(
+              child: Image.asset(
+                'assets/images/loadingGif.gif',
+                width: 80,
+                fit: BoxFit.contain,
+              ),
             );
           }
           if (snapshot.hasError) {

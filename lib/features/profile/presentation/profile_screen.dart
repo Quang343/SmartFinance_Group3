@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/role_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -10,6 +11,7 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentRole = ref.watch(roleProvider);
+    final user = ref.watch(currentUserProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -20,17 +22,8 @@ class ProfileScreen extends ConsumerWidget {
     final borderColor = isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0);
     final textStyleColor = isDark ? Colors.white : const Color(0xFF1E293B);
 
-    final userName = currentRole == UserRole.financeManager
-        ? 'Hoàng Nguyễn'
-        : currentRole == UserRole.expenseAccountant
-            ? 'Minh Trần'
-            : 'Hương Lê';
-
-    final userId = currentRole == UserRole.financeManager
-        ? 'ID: FM-25030024'
-        : currentRole == UserRole.expenseAccountant
-            ? 'ID: EA-25030025'
-            : 'ID: RA-25030026';
+    final userName = user?.fullName ?? 'Người dùng';
+    final userId = 'ID: ${user?.id ?? '---'}';
 
     return Scaffold(
       backgroundColor: accentBgColor,
@@ -295,55 +288,6 @@ class ProfileScreen extends ConsumerWidget {
 
                   const SizedBox(height: 12),
 
-                  // Logout Option
-                  ScaleOnTap(
-                    onTap: () {
-                      context.go('/login');
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1F0D0D) : const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isDark ? const Color(0xFF3F1A1A) : const Color(0xFFFEE2E2),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.logout_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Text(
-                              'Đăng xuất',
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            color: Colors.red,
-                            size: 14,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

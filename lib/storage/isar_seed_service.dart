@@ -4,6 +4,7 @@ import 'isar_database.dart';
 import '../data/local/isar_models/isar_category.dart';
 import '../data/local/isar_models/isar_transaction.dart';
 import '../data/local/isar_models/isar_invoice.dart';
+import '../data/local/isar_models/isar_user.dart';
 
 class IsarSeedService {
   static Future<void> seedIfNeeded() async {
@@ -19,6 +20,41 @@ class IsarSeedService {
     if (invoiceCount <= 2) {
       await _seedAdditionalInvoices(isar);
     }
+
+    final userCount = await isar.isarUsers.count();
+    if (userCount == 0) {
+      await _seedUsers(isar);
+    }
+  }
+
+  static Future<void> _seedUsers(Isar isar) async {
+    final users = [
+      IsarUser()
+        ..email = 'manager@smartfinance.com'
+        ..password = '123'
+        ..fullName = 'Quản lý tài chính'
+        ..company = 'SmartFinance'
+        ..taxCode = '123456789'
+        ..role = 'financeManager',
+      IsarUser()
+        ..email = 'expense@smartfinance.com'
+        ..password = '123'
+        ..fullName = 'Kế toán chi phí'
+        ..company = 'SmartFinance'
+        ..taxCode = '123456789'
+        ..role = 'expenseAccountant',
+      IsarUser()
+        ..email = 'revenue@smartfinance.com'
+        ..password = '123'
+        ..fullName = 'Kế toán doanh thu'
+        ..company = 'SmartFinance'
+        ..taxCode = '123456789'
+        ..role = 'revenueAccountant',
+    ];
+
+    await isar.writeTxn(() async {
+      await isar.isarUsers.putAll(users);
+    });
   }
 
   static Future<void> _seedData(Isar isar) async {

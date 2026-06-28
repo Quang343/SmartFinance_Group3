@@ -25,12 +25,18 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _invoicesFuture = ref.read(invoiceRepositoryProvider).getAll();
+    _invoicesFuture = Future.wait([
+      ref.read(invoiceRepositoryProvider).getAll(),
+      Future.delayed(const Duration(seconds: 1)),
+    ]).then((value) => value.first as List<InvoiceEntity>);
   }
 
   void _refreshInvoices() {
     setState(() {
-      _invoicesFuture = ref.read(invoiceRepositoryProvider).getAll();
+      _invoicesFuture = Future.wait([
+        ref.read(invoiceRepositoryProvider).getAll(),
+        Future.delayed(const Duration(seconds: 1)),
+      ]).then((value) => value.first as List<InvoiceEntity>);
     });
   }
 
@@ -132,7 +138,11 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
-              child: CircularProgressIndicator(color: primaryColor),
+              child: Image.asset(
+                'assets/images/loadingGif.gif',
+                width: 80,
+                fit: BoxFit.contain,
+              ),
             );
           }
           if (snapshot.hasError) {
