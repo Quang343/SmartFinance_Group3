@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'auth_provider.dart';
 
 enum UserRole {
   financeManager,
@@ -53,4 +54,20 @@ extension UserRoleExtension on UserRole {
 }
 
 // Current active role provider
-final roleProvider = StateProvider<UserRole>((ref) => UserRole.financeManager);
+final roleProvider = Provider<UserRole>((ref) {
+  final currentUser = ref.watch(currentUserProvider);
+  if (currentUser == null) {
+    return UserRole.financeManager;
+  }
+  
+  switch (currentUser.role) {
+    case 'financeManager':
+      return UserRole.financeManager;
+    case 'expenseAccountant':
+      return UserRole.expenseAccountant;
+    case 'revenueAccountant':
+      return UserRole.revenueAccountant;
+    default:
+      return UserRole.financeManager;
+  }
+});
