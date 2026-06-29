@@ -54,4 +54,32 @@ class TransactionRepositoryImpl implements TransactionRepository {
   Future<void> softDelete(String id) async {
     await _dataSource.softDelete(id);
   }
+
+  @override
+  Future<void> hardDelete(String id) async {
+    await _dataSource.hardDelete(id);
+  }
+
+  @override
+  Future<void> restore(String id) async {
+    final model = await _dataSource.getByUid(id);
+    if (model != null) {
+      model.status = 'draft'; // Khôi phục về nháp cho an toàn
+      model.updatedAt = DateTime.now();
+      await _dataSource.update(model);
+    }
+  }
+
+  @override
+  Future<void> cleanupDeletedTransactions() async {
+    final models = await _dataSource.getAll();
+    final deletedModels = models.where((m) => m.status == 'deleted').toList();
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    
+    for (var m in deletedModels) {
+      if (m.updatedAt.isBefore(thirtyDaysAgo)) {
+        await _dataSource.hardDelete(m.uid);
+      }
+    }
+  }
 }

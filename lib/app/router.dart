@@ -92,6 +92,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               final extra = state.extra as Map<String, dynamic>?;
               return TransactionFormScreen(
                 transactionId: extra?['transactionId'] as String?,
+                initialAmount: extra?['initialAmount'] as int?,
+                initialNote: extra?['initialNote'] as String?,
+                invoiceId: extra?['invoiceId'] as String?,
               );
             },
           ),

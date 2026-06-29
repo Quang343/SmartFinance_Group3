@@ -50,8 +50,18 @@ class LocalTransactionDataSource {
     final existing = await getByUid(uid);
     if (existing != null) {
       existing.status = 'deleted';
+      existing.updatedAt = DateTime.now();
       await isar.writeTxn(() async {
         await isar.isarTransactions.put(existing);
+      });
+    }
+  }
+
+  Future<void> hardDelete(String uid) async {
+    final existing = await getByUid(uid);
+    if (existing != null) {
+      await isar.writeTxn(() async {
+        await isar.isarTransactions.delete(existing.id);
       });
     }
   }
