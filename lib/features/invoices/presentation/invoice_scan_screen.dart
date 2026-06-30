@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
@@ -158,7 +159,6 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     }
   }
 
-  @override
   Widget _buildScannerTarget(Widget child, bool isDark) {
     final borderColor = const Color(0xFF00D09E);
     return Stack(
@@ -519,9 +519,30 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
               const SizedBox(height: 20),
               _buildExtractedField('Tên đối tác', _partnerName, isDark, (val) => _partnerName = val),
               _buildExtractedField('Mã số thuế', _partnerTaxCode, isDark, (val) => _partnerTaxCode = val),
-              _buildExtractedField('Tiền trước thuế (VND)', _subtotal.toString(), isDark, (val) => _subtotal = int.tryParse(val) ?? 0),
-              _buildExtractedField('Thuế suất (%)', _vatRate.toString(), isDark, (val) => _vatRate = int.tryParse(val) ?? 0),
-              _buildExtractedField('Tổng thanh toán (VND)', _totalAmount.toString(), isDark, (val) => _totalAmount = int.tryParse(val) ?? 0),
+              _buildExtractedField(
+                'Tiền trước thuế (VND)', 
+                _subtotal.toString(), 
+                isDark, 
+                (val) => _subtotal = int.tryParse(val) ?? 0,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              _buildExtractedField(
+                'Thuế suất (%)', 
+                _vatRate.toString(), 
+                isDark, 
+                (val) => _vatRate = int.tryParse(val) ?? 0,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              _buildExtractedField(
+                'Tổng thanh toán (VND)', 
+                _totalAmount.toString(), 
+                isDark, 
+                (val) => _totalAmount = int.tryParse(val) ?? 0,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
             ],
           ),
         );
@@ -530,7 +551,14 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     }
   }
 
-  Widget _buildExtractedField(String label, String value, bool isDark, Function(String) onChanged) {
+  Widget _buildExtractedField(
+    String label, 
+    String value, 
+    bool isDark, 
+    Function(String) onChanged, {
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
     final primaryColor = const Color(0xFF00D09E);
     final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
     final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
@@ -551,6 +579,8 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
           const SizedBox(height: 6),
           TextFormField(
             initialValue: value,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
             style: TextStyle(
               fontSize: 15,
               color: isDark ? Colors.white : Colors.black87,

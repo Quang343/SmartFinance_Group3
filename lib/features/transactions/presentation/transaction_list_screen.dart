@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/transaction_providers.dart';
+import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
@@ -20,32 +22,24 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   String _selectedStatus = 'all'; // 'all', 'confirmed', 'draft'
   DateTimeRange? _customDateRange;
-  late Future<List<dynamic>> _dataFuture;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadData();
-  }
-
-  void _loadData() {
-    final transactionsAsync = ref.read(transactionRepositoryProvider);
-    final categoriesAsync = ref.read(categoryRepositoryProvider);
-    
-    // Auto cleanup old deleted transactions before loading
-    transactionsAsync.cleanupDeletedTransactions();
-    
-    _dataFuture = Future.wait([
-      transactionsAsync.getAll(),
-      categoriesAsync.getAll(),
-      Future.delayed(const Duration(seconds: 1)),
-    ]);
+  void initState() {
+    super.initState();
+    // Auto cleanup old deleted transactions once on mount
+    Future.microtask(() => ref.read(transactionRepositoryProvider).cleanupDeletedTransactions());
   }
 
   void _refreshData() {
-    setState(() {
-      _loadData();
-    });
+    final currentRole = ref.read(roleProvider);
+    if (currentRole == UserRole.expenseAccountant) {
+      ref.invalidate(expenseTransactionsProvider);
+    } else if (currentRole == UserRole.revenueAccountant) {
+      ref.invalidate(incomeTransactionsProvider);
+    } else {
+      ref.invalidate(allTransactionsProvider);
+    }
+    ref.invalidate(allCategoriesProvider);
   }
 
   void _confirmDeleteFromList(TransactionEntity tx) {
@@ -116,7 +110,6 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy');
-    final transactionsAsync = ref.watch(transactionRepositoryProvider);
     final primaryColor = const Color(0xFF00D09E);
     
     return Scaffold(
@@ -218,10 +211,17 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<dynamic>>(
-        future: _dataFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      body: Builder(
+        builder: (context) {
+          final currentRole = ref.watch(roleProvider);
+          final transactionsAsync = currentRole == UserRole.expenseAccountant 
+              ? ref.watch(expenseTransactionsProvider)
+              : currentRole == UserRole.revenueAccountant 
+                  ? ref.watch(incomeTransactionsProvider)
+                  : ref.watch(allTransactionsProvider);
+          final categoriesAsync = ref.watch(allCategoriesProvider);
+
+          if (transactionsAsync.isLoading || categoriesAsync.isLoading) {
             return Center(
               child: Image.asset(
                 'assets/images/loadingGif.gif',
@@ -230,17 +230,17 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
             );
           }
-          if (snapshot.hasError) {
+          if (transactionsAsync.hasError) {
             return Center(
               child: Text(
-                'Lỗi: ${snapshot.error}',
+                'Lỗi: ${transactionsAsync.error}',
                 style: const TextStyle(color: Colors.red),
               ),
             );
           }
 
-          final allTxs = (snapshot.data?[0] as List<TransactionEntity>?) ?? [];
-          final allCats = (snapshot.data?[1] as List<CategoryEntity>?) ?? [];
+          final allTxs = transactionsAsync.value ?? [];
+          final allCats = categoriesAsync.value ?? [];
           final catMap = {for (var c in allCats) c.id: c};
 
           // Filter by status and handle 'deleted' explicitly
@@ -252,11 +252,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             list = list.where((tx) => tx.status != TransactionStatus.deleted).toList();
           }
 
-          if (currentRole == UserRole.expenseAccountant) {
-            list = list.where((tx) => tx.type == TransactionType.expense).toList();
-          } else if (currentRole == UserRole.revenueAccountant) {
-            list = list.where((tx) => tx.type == TransactionType.income).toList();
-          }
+          // Note: No need to filter by role here because the Provider already filtered it!
 
           // Filter by time period
           list = list.where((tx) => _isWithinPeriod(tx.transactionDate)).toList();
@@ -914,7 +910,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                 } else if (action == 'delete') {
                                                   _confirmDeleteFromList(tx);
                                                 } else if (action == 'restore') {
-                                                  await transactionsAsync.restore(tx.id);
+                                                  final repo = ref.read(transactionRepositoryProvider);
+                                                  await repo.restore(tx.id);
                                                   if (context.mounted) {
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp'), backgroundColor: Colors.green),
@@ -922,7 +919,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                     _refreshData();
                                                   }
                                                 } else if (action == 'hard_delete') {
-                                                  await transactionsAsync.hardDelete(tx.id);
+                                                  final repo = ref.read(transactionRepositoryProvider);
+                                                  await repo.hardDelete(tx.id);
                                                   if (context.mounted) {
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       const SnackBar(content: Text('Đã xóa vĩnh viễn giao dịch'), backgroundColor: Colors.red),

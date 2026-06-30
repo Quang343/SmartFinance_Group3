@@ -6,6 +6,8 @@ import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
+import '../../../core/providers/transaction_providers.dart';
+import '../../../core/providers/category_providers.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -30,124 +32,118 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final timeFormatter = DateFormat('HH:mm');
     final dateFormatter = DateFormat('dd/MM');
 
-    final transactionsAsync = ref.watch(transactionRepositoryProvider);
-    final categoriesAsync = ref.watch(categoryRepositoryProvider);
+    final transactionsAsync = currentRole == UserRole.expenseAccountant 
+        ? ref.watch(expenseTransactionsProvider)
+        : currentRole == UserRole.revenueAccountant 
+            ? ref.watch(incomeTransactionsProvider)
+            : ref.watch(allTransactionsProvider);
+            
+    final categoriesAsync = ref.watch(allCategoriesProvider);
 
-    // Fetch transactions and categories in parallel, with artificial 1s delay for the loading animation
-    final dataFuture = Future.wait([
-      transactionsAsync.getAll(),
-      categoriesAsync.getAll(),
-      Future.delayed(const Duration(seconds: 1)),
-    ]);
+    if (transactionsAsync.isLoading || categoriesAsync.isLoading) {
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+        body: Center(
+          child: Image.asset(
+            'assets/images/loadingGif.gif',
+            width: 80,
+            fit: BoxFit.contain,
+          ),
+        ),
+      );
+    }
+
+    if (transactionsAsync.hasError) {
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+        body: Center(
+          child: Text(
+            'Lỗi tải dữ liệu giao dịch: ${transactionsAsync.error}',
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      );
+    }
+
+    final allTxs = transactionsAsync.value ?? [];
+    final allCats = categoriesAsync.value ?? [];
+
+    // Create a quick lookup map for categories
+    final catMap = {for (var c in allCats) c.id: c};
+
+    // Filter by status (Confirmed only)
+    var filteredTxs = allTxs
+        .where((tx) => tx.status == TransactionStatus.confirmed)
+        .toList();
+
+    // Note: No need to filter by role again because the Provider already did it!
+
+    // Apply selected time filter (Daily, Weekly, Monthly)
+    final now = DateTime.now();
+    filteredTxs = filteredTxs.where((tx) {
+      final difference = now.difference(tx.transactionDate).inDays;
+      if (_timeFilter == 'daily') {
+        return difference == 0 && tx.transactionDate.day == now.day;
+      } else if (_timeFilter == 'weekly') {
+        return difference <= 7;
+      } else {
+        // Monthly (Calendar month)
+        return tx.transactionDate.month == now.month && tx.transactionDate.year == now.year;
+      }
+    }).toList();
+
+    // Calculations for balance and stats
+    final incomeSum = filteredTxs
+        .where((tx) => tx.type == TransactionType.income)
+        .map((tx) => tx.amount)
+        .fold(0, (sum, val) => sum + val);
+
+    final expenseSum = filteredTxs
+        .where((tx) => tx.type == TransactionType.expense)
+        .map((tx) => tx.amount)
+        .fold(0, (sum, val) => sum + val);
+
+    final totalBalance = incomeSum - expenseSum;
+
+    // Budget Analysis calculations (Always Monthly)
+    final monthlyExpenseSum = allTxs
+        .where((tx) => 
+            tx.status == TransactionStatus.confirmed &&
+            tx.type == TransactionType.expense &&
+            tx.transactionDate.month == now.month &&
+            tx.transactionDate.year == now.year)
+        .map((tx) => tx.amount)
+        .fold(0, (sum, val) => sum + val);
+
+    const double budgetLimit = 20000000;
+    
+    // Use monthlyExpenseSum for Budget Progress
+    final double expensePercentage = (monthlyExpenseSum / budgetLimit).clamp(0.0, 1.0);
+    final int expensePercentInt = (expensePercentage * 100).toInt();
+    
+    // Budget Insights
+    final double remainingBudget = (budgetLimit - monthlyExpenseSum).toDouble();
+    final int currentDay = now.day;
+    final double dailyAverage = currentDay > 0 ? (monthlyExpenseSum / currentDay).toDouble() : 0.0;
 
     return Scaffold(
       backgroundColor: isDark
           ? const Color(0xFF06150F)
           : const Color(0xFFF4FAF7),
-      body: FutureBuilder<List<dynamic>>(
-        future: dataFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: Image.asset(
-                'assets/images/loadingGif.gif',
-                width: 80,
-                fit: BoxFit.contain,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // Top custom Teal/Mint header
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.only(
+                top: 60,
+                left: 24,
+                right: 24,
+                bottom: 20,
               ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Lỗi tải dữ liệu: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
-              ),
-            );
-          }
-
-          final allTxs = (snapshot.data?[0] as List<TransactionEntity>?) ?? [];
-          final allCats = (snapshot.data?[1] as List<CategoryEntity>?) ?? [];
-
-          // Create a quick lookup map for categories
-          final catMap = {for (var c in allCats) c.id: c};
-
-          // Filter by status and role
-          var filteredTxs = allTxs
-              .where((tx) => tx.status == TransactionStatus.confirmed)
-              .toList();
-
-          if (currentRole == UserRole.expenseAccountant) {
-            filteredTxs = filteredTxs
-                .where((tx) => tx.type == TransactionType.expense)
-                .toList();
-          } else if (currentRole == UserRole.revenueAccountant) {
-            filteredTxs = filteredTxs
-                .where((tx) => tx.type == TransactionType.income)
-                .toList();
-          }
-
-          // Apply selected time filter (Daily, Weekly, Monthly)
-          final now = DateTime.now();
-          filteredTxs = filteredTxs.where((tx) {
-            final difference = now.difference(tx.transactionDate).inDays;
-            if (_timeFilter == 'daily') {
-              return difference == 0 && tx.transactionDate.day == now.day;
-            } else if (_timeFilter == 'weekly') {
-              return difference <= 7;
-            } else {
-              // Monthly (Calendar month)
-              return tx.transactionDate.month == now.month && tx.transactionDate.year == now.year;
-            }
-          }).toList();
-
-          // Calculations for balance and stats
-          final incomeSum = filteredTxs
-              .where((tx) => tx.type == TransactionType.income)
-              .map((tx) => tx.amount)
-              .fold(0, (sum, val) => sum + val);
-
-          final expenseSum = filteredTxs
-              .where((tx) => tx.type == TransactionType.expense)
-              .map((tx) => tx.amount)
-              .fold(0, (sum, val) => sum + val);
-
-          final totalBalance = incomeSum - expenseSum;
-
-          // Budget Analysis calculations (Always Monthly)
-          final monthlyExpenseSum = allTxs
-              .where((tx) => 
-                  tx.status == TransactionStatus.confirmed &&
-                  tx.type == TransactionType.expense &&
-                  tx.transactionDate.month == now.month &&
-                  tx.transactionDate.year == now.year)
-              .map((tx) => tx.amount)
-              .fold(0, (sum, val) => sum + val);
-
-          const double budgetLimit = 20000000;
-          
-          // Use monthlyExpenseSum for Budget Progress
-          final double expensePercentage = (monthlyExpenseSum / budgetLimit).clamp(0.0, 1.0);
-          final int expensePercentInt = (expensePercentage * 100).toInt();
-          
-          // Budget Insights
-          final double remainingBudget = (budgetLimit - monthlyExpenseSum).toDouble();
-          final int currentDay = now.day;
-          final double dailyAverage = currentDay > 0 ? (monthlyExpenseSum / currentDay).toDouble() : 0.0;
-
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              // Top custom Teal/Mint header
-              SliverToBoxAdapter(
-                child: Container(
-                  padding: const EdgeInsets.only(
-                    top: 60,
-                    left: 24,
-                    right: 24,
-                    bottom: 20,
-                  ),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
                       colors: [Color(0xFF00D09E), Color(0xFF00B78A)],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -840,10 +836,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ),
             ],
-          );
-        },
-      ),
-    );
+          ),
+        );
   }
 
   Widget _buildFilterTab({required String id, required String label}) {
