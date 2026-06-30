@@ -11,6 +11,7 @@ class InvoiceModel extends InvoiceEntity {
     required super.vatAmount,
     required super.totalAmount,
     required super.ocrStatus,
+    required super.paymentStatus,
     required super.issuedDate,
     required super.createdAt,
     required super.updatedAt,

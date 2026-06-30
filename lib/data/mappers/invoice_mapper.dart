@@ -16,6 +16,10 @@ class InvoiceMapper {
         (e) => e.name == model.ocrStatus,
         orElse: () => OcrStatus.notStarted,
       ),
+      paymentStatus: PaymentStatus.values.firstWhere(
+        (e) => e.name == model.paymentStatus,
+        orElse: () => PaymentStatus.unpaid,
+      ),
       issuedDate: model.issuedDate,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
@@ -40,6 +44,7 @@ class InvoiceMapper {
       ..totalAmount = entity.totalAmount
       ..imagePath = entity.imagePath
       ..ocrStatus = entity.ocrStatus.name
+      ..paymentStatus = entity.paymentStatus.name
       ..ocrConfidence = entity.ocrConfidence
       ..type = entity.type.name
       ..issuedDate = entity.issuedDate

@@ -136,6 +136,7 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
       vatAmount: (_subtotal * _vatRate / 100).round(),
       totalAmount: _totalAmount,
       ocrStatus: OcrStatus.extracted,
+      paymentStatus: PaymentStatus.unpaid,
       ocrConfidence: 0.94,
       type: InvoiceType.incoming,
       issuedDate: DateTime.now(),
@@ -162,7 +163,9 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     final borderColor = const Color(0xFF00D09E);
     return Stack(
       children: [
-        child,
+        Positioned.fill(
+          child: Center(child: child),
+        ),
         // Top Left
         Positioned(
           top: 0,

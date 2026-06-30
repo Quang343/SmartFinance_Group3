@@ -35,19 +35,12 @@ class InvoiceDetailScreen extends ConsumerWidget {
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
     final invoiceRepository = ref.watch(invoiceRepositoryProvider);
-    final transactionRepository = ref.watch(transactionRepositoryProvider);
-
     return FutureBuilder(
-      future: Future.wait([
-        invoiceRepository.getById(invoiceId),
-        transactionRepository.getAll(),
-      ]),
+      future: invoiceRepository.getById(invoiceId),
       builder: (context, snapshot) {
-        final data = snapshot.data;
-        final invoice = data != null ? data[0] as InvoiceEntity? : null;
+        final invoice = snapshot.data;
         final isIncoming = invoice?.type != InvoiceType.outgoing;
-        final transactions = data != null ? data[1] as List<TransactionEntity> : <TransactionEntity>[];
-        final hasTransaction = transactions.any((tx) => tx.invoiceId == invoiceId);
+        final hasTransaction = invoice?.paymentStatus == PaymentStatus.paid;
 
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
@@ -184,6 +177,31 @@ class InvoiceDetailScreen extends ConsumerWidget {
                                           color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: invoice.paymentStatus == PaymentStatus.paid
+                                            ? const Color(0xFF00D09E).withValues(alpha: 0.1)
+                                            : const Color(0xFFEF4444).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: invoice.paymentStatus == PaymentStatus.paid
+                                              ? const Color(0xFF00D09E)
+                                              : const Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        invoice.paymentStatus == PaymentStatus.paid ? 'ĐÃ THANH TOÁN' : 'CHƯA THANH TOÁN',
+                                        style: TextStyle(
+                                          color: invoice.paymentStatus == PaymentStatus.paid
+                                              ? const Color(0xFF00D09E)
+                                              : const Color(0xFFEF4444),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ),

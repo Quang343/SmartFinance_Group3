@@ -31,6 +31,9 @@ class IsarInvoice {
   double? ocrConfidence;
 
   @Index()
+  late String paymentStatus;
+
+  @Index()
   late String type;
 
   @Index()

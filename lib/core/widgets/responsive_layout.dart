@@ -366,7 +366,7 @@ class _MobileScaffold extends ConsumerWidget {
   }
 }
 
-class _DesktopScaffold extends StatelessWidget {
+class _DesktopScaffold extends ConsumerWidget {
   final Widget child;
   final List<NavigationItem> items;
 
@@ -383,23 +383,40 @@ class _DesktopScaffold extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            selectedIndex: _calculateSelectedIndex(context),
-            onDestinationSelected: (index) => _onItemTapped(index, context),
-            labelType: NavigationRailLabelType.all,
-            selectedIconTheme: IconThemeData(color: primaryColor),
-            selectedLabelTextStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-            destinations: items
-                .map((item) => NavigationRailDestination(
-                      icon: Icon(item.icon),
-                      label: Text(item.label),
-                    ))
-                .toList(),
+          Column(
+            children: [
+              Expanded(
+                child: NavigationRail(
+                  selectedIndex: _calculateSelectedIndex(context),
+                  onDestinationSelected: (index) => _onItemTapped(index, context),
+                  labelType: NavigationRailLabelType.all,
+                  selectedIconTheme: IconThemeData(color: primaryColor),
+                  selectedLabelTextStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                  destinations: items
+                      .map((item) => NavigationRailDestination(
+                            icon: Icon(item.icon),
+                            label: Text(item.label),
+                          ))
+                      .toList(),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: IconButton(
+                  icon: const Icon(Icons.logout_rounded, color: Colors.red),
+                  tooltip: 'Đăng xuất',
+                  onPressed: () {
+                    ref.read(currentUserProvider.notifier).state = null;
+                    context.go('/welcome');
+                  },
+                ),
+              ),
+            ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(child: child),

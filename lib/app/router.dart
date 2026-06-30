@@ -145,7 +145,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: RouteNames.reportDetail,
             builder: (context, state) {
               final type = state.uri.queryParameters['type'] ?? 'expense';
-              return ReportDetailScreen(reportType: type);
+              final period = state.uri.queryParameters['period'] ?? 'all';
+              final startDate = state.uri.queryParameters['startDate'];
+              final endDate = state.uri.queryParameters['endDate'];
+              return ReportDetailScreen(
+                reportType: type,
+                period: period,
+                startDate: startDate,
+                endDate: endDate,
+              );
             },
           ),
           GoRoute(

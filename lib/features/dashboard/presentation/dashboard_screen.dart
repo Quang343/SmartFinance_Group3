@@ -95,8 +95,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             } else if (_timeFilter == 'weekly') {
               return difference <= 7;
             } else {
-              // Monthly (last 30 days)
-              return difference <= 30;
+              // Monthly (Calendar month)
+              return tx.transactionDate.month == now.month && tx.transactionDate.year == now.year;
             }
           }).toList();
 
@@ -113,13 +113,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
           final totalBalance = incomeSum - expenseSum;
 
-          // Compute budget progress percentage (Mocked budget max: 20,000,000 ₫)
+          // Budget Analysis calculations (Always Monthly)
+          final monthlyExpenseSum = allTxs
+              .where((tx) => 
+                  tx.status == TransactionStatus.confirmed &&
+                  tx.type == TransactionType.expense &&
+                  tx.transactionDate.month == now.month &&
+                  tx.transactionDate.year == now.year)
+              .map((tx) => tx.amount)
+              .fold(0, (sum, val) => sum + val);
+
           const double budgetLimit = 20000000;
-          final double expensePercentage = (expenseSum / budgetLimit).clamp(
-            0.0,
-            1.0,
-          );
+          
+          // Use monthlyExpenseSum for Budget Progress
+          final double expensePercentage = (monthlyExpenseSum / budgetLimit).clamp(0.0, 1.0);
           final int expensePercentInt = (expensePercentage * 100).toInt();
+          
+          // Budget Insights
+          final double remainingBudget = (budgetLimit - monthlyExpenseSum).toDouble();
+          final int currentDay = now.day;
+          final double dailyAverage = currentDay > 0 ? (monthlyExpenseSum / currentDay).toDouble() : 0.0;
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
@@ -358,7 +371,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ] else if (currentRole == UserRole.expenseAccountant) ...[
                               // Tổng chi tiêu
                               Text(
-                                'TỔNG CHI TIÊU HÀNG THÁNG',
+                                _timeFilter == 'daily' 
+                                    ? 'TỔNG CHI TIÊU HÔM NAY' 
+                                    : _timeFilter == 'weekly' 
+                                        ? 'TỔNG CHI TIÊU TUẦN NÀY' 
+                                        : 'TỔNG CHI TIÊU HÀNG THÁNG',
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: isDark ? Colors.white70 : Colors.black87,
@@ -547,8 +564,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Text(
-                                'Tiết kiệm mục tiêu',
+                                Text(
+                                  'Phân tích Ngân sách',
                                 style: TextStyle(
                                   color: isDark
                                       ? Colors.white70
@@ -575,7 +592,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Doanh thu tuần trước',
+                                  'Ngân sách còn lại',
                                   style: TextStyle(
                                     color: isDark
                                         ? Colors.white60
@@ -586,13 +603,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  currencyFormatter.format(
-                                    4000000,
-                                  ), // static representation for UI layout
+                                  currencyFormatter.format(remainingBudget),
                                   style: TextStyle(
-                                    color: isDark
-                                        ? const Color(0xFF00D09E)
-                                        : const Color(0xFF059669),
+                                    color: remainingBudget < 0
+                                        ? const Color(0xFFE11D48)
+                                        : (isDark
+                                            ? const Color(0xFF00D09E)
+                                            : const Color(0xFF059669)),
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
                                   ),
@@ -609,7 +626,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   ),
                                 ),
                                 Text(
-                                  'Chi ăn uống tuần trước',
+                                  'Chi trung bình/ngày',
                                   style: TextStyle(
                                     color: isDark
                                         ? Colors.white60
@@ -620,11 +637,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '-${currencyFormatter.format(100000)}',
+                                  currencyFormatter.format(dailyAverage),
                                   style: const TextStyle(
-                                    color: Color(
-                                      0xFFE11D48,
-                                    ), // Rose/red for negative expenses
+                                    color: Color(0xFFE11D48),
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
                                   ),
