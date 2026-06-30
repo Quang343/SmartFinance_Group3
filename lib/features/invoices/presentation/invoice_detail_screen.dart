@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
+import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
+import 'package:smart_finance/core/constants/route_names.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
   final String invoiceId;
@@ -32,12 +35,19 @@ class InvoiceDetailScreen extends ConsumerWidget {
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
     final invoiceRepository = ref.watch(invoiceRepositoryProvider);
+    final transactionRepository = ref.watch(transactionRepositoryProvider);
 
-    return FutureBuilder<InvoiceEntity?>(
-      future: invoiceRepository.getById(invoiceId),
+    return FutureBuilder(
+      future: Future.wait([
+        invoiceRepository.getById(invoiceId),
+        transactionRepository.getAll(),
+      ]),
       builder: (context, snapshot) {
-        final invoice = snapshot.data;
-        final isIncoming = invoice?.type != InvoiceType.outgoing; // default to true if loading
+        final data = snapshot.data;
+        final invoice = data != null ? data[0] as InvoiceEntity? : null;
+        final isIncoming = invoice?.type != InvoiceType.outgoing;
+        final transactions = data != null ? data[1] as List<TransactionEntity> : <TransactionEntity>[];
+        final hasTransaction = transactions.any((tx) => tx.invoiceId == invoiceId);
 
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
@@ -300,7 +310,8 @@ class InvoiceDetailScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 12),
                             Container(
-                              height: 280,
+                              width: double.infinity,
+                              constraints: const BoxConstraints(maxHeight: 400),
                               decoration: BoxDecoration(
                                 color: isDark ? const Color(0xFF0D251C) : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
@@ -310,19 +321,106 @@ class InvoiceDetailScreen extends ConsumerWidget {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(20),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.image_outlined,
-                                    size: 64,
-                                    color: Colors.grey,
-                                  ),
-                                ),
+                                child: invoice.imagePath == 'mock_path_ocr.png' || !File(invoice.imagePath!).existsSync()
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(40.0),
+                                        child: Center(
+                                          child: Icon(
+                                            Icons.image_outlined,
+                                            size: 64,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      )
+                                    : Image.file(
+                                        File(invoice.imagePath!),
+                                        fit: BoxFit.contain,
+                                      ),
                               ),
                             ),
                           ],
                         ],
                       ),
                     ),
+          bottomNavigationBar: invoice != null && isIncoming && !hasTransaction
+              ? SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: ScaleOnTap(
+                      onTap: () {
+                        context.pushNamed(
+                          RouteNames.transactionForm,
+                          extra: {
+                            'initialAmount': invoice.totalAmount,
+                            'initialNote': 'Thanh toán hóa đơn: ${invoice.partnerName}',
+                            'invoiceId': invoice.id,
+                          },
+                        );
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00D09E),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00D09E).withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_card_rounded, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Tạo khoản chi',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : invoice != null && hasTransaction
+                  ? SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFF00D09E)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check_circle_rounded, color: Color(0xFF00D09E)),
+                              SizedBox(width: 8),
+                              Text(
+                                'Đã thanh toán',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF00D09E),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
         );
       },
     );

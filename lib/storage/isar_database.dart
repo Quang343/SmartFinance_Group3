@@ -5,6 +5,7 @@ import '../data/local/isar_models/isar_category.dart';
 import '../data/local/isar_models/isar_transaction.dart';
 import '../data/local/isar_models/isar_invoice.dart';
 import '../data/local/isar_models/isar_user.dart';
+import '../data/local/isar_models/isar_attachment.dart';
 
 class IsarDatabase {
   static Isar? _instance;
@@ -31,6 +32,7 @@ class IsarDatabase {
         IsarTransactionSchema,
         IsarInvoiceSchema,
         IsarUserSchema,
+        IsarAttachmentSchema,
       ],
       directory: dir,
     );

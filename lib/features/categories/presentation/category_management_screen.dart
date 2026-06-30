@@ -42,7 +42,6 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
     await repo.create(newCat);
     _newCategoryController.clear();
     if (mounted) {
-      Navigator.pop(context);
       setState(() {});
     }
   }
@@ -50,7 +49,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
   void _showAddCategoryDialog(String type) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final primaryColor = const Color(0xFF00D09E);
         final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
@@ -89,14 +88,19 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
           actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                if (dialogContext.canPop()) dialogContext.pop();
+              },
               child: Text(
                 'Hủy',
                 style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
               ),
             ),
             ScaleOnTap(
-              onTap: () => _addCategory(type),
+              onTap: () {
+                if (dialogContext.canPop()) dialogContext.pop();
+                _addCategory(type);
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 decoration: BoxDecoration(

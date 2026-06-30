@@ -2,15 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
+import '../../../domain/entities/attachment_entity.dart';
+import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
+  final int? initialAmount;
+  final String? initialNote;
+  final String? invoiceId;
 
-  const TransactionFormScreen({super.key, this.transactionId});
+  const TransactionFormScreen({
+    super.key, 
+    this.transactionId,
+    this.initialAmount,
+    this.initialNote,
+    this.invoiceId,
+  });
 
   @override
   ConsumerState<TransactionFormScreen> createState() => _TransactionFormScreenState();
@@ -25,9 +39,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   String _categoryId = '';
   TransactionStatus _status = TransactionStatus.confirmed;
 
+  String? _invoiceId;
+  String? _invoiceImagePath;
+  final _picker = ImagePicker();
+  String? _selectedImagePath;
+
+  DateTime _transactionDate = DateTime.now();
+  DateTime? _createdAt;
+
+  List<CategoryEntity> _categories = [];
+  bool _isLoadingCategories = true;
+
   @override
   void initState() {
     super.initState();
+    if (widget.initialAmount != null) {
+      _amountController.text = widget.initialAmount.toString();
+    }
+    if (widget.initialNote != null) {
+      _noteController.text = widget.initialNote!;
+    }
+    _invoiceId = widget.invoiceId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
@@ -39,6 +71,16 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       _type = TransactionType.income;
     } else {
       _type = TransactionType.expense;
+    }
+
+    // Fetch categories
+    final categoryRepo = ref.read(categoryRepositoryProvider);
+    final fetchedCategories = await categoryRepo.getAll();
+    if (mounted) {
+      setState(() {
+        _categories = fetchedCategories;
+        _isLoadingCategories = false;
+      });
     }
 
     if (widget.transactionId != null) {
@@ -53,7 +95,53 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           _type = tx.type;
           _categoryId = tx.categoryId;
           _status = tx.status;
+          _invoiceId = tx.invoiceId;
+          _transactionDate = tx.transactionDate;
+          _createdAt = tx.createdAt;
         });
+
+        // Also fetch attachment if exists
+        final attachmentRepo = ref.read(attachmentRepositoryProvider);
+        final attachments = await attachmentRepo.getByOwnerId(widget.transactionId!);
+        if (attachments.isNotEmpty) {
+          setState(() {
+            _selectedImagePath = attachments.first.filePath;
+          });
+        }
+      }
+    }
+    
+    // If we have an invoice linked, fetch its image
+    if (_invoiceId != null) {
+      final invoiceRepo = ref.read(invoiceRepositoryProvider);
+      final invoice = await invoiceRepo.getById(_invoiceId!);
+      if (invoice != null && invoice.imagePath != null && invoice.imagePath != 'mock_path_ocr.png') {
+        if (mounted) {
+          setState(() {
+            _invoiceImagePath = invoice.imagePath;
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(source: source);
+      if (image != null) {
+        setState(() {
+          _selectedImagePath = image.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMsg = 'Lỗi chọn ảnh: $e';
+        if (e.toString().contains('cameraDelegate')) {
+          errorMsg = 'Tính năng chụp ảnh chưa được hỗ trợ trên thiết bị này (Windows/Desktop). Vui lòng chọn từ Thư viện!';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -67,73 +155,192 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   void _saveTransaction() async {
     if (_formKey.currentState!.validate()) {
+      if (_categoryId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vui lòng chọn danh mục giao dịch!'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
       final repo = ref.read(transactionRepositoryProvider);
       
       final String id = widget.transactionId ?? const Uuid().v4();
       final int amount = int.parse(_amountController.text);
-      
-      // Default category if empty
-      final String catId = _categoryId.isEmpty 
-          ? (_type == TransactionType.income ? 'cat_revenue' : 'cat_expense')
-          : _categoryId;
+
+      // Verify file existence right before saving to prevent ghost paths
+      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync()) {
+        _selectedImagePath = null;
+      }
 
       final transaction = TransactionEntity(
         id: id,
         amount: amount,
         type: _type,
-        categoryId: catId,
-        transactionDate: DateTime.now(),
+        categoryId: _categoryId,
+        transactionDate: _transactionDate,
         status: _status,
         note: _noteController.text,
-        createdAt: DateTime.now(),
+        invoiceId: _invoiceId,
+        createdAt: _createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
       if (widget.transactionId == null) {
         await repo.create(transaction);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tạo giao dịch thành công!'), backgroundColor: Colors.green),
-        );
+        if (_selectedImagePath != null) {
+          final attachmentRepo = ref.read(attachmentRepositoryProvider);
+          final attachment = AttachmentEntity(
+            id: const Uuid().v4(),
+            ownerId: id,
+            ownerType: 'transaction',
+            filePath: _selectedImagePath!,
+            createdAt: DateTime.now(),
+          );
+          await attachmentRepo.create(attachment);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tạo giao dịch thành công!'), backgroundColor: Colors.green),
+          );
+        }
       } else {
         await repo.update(transaction);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cập nhật giao dịch thành công!'), backgroundColor: Colors.green),
+        if (_selectedImagePath != null) {
+          final attachmentRepo = ref.read(attachmentRepositoryProvider);
+          final existing = await attachmentRepo.getByOwnerId(id);
+          if (existing.isEmpty || existing.first.filePath != _selectedImagePath) {
+            if (existing.isNotEmpty) {
+              await attachmentRepo.delete(existing.first.id);
+            }
+            final attachment = AttachmentEntity(
+              id: const Uuid().v4(),
+              ownerId: id,
+              ownerType: 'transaction',
+              filePath: _selectedImagePath!,
+              createdAt: DateTime.now(),
+            );
+            await attachmentRepo.create(attachment);
+          }
+        } else {
+          final attachmentRepo = ref.read(attachmentRepositoryProvider);
+          final existing = await attachmentRepo.getByOwnerId(id);
+          if (existing.isNotEmpty) {
+            await attachmentRepo.delete(existing.first.id);
+          }
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cập nhật giao dịch thành công!'), backgroundColor: Colors.green),
+          );
+        }
+      }
+
+      if (mounted) {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/transactions');
+        }
+      }
+    }
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: const Text('Xác nhận xóa', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final repo = ref.read(transactionRepositoryProvider);
+              await repo.softDelete(widget.transactionId!);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
+                );
+                context.go('/transactions');
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Xóa', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _selectDateTime() async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _transactionDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF00D09E),
+            ),
+          ),
+          child: child!,
         );
-      }
-
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go('/transactions');
+      },
+    );
+    if (pickedDate != null && mounted) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(_transactionDate),
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: Color(0xFF00D09E),
+              ),
+            ),
+            child: child!,
+          );
+        },
+      );
+      if (pickedTime != null && mounted) {
+        setState(() {
+          _transactionDate = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+        });
       }
     }
   }
 
-  String _getCategoryName(String cat) {
-    switch (cat) {
-      case 'cat_sales': return 'Doanh thu bán hàng';
-      case 'cat_investment': return 'Đầu tư';
-      case 'cat_other_income': return 'Thu nhập khác';
-      case 'cat_salary': return 'Lương nhân viên';
-      case 'cat_rent': return 'Tiền thuê mặt bằng';
-      case 'cat_utilities': return 'Điện nước & Tiện ích';
-      case 'cat_marketing': return 'Marketing & Quảng cáo';
-      case 'cat_other_expense': return 'Chi phí khác';
-      default: return 'Khác';
+  String _getCategoryName(String id) {
+    if (id.isEmpty) return 'Khác';
+    try {
+      final cat = _categories.firstWhere((c) => c.id == id);
+      return cat.name;
+    } catch (_) {
+      return 'Khác';
     }
   }
 
-  IconData _getCategoryIcon(String cat) {
-    switch (cat) {
-      case 'cat_sales': return Icons.point_of_sale_rounded;
-      case 'cat_investment': return Icons.trending_up_rounded;
-      case 'cat_other_income': return Icons.account_balance_wallet_rounded;
-      case 'cat_salary': return Icons.people_alt_rounded;
-      case 'cat_rent': return Icons.business_rounded;
-      case 'cat_utilities': return Icons.bolt_rounded;
-      case 'cat_marketing': return Icons.campaign_rounded;
-      case 'cat_other_expense': return Icons.local_mall_rounded;
-      default: return Icons.category_rounded;
+  IconData _getCategoryIcon(String id) {
+    if (id.isEmpty) return Icons.category_rounded;
+    try {
+      final cat = _categories.firstWhere((c) => c.id == id);
+      // Since icons aren't stored natively, use a generic icon based on type
+      return cat.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+    } catch (_) {
+      return Icons.category_rounded;
     }
   }
 
@@ -167,9 +374,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = const Color(0xFF00D09E);
 
-    final List<String> categories = _type == TransactionType.income
-        ? ['cat_sales', 'cat_investment', 'cat_other_income']
-        : ['cat_salary', 'cat_rent', 'cat_utilities', 'cat_marketing', 'cat_other_expense'];
+    final List<CategoryEntity> categories = _categories
+        .where((c) => c.type == _type.name && c.isActive)
+        .toList();
 
     final inputFillColor = isDark ? const Color(0xFF0F1E15) : Colors.grey.shade50;
     final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
@@ -207,61 +414,76 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: categories.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final cat = categories[index];
-                        final isSelected = _categoryId == cat || (_categoryId.isEmpty && cat == categories.last);
-                        return InkWell(
-                          onTap: () {
-                            setState(() => _categoryId = cat);
-                            Navigator.pop(context);
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: isSelected 
-                                  ? const Color(0x1500D09E) 
-                                  : inputFillColor,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected ? const Color(0xFF00D09E) : inputBorderColor,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _getCategoryIcon(cat),
-                                  color: isSelected ? const Color(0xFF00D09E) : (isDark ? Colors.white60 : Colors.black54),
-                                  size: 22,
+                  if (_isLoadingCategories)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (categories.isEmpty)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('Không có danh mục nào.'),
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: categories.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final cat = categories[index];
+                          final isSelected = _categoryId == cat.id;
+                          return InkWell(
+                            onTap: () {
+                              setState(() => _categoryId = cat.id);
+                              Navigator.pop(context);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: isSelected 
+                                    ? const Color(0x1500D09E) 
+                                    : inputFillColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFF00D09E) : inputBorderColor,
+                                  width: 1.5,
                                 ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Text(
-                                    _getCategoryName(cat),
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                      color: isSelected 
-                                          ? const Color(0xFF00D09E) 
-                                          : (isDark ? Colors.white : Colors.black87),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _getCategoryIcon(cat.id),
+                                    color: isSelected ? const Color(0xFF00D09E) : (isDark ? Colors.white60 : Colors.black54),
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Text(
+                                      _getCategoryName(cat.id),
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        color: isSelected 
+                                            ? const Color(0xFF00D09E) 
+                                            : (isDark ? Colors.white : Colors.black87),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (isSelected)
-                                  const Icon(Icons.check_rounded, color: Color(0xFF00D09E), size: 20),
-                              ],
+                                  if (isSelected)
+                                    const Icon(Icons.check_rounded, color: Color(0xFF00D09E), size: 20),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -306,10 +528,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   Flexible(
                     child: ListView.separated(
                       shrinkWrap: true,
-                      itemCount: TransactionStatus.values.length,
+                      itemCount: TransactionStatus.values.where((s) => s != TransactionStatus.deleted).length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
-                        final s = TransactionStatus.values[index];
+                        final s = TransactionStatus.values.where((s) => s != TransactionStatus.deleted).toList()[index];
                         final isSelected = _status == s;
                         return InkWell(
                           onTap: () {
@@ -380,6 +602,14 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             color: isDark ? Colors.white : Colors.black87,
           ),
         ),
+        actions: [
+          if (widget.transactionId != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              tooltip: 'Xóa giao dịch',
+              onPressed: _confirmDelete,
+            ),
+        ],
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: 20),
           onPressed: () {
@@ -432,8 +662,51 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 if (val == null || int.tryParse(val) == null) {
                   return 'Vui lòng nhập số tiền hợp lệ';
                 }
+                if (int.parse(val) <= 0) {
+                  return 'Số tiền phải lớn hơn 0';
+                }
                 return null;
               },
+            ),
+            const SizedBox(height: 24),
+
+            // Transaction Date Picker
+            Text(
+              'Ngày giao dịch',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ScaleOnTap(
+              onTap: _selectDateTime,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  color: inputFillColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: inputBorderColor, width: 1.5),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_month_rounded, color: Color(0xFF00D09E)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        DateFormat('dd/MM/yyyy HH:mm').format(_transactionDate),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios_rounded, color: isDark ? Colors.white54 : Colors.black54, size: 16),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -575,17 +848,19 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      _getCategoryIcon(_categoryId.isEmpty ? categories.last : _categoryId),
-                      color: primaryColor,
+                      _categoryId.isEmpty ? Icons.category_outlined : _getCategoryIcon(_categoryId),
+                      color: _categoryId.isEmpty ? Colors.grey : primaryColor,
                       size: 22,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        _getCategoryName(_categoryId.isEmpty ? categories.last : _categoryId),
+                        _categoryId.isEmpty ? 'Chọn danh mục' : _getCategoryName(_categoryId),
                         style: TextStyle(
                           fontSize: 15,
-                          color: isDark ? Colors.white : Colors.black87,
+                          color: _categoryId.isEmpty 
+                              ? (isDark ? Colors.white54 : Colors.black54)
+                              : (isDark ? Colors.white : Colors.black87),
                         ),
                       ),
                     ),
@@ -670,6 +945,158 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+
+            // Attachment Picker
+            Text(
+              'Đính kèm hóa đơn/biên lai',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 10),
+            
+            // Hide attachment upload if coming from an invoice, as it's already linked
+            if (_invoiceId != null)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF00D09E).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.link_rounded, color: Color(0xFF00D09E)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark ? Colors.white70 : const Color(0xFF093021),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_invoiceImagePath != null && File(_invoiceImagePath!).existsSync()) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: inputFillColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: inputBorderColor, width: 1.5),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(_invoiceImagePath!),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              )
+            else if (_selectedImagePath != null && File(_selectedImagePath!).existsSync())
+              Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: inputFillColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: inputBorderColor, width: 1.5),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(_selectedImagePath!),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: InkWell(
+                      onTap: () => setState(() => _selectedImagePath = null),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _pickImage(ImageSource.camera),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorderColor, width: 1.5),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
+                            SizedBox(width: 8),
+                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => _pickImage(ImageSource.gallery),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorderColor, width: 1.5),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.image_rounded, color: Color(0xFF00D09E), size: 20),
+                            SizedBox(width: 8),
+                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 40),
 
             ScaleOnTap(

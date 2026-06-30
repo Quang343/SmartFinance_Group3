@@ -9,4 +9,7 @@ abstract class TransactionRepository {
   Future<void> create(TransactionEntity transaction);
   Future<void> update(TransactionEntity transaction);
   Future<void> softDelete(String id);
+  Future<void> hardDelete(String id);
+  Future<void> restore(String id);
+  Future<void> cleanupDeletedTransactions();
 }

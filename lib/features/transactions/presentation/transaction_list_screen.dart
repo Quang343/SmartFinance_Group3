@@ -18,6 +18,7 @@ class TransactionListScreen extends ConsumerStatefulWidget {
 class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
+  String _selectedStatus = 'all'; // 'all', 'confirmed', 'draft'
   DateTimeRange? _customDateRange;
   late Future<List<dynamic>> _dataFuture;
 
@@ -30,6 +31,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   void _loadData() {
     final transactionsAsync = ref.read(transactionRepositoryProvider);
     final categoriesAsync = ref.read(categoryRepositoryProvider);
+    
+    // Auto cleanup old deleted transactions before loading
+    transactionsAsync.cleanupDeletedTransactions();
+    
     _dataFuture = Future.wait([
       transactionsAsync.getAll(),
       categoriesAsync.getAll(),
@@ -41,6 +46,68 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     setState(() {
       _loadData();
     });
+  }
+
+  void _confirmDeleteFromList(TransactionEntity tx) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa giao dịch?'),
+        content: const Text('Bạn có chắc chắn muốn xóa giao dịch này không? Dữ liệu thống kê sẽ được cập nhật lại.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final repo = ref.read(transactionRepositoryProvider);
+              await repo.softDelete(tx.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.redAccent),
+                );
+                _refreshData();
+              }
+            },
+            child: const Text('Xóa', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String value, String label, bool isDark) {
+    final isSelected = _selectedStatus == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedStatus = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? const Color(0xFF00D09E) 
+              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected 
+                ? Colors.white 
+                : (isDark ? const Color(0xFF00D09E) : Colors.black54),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -176,8 +243,15 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           final allCats = (snapshot.data?[1] as List<CategoryEntity>?) ?? [];
           final catMap = {for (var c in allCats) c.id: c};
 
-          // Filter by role scope
+          // Filter by status and handle 'deleted' explicitly
           var list = allTxs;
+          if (_selectedStatus == 'deleted') {
+            list = list.where((tx) => tx.status == TransactionStatus.deleted).toList();
+          } else {
+            // Normal flow: hide completely deleted transactions
+            list = list.where((tx) => tx.status != TransactionStatus.deleted).toList();
+          }
+
           if (currentRole == UserRole.expenseAccountant) {
             list = list.where((tx) => tx.type == TransactionType.expense).toList();
           } else if (currentRole == UserRole.revenueAccountant) {
@@ -186,6 +260,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
           // Filter by time period
           list = list.where((tx) => _isWithinPeriod(tx.transactionDate)).toList();
+
+          // Filter by status
+          if (_selectedStatus == 'confirmed') {
+            list = list.where((tx) => tx.status == TransactionStatus.confirmed).toList();
+          } else if (_selectedStatus == 'draft') {
+            list = list.where((tx) => tx.status == TransactionStatus.draft).toList();
+          }
 
           // Filter by search query
           if (_searchQuery.isNotEmpty) {
@@ -196,12 +277,12 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             }).toList();
           }
 
-          // Calculate overview stats
+          // Calculate overview stats (ONLY use confirmed status)
           final totalIncome = list
-              .where((tx) => tx.type == TransactionType.income)
+              .where((tx) => tx.type == TransactionType.income && tx.status == TransactionStatus.confirmed)
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final totalExpense = list
-              .where((tx) => tx.type == TransactionType.expense)
+              .where((tx) => tx.type == TransactionType.expense && tx.status == TransactionStatus.confirmed)
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final netBalance = totalIncome - totalExpense;
 
@@ -604,6 +685,61 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                   },
                 ),
               ),
+
+              const SizedBox(height: 8),
+              // Status Filter
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Text('Trạng thái: ', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildStatusChip('all', 'Tất cả', isDark),
+                            const SizedBox(width: 8),
+                            _buildStatusChip('confirmed', 'Đã xác nhận', isDark),
+                            const SizedBox(width: 8),
+                            _buildStatusChip('draft', 'Bản nháp', isDark),
+                            const SizedBox(width: 8),
+                            _buildStatusChip('deleted', 'Đã xóa', isDark),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              if (_selectedStatus == 'deleted')
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Giao dịch trong Thùng rác sẽ bị tự động xóa vĩnh viễn sau 30 ngày.',
+                          style: TextStyle(
+                            color: isDark ? Colors.white70 : Colors.black87,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               
               // List area
               Expanded(
@@ -704,6 +840,23 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                               runSpacing: 4,
                                               crossAxisAlignment: WrapCrossAlignment.center,
                                               children: [
+                                                if (tx.status == TransactionStatus.draft)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.orange.withOpacity(0.15),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                                                    ),
+                                                    child: const Text(
+                                                      'Bản nháp',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.orange,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                   decoration: BoxDecoration(
@@ -759,28 +912,66 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                 if (action == 'edit') {
                                                   context.go('/transactions/form', extra: {'transactionId': tx.id});
                                                 } else if (action == 'delete') {
-                                                  await transactionsAsync.softDelete(tx.id);
-                                                  setState(() {});
+                                                  _confirmDeleteFromList(tx);
+                                                } else if (action == 'restore') {
+                                                  await transactionsAsync.restore(tx.id);
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp'), backgroundColor: Colors.green),
+                                                    );
+                                                    _refreshData();
+                                                  }
+                                                } else if (action == 'hard_delete') {
+                                                  await transactionsAsync.hardDelete(tx.id);
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('Đã xóa vĩnh viễn giao dịch'), backgroundColor: Colors.red),
+                                                    );
+                                                    _refreshData();
+                                                  }
                                                 }
                                               },
-                                              itemBuilder: (context) => [
-                                                const PopupMenuItem(
-                                                  value: 'edit',
-                                                  child: ListTile(
-                                                    dense: true,
-                                                    leading: Icon(Icons.edit_rounded, size: 20),
-                                                    title: Text('Sửa'),
-                                                  ),
-                                                ),
-                                                const PopupMenuItem(
-                                                  value: 'delete',
-                                                  child: ListTile(
-                                                    dense: true,
-                                                    leading: Icon(Icons.delete_rounded, color: Colors.red, size: 20),
-                                                    title: Text('Xóa', style: TextStyle(color: Colors.red)),
-                                                  ),
-                                                ),
-                                              ],
+                                              itemBuilder: (context) {
+                                                if (tx.status == TransactionStatus.deleted) {
+                                                  return [
+                                                    const PopupMenuItem(
+                                                      value: 'restore',
+                                                      child: ListTile(
+                                                        dense: true,
+                                                        leading: Icon(Icons.restore_rounded, color: Colors.blue, size: 20),
+                                                        title: Text('Khôi phục', style: TextStyle(color: Colors.blue)),
+                                                      ),
+                                                    ),
+                                                    const PopupMenuItem(
+                                                      value: 'hard_delete',
+                                                      child: ListTile(
+                                                        dense: true,
+                                                        leading: Icon(Icons.delete_forever_rounded, color: Colors.red, size: 20),
+                                                        title: Text('Xóa vĩnh viễn', style: TextStyle(color: Colors.red)),
+                                                      ),
+                                                    ),
+                                                  ];
+                                                } else {
+                                                  return [
+                                                    const PopupMenuItem(
+                                                      value: 'edit',
+                                                      child: ListTile(
+                                                        dense: true,
+                                                        leading: Icon(Icons.edit_rounded, size: 20),
+                                                        title: Text('Sửa'),
+                                                      ),
+                                                    ),
+                                                    const PopupMenuItem(
+                                                      value: 'delete',
+                                                      child: ListTile(
+                                                        dense: true,
+                                                        leading: Icon(Icons.delete_rounded, color: Colors.red, size: 20),
+                                                        title: Text('Xóa', style: TextStyle(color: Colors.red)),
+                                                      ),
+                                                    ),
+                                                  ];
+                                                }
+                                              },
                                             ),
                                           ],
                                         ],
