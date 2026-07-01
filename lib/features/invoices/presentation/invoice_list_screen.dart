@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
+import '../../../domain/entities/transaction_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
@@ -20,24 +21,27 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   DateTimeRange? _customDateRange;
-  late Future<List<InvoiceEntity>> _invoicesFuture;
+  late Future<List<dynamic>> _dataFuture;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _invoicesFuture = Future.wait([
+    _dataFuture = Future.wait([
       ref.read(invoiceRepositoryProvider).getAll(),
+      ref.read(transactionRepositoryProvider).getAll(),
       Future.delayed(const Duration(seconds: 1)),
-    ]).then((value) => value.first as List<InvoiceEntity>);
+    ]);
   }
 
-  void _refreshInvoices() {
+  Future<void> _refreshInvoices() async {
     setState(() {
-      _invoicesFuture = Future.wait([
+      _dataFuture = Future.wait([
         ref.read(invoiceRepositoryProvider).getAll(),
+        ref.read(transactionRepositoryProvider).getAll(),
         Future.delayed(const Duration(seconds: 1)),
-      ]).then((value) => value.first as List<InvoiceEntity>);
+      ]);
     });
+    await _dataFuture;
   }
 
   @override
@@ -73,109 +77,106 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-        elevation: 0,
-        centerTitle: false,
-        titleSpacing: 20,
-        title: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
-              colors: [primaryColor, gradientEnd],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ).createShader(bounds),
-            child: Text(
-              isIncoming ? 'Hóa đơn đầu vào' : 'Hóa đơn đầu ra',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                fontSize: 22,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          Center(
-            child: ScaleOnTap(
-              onTap: _refreshInvoices,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0D281E) : Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    if (!isDark)
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                  ],
-                  border: Border.all(
-                    color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
-                    width: 1,
+    return FutureBuilder<List<dynamic>>(
+      future: _dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return Scaffold(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/images/loadingGif.gif',
+                      width: 150,
+                      height: 150,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                ),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  color: isDark ? (isIncoming ? const Color(0xFFFED7AA) : const Color(0xFF86EFAC)) : primaryColor,
-                  size: 20,
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Đang tải dữ liệu...',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.black54,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 20),
-        ],
-      ),
-      body: FutureBuilder<List<InvoiceEntity>>(
-        future: _invoicesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: Image.asset(
-                'assets/images/loadingGif.gif',
-                width: 80,
-                fit: BoxFit.contain,
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            body: Center(
               child: Text(
                 'Lỗi: ${snapshot.error}',
                 style: const TextStyle(color: Colors.red),
               ),
-            );
-          }
+            ),
+          );
+        }
 
-          var list = snapshot.data ?? [];
-           // Filter by invoice type
-          list = list.where((inv) => inv.type == (isIncoming ? InvoiceType.incoming : InvoiceType.outgoing)).toList();
+        final invoices = (snapshot.data?[0] as List<InvoiceEntity>?) ?? [];
+        final transactions = (snapshot.data?[1] as List<TransactionEntity>?) ?? [];
 
-          // Filter by time period
-          list = list.where((inv) => _isWithinPeriod(inv.issuedDate)).toList();
+        var list = invoices;
+         // Filter by invoice type
+        list = list.where((inv) => inv.type == (isIncoming ? InvoiceType.incoming : InvoiceType.outgoing)).toList();
 
-          // Filter by search query
-          if (_searchQuery.isNotEmpty) {
-            list = list.where((inv) {
-              final partner = inv.partnerName.toLowerCase();
-              final invNum = inv.invoiceNumber.toLowerCase();
-              return partner.contains(_searchQuery) || invNum.contains(_searchQuery);
-            }).toList();
-          }
+        // Filter by time period
+        list = list.where((inv) => _isWithinPeriod(inv.issuedDate)).toList();
 
-          // Calculate overview stats
-          final totalAmount = list.fold<double>(0.0, (sum, inv) => sum + inv.totalAmount);
-          final totalSubtotal = list.fold<double>(0.0, (sum, inv) => sum + inv.subtotal);
-          final totalVat = list.fold<double>(0.0, (sum, inv) => sum + inv.vatAmount);
+        // Filter by search query
+        if (_searchQuery.isNotEmpty) {
+          list = list.where((inv) {
+            final partner = inv.partnerName.toLowerCase();
+            final invNum = inv.invoiceNumber.toLowerCase();
+            return partner.contains(_searchQuery) || invNum.contains(_searchQuery);
+          }).toList();
+        }
 
-          return Column(
+        // Sort by date descending
+        list.sort((a, b) => b.issuedDate.compareTo(a.issuedDate));
+
+        // Calculate overview stats
+        final totalAmount = list.fold<double>(0.0, (sum, inv) => sum + inv.totalAmount);
+        final totalSubtotal = list.fold<double>(0.0, (sum, inv) => sum + inv.subtotal);
+        final totalVat = list.fold<double>(0.0, (sum, inv) => sum + inv.vatAmount);
+
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            elevation: 0,
+            centerTitle: false,
+            titleSpacing: 20,
+            title: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: ShaderMask(
+                shaderCallback: (bounds) => LinearGradient(
+                  colors: [primaryColor, gradientEnd],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ).createShader(bounds),
+                child: Text(
+                  isIncoming ? 'Hóa đơn đầu vào' : 'Hóa đơn đầu ra',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontSize: 22,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          body: Column(
             children: [
               // Period Filter Tabs
               Padding(
@@ -454,151 +455,184 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.receipt_long_rounded,
-                              size: 64,
-                              color: isDark ? Colors.white24 : Colors.black12,
-                            ),
+                            Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey.withOpacity(0.2)),
                             const SizedBox(height: 16),
-                            Text(
-                              'Không tìm thấy hóa đơn nào',
-                              style: TextStyle(
-                                color: isDark ? Colors.white38 : Colors.black45,
-                                fontSize: 15,
-                              ),
-                            ),
+                            const Text('Không có hóa đơn nào', style: TextStyle(color: Colors.grey, fontSize: 16)),
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: list.length,
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                        itemBuilder: (context, index) {
-                          final inv = list[index];
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0E2219) : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                if (!isDark)
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                              ],
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF1A382B) : const Color(0xFFEDF2F7),
-                                width: 1,
-                              ),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
+                    : RefreshIndicator(
+                        onRefresh: _refreshInvoices,
+                        color: primaryColor,
+                        child: ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
+                          itemCount: list.length,
+                          itemBuilder: (context, index) {
+                            final inv = list[index];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF0E2219) : Colors.white,
                                 borderRadius: BorderRadius.circular(16),
-                                onTap: () {
-                                  context.go('/invoices/incoming/${inv.id}');
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: primaryColor.withOpacity(0.1),
-                                          shape: BoxShape.circle,
+                                boxShadow: [
+                                  if (!isDark)
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.03),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                ],
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF1A382B) : const Color(0xFFEDF2F7),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () {
+                                    if (isIncoming) {
+                                      context.go('/invoices/incoming/${inv.id}');
+                                    } else {
+                                      context.go('/invoices/outgoing/${inv.id}');
+                                    }
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: primaryColor.withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            isIncoming ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                                            color: primaryColor,
+                                            size: 20,
+                                          ),
                                         ),
-                                        child: Icon(
-                                          isIncoming ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                                          color: primaryColor,
-                                          size: 20,
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                inv.partnerName,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? Colors.white : const Color(0xFF093021),
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Số HĐ: ${inv.invoiceNumber} • ${dateFormatter.format(inv.issuedDate)}',
+                                                style: TextStyle(
+                                                  color: isDark ? Colors.white38 : Colors.black45,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
                                           children: [
                                             Text(
-                                              inv.partnerName,
+                                              currencyFormatter.format(inv.totalAmount),
                                               style: TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                color: isDark ? Colors.white : const Color(0xFF093021),
+                                                color: isDark ? primaryColor : const Color(0xFF093021),
                                                 fontSize: 15,
                                               ),
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Số HĐ: ${inv.invoiceNumber} • ${dateFormatter.format(inv.issuedDate)}',
-                                              style: TextStyle(
-                                                color: isDark ? Colors.white38 : Colors.black45,
-                                                fontSize: 12,
+                                            if (inv.vatAmount > 0) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Thuế: +${currencyFormatter.format(inv.vatAmount)}',
+                                                style: const TextStyle(
+                                                  color: Colors.blue,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
                                               ),
-                                            ),
+                                            ],
+                                            const SizedBox(height: 4),
+                                            if (transactions.any((tx) => tx.invoiceId == inv.id))
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF00D09E).withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text(
+                                                  'Đã thanh toán',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF00D09E),
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              )
+                                            else
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text(
+                                                  'Chưa thanh toán',
+                                                  style: TextStyle(
+                                                    color: Colors.red,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
                                           ],
                                         ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            currencyFormatter.format(inv.totalAmount),
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark ? primaryColor : const Color(0xFF093021),
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                          if (inv.vatAmount > 0) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              'Thuế: +${currencyFormatter.format(inv.vatAmount)}',
-                                              style: const TextStyle(
-                                                color: Colors.blue,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
               ),
             ],
-          );
-        },
-      ),
-      floatingActionButton: canManage
-          ? ScaleOnTap(
-              onTap: () {
-                if (isIncoming) {
-                  context.go('/invoices/scan');
-                } else {
-                  context.go('/invoices/outgoing/new');
-                }
-              },
-              child: FloatingActionButton.extended(
-                onPressed: null,
-                backgroundColor: primaryColor,
-                icon: Icon(isIncoming ? Icons.qr_code_scanner_rounded : Icons.add_rounded, color: Colors.white),
-                label: Text(
-                  isIncoming ? 'Quét hóa đơn' : 'Tạo Hóa đơn',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              ),
-            )
-          : null,
+          ),
+          floatingActionButton: canManage
+              ? ScaleOnTap(
+                  onTap: () {
+                    if (isIncoming) {
+                      context.go('/invoices/scan');
+                    } else {
+                      context.go('/invoices/outgoing/new');
+                    }
+                  },
+                  child: FloatingActionButton.extended(
+                    onPressed: null,
+                    backgroundColor: primaryColor,
+                    icon: Icon(isIncoming ? Icons.qr_code_scanner_rounded : Icons.add_rounded, color: Colors.white),
+                    label: Text(
+                      isIncoming ? 'Quét hóa đơn' : 'Tạo Hóa đơn',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                )
+              : null,
+        );
+      },
     );
   }
+
 
   bool _isWithinPeriod(DateTime date) {
     final now = DateTime.now();

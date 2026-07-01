@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
+import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 
 class InvoiceCreateScreen extends ConsumerStatefulWidget {
@@ -57,13 +58,15 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
 
       await repo.create(newInvoice);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hóa đơn đầu ra đã được tạo thành công!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      context.go('/invoices/outgoing');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Hóa đơn đã được ghi nhận!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.pushReplacement('/invoices/outgoing/${newInvoice.id}');
+      }
     }
   }
 
@@ -77,27 +80,101 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
         elevation: 0,
-        centerTitle: true,
-        title: Text(
-          'Tạo hóa đơn bán ra',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-            color: isDark ? Colors.white : Colors.black87,
+        centerTitle: false,
+        titleSpacing: 0,
+        leading: Center(
+          child: ScaleOnTap(
+            onTap: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                context.go('/invoices/outgoing');
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0D281E) : Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  if (!isDark)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
+                border: Border.all(
+                  color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                size: 16,
+              ),
+            ),
           ),
         ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: 20),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/invoices/outgoing');
-            }
-          },
+        title: ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [Color(0xFF00D09E), Color(0xFF34D399)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(bounds),
+          child: const Text(
+            'Tạo hóa đơn bán ra',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              fontSize: 22,
+              letterSpacing: -0.5,
+            ),
+          ),
         ),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.auto_awesome, color: Color(0xFF00D09E)),
+            tooltip: 'Điền dữ liệu mẫu bằng AI',
+            onSelected: (value) {
+              setState(() {
+                if (value == 'it') {
+                  _partnerNameController.text = 'CTY TNHH Công Nghệ Tương Lai';
+                  _partnerTaxCodeController.text = '0123456789';
+                  _subtotalController.text = '150000000';
+                  _vatRateController.text = '10';
+                } else if (value == 'furniture') {
+                  _partnerNameController.text = 'Nội Thất Sang Trọng';
+                  _partnerTaxCodeController.text = '0987654321';
+                  _subtotalController.text = '45000000';
+                  _vatRateController.text = '8';
+                } else if (value == 'shipping') {
+                  _partnerNameController.text = 'Giao Hàng Nhanh Chóng';
+                  _partnerTaxCodeController.text = '0369852147';
+                  _subtotalController.text = '5500000';
+                  _vatRateController.text = '10';
+                }
+              });
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'it',
+                child: Row(children: [Icon(Icons.computer, size: 20, color: Color(0xFF00D09E)), SizedBox(width: 8), Text('Dịch vụ IT')]),
+              ),
+              const PopupMenuItem(
+                value: 'furniture',
+                child: Row(children: [Icon(Icons.chair, size: 20, color: Color(0xFF00D09E)), SizedBox(width: 8), Text('Nội thất')]),
+              ),
+              const PopupMenuItem(
+                value: 'shipping',
+                child: Row(children: [Icon(Icons.local_shipping, size: 20, color: Color(0xFF00D09E)), SizedBox(width: 8), Text('Vận chuyển')]),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Form(
         key: _formKey,

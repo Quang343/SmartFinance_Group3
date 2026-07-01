@@ -49,4 +49,9 @@ class CategoryRepositoryImpl implements CategoryRepository {
   Future<void> deactivate(String id) async {
     await _dataSource.deactivate(id);
   }
+
+  @override
+  Future<void> delete(String id) async {
+    await _dataSource.delete(id);
+  }
 }

@@ -131,9 +131,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const InvoiceCreateScreen(),
           ),
           GoRoute(
-            path: '/invoices/outgoing/preview',
+            path: '/invoices/outgoing/preview/:id',
             name: RouteNames.invoicePreview,
-            builder: (context, state) => const InvoicePreviewScreen(),
+            builder: (context, state) => InvoicePreviewScreen(
+              invoiceId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: '/invoices/outgoing/:id',
+            name: 'outgoingInvoiceDetail',
+            builder: (context, state) => InvoiceDetailScreen(
+              invoiceId: state.pathParameters['id']!,
+            ),
           ),
           GoRoute(
             path: '/reports',

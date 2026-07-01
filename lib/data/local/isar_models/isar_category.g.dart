@@ -47,18 +47,23 @@ const IsarCategorySchema = CollectionSchema(
       name: r'name',
       type: IsarType.string,
     ),
-    r'type': PropertySchema(
+    r'orderIndex': PropertySchema(
       id: 6,
+      name: r'orderIndex',
+      type: IsarType.long,
+    ),
+    r'type': PropertySchema(
+      id: 7,
       name: r'type',
       type: IsarType.string,
     ),
     r'uid': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'uid',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'updatedAt',
       type: IsarType.dateTime,
     )
@@ -153,9 +158,10 @@ void _isarCategorySerialize(
   writer.writeBool(offsets[3], object.isActive);
   writer.writeBool(offsets[4], object.isDefault);
   writer.writeString(offsets[5], object.name);
-  writer.writeString(offsets[6], object.type);
-  writer.writeString(offsets[7], object.uid);
-  writer.writeDateTime(offsets[8], object.updatedAt);
+  writer.writeLong(offsets[6], object.orderIndex);
+  writer.writeString(offsets[7], object.type);
+  writer.writeString(offsets[8], object.uid);
+  writer.writeDateTime(offsets[9], object.updatedAt);
 }
 
 IsarCategory _isarCategoryDeserialize(
@@ -172,9 +178,10 @@ IsarCategory _isarCategoryDeserialize(
   object.isActive = reader.readBool(offsets[3]);
   object.isDefault = reader.readBool(offsets[4]);
   object.name = reader.readString(offsets[5]);
-  object.type = reader.readString(offsets[6]);
-  object.uid = reader.readString(offsets[7]);
-  object.updatedAt = reader.readDateTime(offsets[8]);
+  object.orderIndex = reader.readLong(offsets[6]);
+  object.type = reader.readString(offsets[7]);
+  object.uid = reader.readString(offsets[8]);
+  object.updatedAt = reader.readDateTime(offsets[9]);
   return object;
 }
 
@@ -198,10 +205,12 @@ P _isarCategoryDeserializeProp<P>(
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
+      return (reader.readString(offset)) as P;
+    case 9:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1071,6 +1080,62 @@ extension IsarCategoryQueryFilter
     });
   }
 
+  QueryBuilder<IsarCategory, IsarCategory, QAfterFilterCondition>
+      orderIndexEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'orderIndex',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarCategory, IsarCategory, QAfterFilterCondition>
+      orderIndexGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'orderIndex',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarCategory, IsarCategory, QAfterFilterCondition>
+      orderIndexLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'orderIndex',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarCategory, IsarCategory, QAfterFilterCondition>
+      orderIndexBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'orderIndex',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<IsarCategory, IsarCategory, QAfterFilterCondition> typeEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1474,6 +1539,19 @@ extension IsarCategoryQuerySortBy
     });
   }
 
+  QueryBuilder<IsarCategory, IsarCategory, QAfterSortBy> sortByOrderIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orderIndex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarCategory, IsarCategory, QAfterSortBy>
+      sortByOrderIndexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orderIndex', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarCategory, IsarCategory, QAfterSortBy> sortByType() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'type', Sort.asc);
@@ -1597,6 +1675,19 @@ extension IsarCategoryQuerySortThenBy
     });
   }
 
+  QueryBuilder<IsarCategory, IsarCategory, QAfterSortBy> thenByOrderIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orderIndex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarCategory, IsarCategory, QAfterSortBy>
+      thenByOrderIndexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'orderIndex', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarCategory, IsarCategory, QAfterSortBy> thenByType() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'type', Sort.asc);
@@ -1675,6 +1766,12 @@ extension IsarCategoryQueryWhereDistinct
     });
   }
 
+  QueryBuilder<IsarCategory, IsarCategory, QDistinct> distinctByOrderIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'orderIndex');
+    });
+  }
+
   QueryBuilder<IsarCategory, IsarCategory, QDistinct> distinctByType(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1737,6 +1834,12 @@ extension IsarCategoryQueryProperty
   QueryBuilder<IsarCategory, String, QQueryOperations> nameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'name');
+    });
+  }
+
+  QueryBuilder<IsarCategory, int, QQueryOperations> orderIndexProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'orderIndex');
     });
   }
 
