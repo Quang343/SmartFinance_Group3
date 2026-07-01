@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
@@ -591,18 +593,63 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
         elevation: 0,
-        centerTitle: true,
-        title: Text(
-          widget.transactionId == null ? 'Thêm Giao dịch' : 'Sửa Giao dịch',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-            color: isDark ? Colors.white : Colors.black87,
+        centerTitle: false,
+        titleSpacing: 0,
+        leading: Center(
+          child: ScaleOnTap(
+            onTap: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              } else {
+                context.go('/transactions');
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0D281E) : Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  if (!isDark)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
+                border: Border.all(
+                  color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+        title: ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [Color(0xFF00D09E), Color(0xFF34D399)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(bounds),
+          child: Text(
+            widget.transactionId == null ? 'Thêm Giao dịch' : 'Sửa Giao dịch',
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              fontSize: 22,
+              letterSpacing: -0.5,
+            ),
           ),
         ),
         actions: [
+
           if (widget.transactionId != null)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -610,16 +657,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               onPressed: _confirmDelete,
             ),
         ],
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: 20),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/transactions');
-            }
-          },
-        ),
+
       ),
       body: Form(
         key: _formKey,

@@ -11,6 +11,7 @@ class CategoryMapper {
       colorHex: model.colorHex,
       isDefault: model.isDefault,
       isActive: model.isActive,
+      orderIndex: model.orderIndex,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
     );
@@ -25,6 +26,7 @@ class CategoryMapper {
       ..colorHex = entity.colorHex
       ..isDefault = entity.isDefault
       ..isActive = entity.isActive
+      ..orderIndex = entity.orderIndex
       ..createdAt = entity.createdAt
       ..updatedAt = entity.updatedAt;
   }

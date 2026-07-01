@@ -6,6 +6,7 @@ class CategoryEntity {
   final String? colorHex;
   final bool isDefault;
   final bool isActive;
+  final int orderIndex;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -17,6 +18,7 @@ class CategoryEntity {
     this.colorHex,
     required this.isDefault,
     required this.isActive,
+    this.orderIndex = 0,
     required this.createdAt,
     required this.updatedAt,
   });
