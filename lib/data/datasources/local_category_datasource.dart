@@ -47,4 +47,13 @@ class LocalCategoryDataSource {
       });
     }
   }
+
+  Future<void> delete(String uid) async {
+    final existing = await getByUid(uid);
+    if (existing != null) {
+      await isar.writeTxn(() async {
+        await isar.isarCategorys.delete(existing.id);
+      });
+    }
+  }
 }

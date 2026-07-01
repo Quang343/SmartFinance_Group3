@@ -23,6 +23,8 @@ class IsarCategory {
   @Index()
   late bool isActive;
 
+  int orderIndex = 0;
+
   late DateTime createdAt;
   late DateTime updatedAt;
 }

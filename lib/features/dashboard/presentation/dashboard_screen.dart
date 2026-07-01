@@ -49,10 +49,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(
-              child: Image.asset(
-                'assets/images/loadingGif.gif',
-                width: 80,
-                fit: BoxFit.contain,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/images/loadingGif.gif',
+                      width: 150,
+                      height: 150,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Đang tải dữ liệu...',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.black54,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             );
           }
@@ -100,6 +117,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             }
           }).toList();
 
+          // Sort descending by date (newest first)
+          filteredTxs.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
           // Calculations for balance and stats
           final incomeSum = filteredTxs
               .where((tx) => tx.type == TransactionType.income)
@@ -120,6 +140,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             1.0,
           );
           final int expensePercentInt = (expensePercentage * 100).toInt();
+
+          String timeFilterText = 'trong tháng';
+          if (_timeFilter == 'daily') {
+            timeFilterText = 'hôm nay';
+          } else if (_timeFilter == 'weekly') {
+            timeFilterText = 'tuần này';
+          }
+          
+          String highestExpenseCatName = 'chưa có dữ liệu';
+          double highestExpenseAmount = 0;
+          final expenseTxs = filteredTxs.where((tx) => tx.type == TransactionType.expense);
+          if (expenseTxs.isNotEmpty) {
+            final Map<String, double> catExpenses = {};
+            for (var tx in expenseTxs) {
+              catExpenses[tx.categoryId] = (catExpenses[tx.categoryId] ?? 0) + tx.amount;
+            }
+            final highestCatId = catExpenses.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+            highestExpenseAmount = catExpenses[highestCatId]!;
+            highestExpenseCatName = (catMap[highestCatId]?.name ?? 'khác').toLowerCase();
+          }
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
@@ -529,7 +569,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     width: 72,
                                     height: 72,
                                     child: CircularProgressIndicator(
-                                      value: 0.65, // example target progress
+                                      value: expensePercentage,
                                       strokeWidth: 6,
                                       backgroundColor: isDark
                                           ? Colors.white.withOpacity(0.1)
@@ -548,7 +588,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Tiết kiệm mục tiêu',
+                                'Hạn mức chi tiêu',
                                 style: TextStyle(
                                   color: isDark
                                       ? Colors.white70
@@ -575,7 +615,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Doanh thu tuần trước',
+                                  'Doanh thu $timeFilterText',
                                   style: TextStyle(
                                     color: isDark
                                         ? Colors.white60
@@ -586,9 +626,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  currencyFormatter.format(
-                                    4000000,
-                                  ), // static representation for UI layout
+                                  currencyFormatter.format(incomeSum),
                                   style: TextStyle(
                                     color: isDark
                                         ? const Color(0xFF00D09E)
@@ -609,7 +647,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   ),
                                 ),
                                 Text(
-                                  'Chi ăn uống tuần trước',
+                                  highestExpenseAmount > 0 ? 'Chi $highestExpenseCatName $timeFilterText' : 'Tổng chi $timeFilterText',
                                   style: TextStyle(
                                     color: isDark
                                         ? Colors.white60
@@ -620,7 +658,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '-${currencyFormatter.format(100000)}',
+                                  '-${currencyFormatter.format(highestExpenseAmount > 0 ? highestExpenseAmount : expenseSum)}',
                                   style: const TextStyle(
                                     color: Color(
                                       0xFFE11D48,
@@ -657,16 +695,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     const SizedBox(height: 20),
 
                     // Header for transaction list
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        const Text(
                           'GIAO DỊCH GẦN ĐÂY',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: Colors.grey,
                             letterSpacing: 1.1,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => context.go('/transactions'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF00D09E),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                currentRole == UserRole.financeManager
+                                    ? 'Xem tất cả'
+                                    : currentRole == UserRole.expenseAccountant
+                                        ? 'Xem chi phí'
+                                        : 'Xem doanh thu',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.arrow_forward_ios_rounded, size: 12),
+                            ],
                           ),
                         ),
                       ],
@@ -697,7 +763,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       )
                     else
-                      ...filteredTxs.map((tx) {
+                      ...filteredTxs.take(5).map((tx) {
                         final isIncome = tx.type == TransactionType.income;
                         final cat = catMap[tx.categoryId];
                         final catName = cat?.name ?? 'Khác';
