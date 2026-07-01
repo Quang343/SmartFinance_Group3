@@ -3,16 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:screenshot/screenshot.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
 
-class InvoiceDetailScreen extends ConsumerWidget {
+class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
 
   const InvoiceDetailScreen({super.key, required this.invoiceId});
+
+  @override
+  ConsumerState<InvoiceDetailScreen> createState() => _InvoiceDetailScreenState();
+}
+
+class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
+  final ScreenshotController _screenshotController = ScreenshotController();
 
   String _getOcrStatusText(OcrStatus status) {
     switch (status) {
@@ -30,7 +40,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
@@ -39,7 +49,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
 
     return FutureBuilder(
       future: Future.wait([
-        invoiceRepository.getById(invoiceId),
+        invoiceRepository.getById(widget.invoiceId),
         transactionRepository.getAll(),
       ]),
       builder: (context, snapshot) {
@@ -47,7 +57,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
         final invoice = data != null ? data[0] as InvoiceEntity? : null;
         final isIncoming = invoice?.type != InvoiceType.outgoing;
         final transactions = data != null ? data[1] as List<TransactionEntity> : <TransactionEntity>[];
-        final hasTransaction = transactions.any((tx) => tx.invoiceId == invoiceId);
+        final hasTransaction = transactions.any((tx) => tx.invoiceId == widget.invoiceId);
 
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
@@ -111,7 +121,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
               if (invoice != null && invoice.type == InvoiceType.outgoing)
                 Center(
                   child: ScaleOnTap(
-                    onTap: () => context.push('/invoices/outgoing/preview'),
+                    onTap: () => context.push('/invoices/outgoing/preview/${invoice.id}'),
                     child: Container(
                       margin: const EdgeInsets.only(right: 20),
                       padding: const EdgeInsets.all(8),
@@ -152,9 +162,13 @@ class InvoiceDetailScreen extends ConsumerWidget {
                     )
                   : SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+                      child: Screenshot(
+                        controller: _screenshotController,
+                        child: Container(
+                          color: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
                           // Header Receipt Card
                           Container(
                             padding: const EdgeInsets.all(20),
@@ -298,6 +312,72 @@ class InvoiceDetailScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 20),
 
+                          if (hasTransaction) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFF00D09E)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.check_circle_rounded, color: Color(0xFF00D09E)),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Đã thanh toán',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF00D09E),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _shareScreenshot(context),
+                                    icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                                    label: const Text(
+                                      'Chia sẻ',
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF00D09E),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      elevation: 0,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _saveScreenshot(context),
+                                    icon: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                                    label: const Text(
+                                      'Chụp',
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      elevation: 0,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+
                           // Image View Section
                           if (invoice.imagePath != null && invoice.imagePath!.isNotEmpty) ...[
                             Text(
@@ -342,7 +422,9 @@ class InvoiceDetailScreen extends ConsumerWidget {
                         ],
                       ),
                     ),
-          bottomNavigationBar: invoice != null && isIncoming && !hasTransaction
+                  ),
+                ),
+          bottomNavigationBar: invoice != null && !hasTransaction
               ? SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -352,7 +434,9 @@ class InvoiceDetailScreen extends ConsumerWidget {
                           RouteNames.transactionForm,
                           extra: {
                             'initialAmount': invoice.totalAmount,
-                            'initialNote': 'Thanh toán hóa đơn: ${invoice.partnerName}',
+                            'initialNote': isIncoming
+                                ? 'Thanh toán hóa đơn: ${invoice.invoiceNumber}'
+                                : 'Doanh thu từ hóa đơn: ${invoice.invoiceNumber}',
                             'invoiceId': invoice.id,
                           },
                         );
@@ -371,14 +455,14 @@ class InvoiceDetailScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_card_rounded, color: Colors.white),
-                            SizedBox(width: 8),
+                            Icon(isIncoming ? Icons.add_card_rounded : Icons.payments_rounded, color: Colors.white),
+                            const SizedBox(width: 8),
                             Text(
-                              'Tạo khoản chi',
-                              style: TextStyle(
+                              isIncoming ? 'Tạo khoản chi' : 'Tạo khoản thu',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -390,40 +474,63 @@ class InvoiceDetailScreen extends ConsumerWidget {
                     ),
                   ),
                 )
-              : invoice != null && hasTransaction
-                  ? SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF00D09E)),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle_rounded, color: Color(0xFF00D09E)),
-                              SizedBox(width: 8),
-                              Text(
-                                'Đã thanh toán',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF00D09E),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  : null,
+              : null,
         );
       },
     );
+  }
+
+  Future<void> _shareScreenshot(BuildContext context) async {
+    try {
+      final imageBytes = await _screenshotController.capture();
+      if (imageBytes != null) {
+        final directory = await getTemporaryDirectory();
+        final imagePath = await File('${directory.path}/hoadon.png').create();
+        await imagePath.writeAsBytes(imageBytes);
+        await Share.shareXFiles([XFile(imagePath.path)], text: 'Hóa đơn từ Smart Finance');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chia sẻ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveScreenshot(BuildContext context) async {
+    try {
+      final imageBytes = await _screenshotController.capture();
+      if (imageBytes != null) {
+        Directory? directory;
+        if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+          directory = await getDownloadsDirectory();
+        } else {
+          directory = await getApplicationDocumentsDirectory();
+        }
+        
+        if (directory != null) {
+          final file = File('${directory.path}/hoadon_${DateTime.now().millisecondsSinceEpoch}.png');
+          await file.writeAsBytes(imageBytes);
+          
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Đã lưu ảnh tại:\n${file.path}'),
+                backgroundColor: const Color(0xFF10B981),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi lưu ảnh: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
 
