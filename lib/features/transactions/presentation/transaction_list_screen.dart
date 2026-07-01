@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -18,9 +19,10 @@ class TransactionListScreen extends ConsumerStatefulWidget {
 class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
-  String _selectedStatus = 'all'; // 'all', 'confirmed', 'draft'
+  String _selectedStatus = 'confirmed'; // 'all', 'confirmed', 'draft'
   DateTimeRange? _customDateRange;
   late Future<List<dynamic>> _dataFuture;
+  int _displayLimit = 15;
 
   @override
   void didChangeDependencies() {
@@ -28,7 +30,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     _loadData();
   }
 
-  void _loadData() {
+  void _loadData({bool showLoading = true}) {
     final transactionsAsync = ref.read(transactionRepositoryProvider);
     final categoriesAsync = ref.read(categoryRepositoryProvider);
     
@@ -38,13 +40,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     _dataFuture = Future.wait([
       transactionsAsync.getAll(),
       categoriesAsync.getAll(),
-      Future.delayed(const Duration(seconds: 1)),
+      if (showLoading) Future.delayed(const Duration(seconds: 1)),
     ]);
   }
 
-  void _refreshData() {
+  void _refreshData({bool showLoading = false}) {
     setState(() {
-      _loadData();
+      _loadData(showLoading: showLoading);
     });
   }
 
@@ -73,6 +75,37 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               }
             },
             child: const Text('Xóa', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRestoreFromList(TransactionEntity tx) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Khôi phục giao dịch?'),
+        content: const Text('Giao dịch này sẽ được khôi phục về trạng thái Bản nháp để bạn kiểm tra lại trước khi xác nhận.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final repo = ref.read(transactionRepositoryProvider);
+              await repo.restore(tx.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
+                );
+                _refreshData();
+              }
+            },
+            child: const Text('Khôi phục', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -110,6 +143,46 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     );
   }
 
+  Widget _buildTrashChip(bool isDark) {
+    final isSelected = _selectedStatus == 'deleted';
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedStatus = 'deleted';
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? Colors.red 
+              : (isDark ? const Color(0xFF3B1515) : const Color(0xFFFDE8E8)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.delete_outline_rounded,
+              size: 14,
+              color: isSelected ? Colors.white : Colors.red,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Thùng rác',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.red,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
@@ -119,126 +192,121 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     final transactionsAsync = ref.watch(transactionRepositoryProvider);
     final primaryColor = const Color(0xFF00D09E);
     
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-        elevation: 0,
-        centerTitle: false,
-        titleSpacing: 20,
-        title: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [
-                Color(0xFF00D09E),
-                Color(0xFF34D399),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ).createShader(bounds),
-            child: Text(
-              currentRole == UserRole.financeManager
-                  ? 'Dòng tiền doanh nghiệp'
-                  : currentRole == UserRole.expenseAccountant
-                      ? 'Giao dịch Chi phí'
-                      : 'Giao dịch Doanh thu',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                fontSize: 22,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          Center(
-            child: ScaleOnTap(
-              onTap: _refreshData,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0D281E) : Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    if (!isDark)
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                  ],
-                  border: Border.all(
-                    color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: Center(
-              child: ScaleOnTap(
-                onTap: () => context.push('/notifications'),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0D281E) : Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      if (!isDark)
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                    ],
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
-                      width: 1,
+    return FutureBuilder<List<dynamic>>(
+      future: _dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return Scaffold(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/images/loadingGif.gif',
+                      width: 150,
+                      height: 150,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                  child: Icon(
-                    Icons.notifications_none_rounded,
-                    color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
-                    size: 20,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Đang tải dữ liệu...',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.black54,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
-      body: FutureBuilder<List<dynamic>>(
-        future: _dataFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: Image.asset(
-                'assets/images/loadingGif.gif',
-                width: 80,
-                fit: BoxFit.contain,
-              ),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            body: Center(
               child: Text(
                 'Lỗi: ${snapshot.error}',
                 style: const TextStyle(color: Colors.red),
               ),
-            );
-          }
+            ),
+          );
+        }
 
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            elevation: 0,
+            centerTitle: false,
+            titleSpacing: 20,
+            title: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [
+                    Color(0xFF00D09E),
+                    Color(0xFF34D399),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ).createShader(bounds),
+                child: Text(
+                  currentRole == UserRole.financeManager
+                      ? 'Dòng tiền doanh nghiệp'
+                      : currentRole == UserRole.expenseAccountant
+                          ? 'Giao dịch Chi phí'
+                          : 'Giao dịch Doanh thu',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    fontSize: 22,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Center(
+                  child: ScaleOnTap(
+                    onTap: () => context.push('/notifications'),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D281E) : Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          if (!isDark)
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                        ],
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.notifications_none_rounded,
+                        color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          body: Builder(
+            builder: (context) {
           final allTxs = (snapshot.data?[0] as List<TransactionEntity>?) ?? [];
           final allCats = (snapshot.data?[1] as List<CategoryEntity>?) ?? [];
           final catMap = {for (var c in allCats) c.id: c};
@@ -277,12 +345,15 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             }).toList();
           }
 
-          // Calculate overview stats (ONLY use confirmed status)
+          // Sort by date descending
+          list.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
+          // Calculate overview stats based on current filter
           final totalIncome = list
-              .where((tx) => tx.type == TransactionType.income && tx.status == TransactionStatus.confirmed)
+              .where((tx) => tx.type == TransactionType.income)
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final totalExpense = list
-              .where((tx) => tx.type == TransactionType.expense && tx.status == TransactionStatus.confirmed)
+              .where((tx) => tx.type == TransactionType.expense)
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final netBalance = totalIncome - totalExpense;
 
@@ -704,12 +775,12 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                             _buildStatusChip('confirmed', 'Đã xác nhận', isDark),
                             const SizedBox(width: 8),
                             _buildStatusChip('draft', 'Bản nháp', isDark),
-                            const SizedBox(width: 8),
-                            _buildStatusChip('deleted', 'Đã xóa', isDark),
                           ],
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    _buildTrashChip(isDark),
                   ],
                 ),
               ),
@@ -764,14 +835,39 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: list.length,
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                        itemBuilder: (context, index) {
-                          final tx = list[index];
-                          final isIncome = tx.type == TransactionType.income;
-                          final cat = catMap[tx.categoryId];
-                          final catName = cat?.name ?? 'Chưa phân loại';
+                    : RefreshIndicator(
+                        color: primaryColor,
+                        onRefresh: () async {
+                          _refreshData(showLoading: false);
+                          await _dataFuture;
+                        },
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: (ScrollNotification scrollInfo) {
+                            if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent &&
+                                list.length > _displayLimit) {
+                              setState(() {
+                                _displayLimit += 15;
+                              });
+                              return true;
+                            }
+                            return false;
+                          },
+                          child: ListView.builder(
+                            itemCount: min(_displayLimit, list.length) + (list.length > _displayLimit ? 1 : 0),
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                            itemBuilder: (context, index) {
+                              if (index == _displayLimit) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                                  child: Center(
+                                    child: CircularProgressIndicator(color: primaryColor),
+                                  ),
+                                );
+                              }
+                              final tx = list[index];
+                              final isIncome = tx.type == TransactionType.income;
+                              final cat = catMap[tx.categoryId];
+                              final catName = cat?.name ?? 'Chưa phân loại';
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -914,13 +1010,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                 } else if (action == 'delete') {
                                                   _confirmDeleteFromList(tx);
                                                 } else if (action == 'restore') {
-                                                  await transactionsAsync.restore(tx.id);
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp'), backgroundColor: Colors.green),
-                                                    );
-                                                    _refreshData();
-                                                  }
+                                                  _confirmRestoreFromList(tx);
                                                 } else if (action == 'hard_delete') {
                                                   await transactionsAsync.hardDelete(tx.id);
                                                   if (context.mounted) {
@@ -984,7 +1074,9 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                           );
                         },
                       ),
-              ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -1001,6 +1093,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
             )
           : null,
+    );
+      },
     );
   }
 
