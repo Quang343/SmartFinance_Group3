@@ -12,6 +12,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/attachment_entity.dart';
 import '../../../domain/entities/category_entity.dart';
+import '../../../domain/entities/invoice_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
@@ -51,6 +52,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   List<CategoryEntity> _categories = [];
   bool _isLoadingCategories = true;
+
+  bool _showCategoryError = false;
+  final _amountKey = GlobalKey();
+  final _categoryKey = GlobalKey();
 
   @override
   void initState() {
@@ -156,13 +161,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _saveTransaction() async {
-    if (_formKey.currentState!.validate()) {
-      if (_categoryId.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vui lòng chọn danh mục giao dịch!'), backgroundColor: Colors.red),
-        );
-        return;
+    final isAmountValid = _formKey.currentState!.validate();
+    final isCategoryValid = _categoryId.isNotEmpty;
+
+    setState(() {
+      _showCategoryError = !isCategoryValid;
+    });
+
+    if (!isAmountValid || !isCategoryValid) {
+      if (!isAmountValid && _amountKey.currentContext != null) {
+        Scrollable.ensureVisible(_amountKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      } else if (!isCategoryValid && _categoryKey.currentContext != null) {
+        Scrollable.ensureVisible(_categoryKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
+      return;
+    }
 
       final repo = ref.read(transactionRepositoryProvider);
       
@@ -237,14 +250,39 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
       }
 
+      if (_invoiceId != null) {
+        final invoiceRepo = ref.read(invoiceRepositoryProvider);
+        final invoice = await invoiceRepo.getById(_invoiceId!);
+        if (invoice != null) {
+          final updatedInvoice = InvoiceEntity(
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            partnerName: invoice.partnerName,
+            partnerTaxCode: invoice.partnerTaxCode,
+            subtotal: invoice.subtotal,
+            vatRate: invoice.vatRate,
+            vatAmount: invoice.vatAmount,
+            totalAmount: invoice.totalAmount,
+            ocrStatus: invoice.ocrStatus,
+            paymentStatus: PaymentStatus.paid,
+            issuedDate: invoice.issuedDate,
+            createdAt: invoice.createdAt,
+            updatedAt: DateTime.now(),
+            type: invoice.type,
+            imagePath: invoice.imagePath,
+            ocrConfidence: invoice.ocrConfidence,
+          );
+          await invoiceRepo.update(updatedInvoice);
+        }
+      }
+
       if (mounted) {
-        if (context.canPop()) {
-          context.pop();
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context, true);
         } else {
           context.go('/transactions');
         }
       }
-    }
   }
 
   void _confirmDelete() {
@@ -666,6 +704,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           children: [
             // Amount
             TextFormField(
+              key: _amountKey,
               controller: _amountController,
               keyboardType: TextInputType.number,
               style: TextStyle(
@@ -874,14 +913,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             InkWell(
-              onTap: showCategoryPicker,
+              key: _categoryKey,
+              onTap: () {
+                setState(() => _showCategoryError = false);
+                showCategoryPicker();
+              },
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 decoration: BoxDecoration(
                   color: inputFillColor,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: inputBorderColor, width: 1.5),
+                  border: Border.all(
+                    color: _showCategoryError ? const Color(0xFFEF4444) : inputBorderColor, 
+                    width: _showCategoryError ? 2.0 : 1.5,
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -910,6 +956,17 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
             ),
+            if (_showCategoryError)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, left: 16),
+                child: Text(
+                  'Vui lòng chọn danh mục giao dịch!',
+                  style: TextStyle(
+                    color: const Color(0xFFEF4444),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             const SizedBox(height: 24),
 
              // Notes

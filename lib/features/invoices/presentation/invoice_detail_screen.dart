@@ -18,7 +18,8 @@ class InvoiceDetailScreen extends ConsumerStatefulWidget {
   const InvoiceDetailScreen({super.key, required this.invoiceId});
 
   @override
-  ConsumerState<InvoiceDetailScreen> createState() => _InvoiceDetailScreenState();
+  ConsumerState<InvoiceDetailScreen> createState() =>
+      _InvoiceDetailScreenState();
 }
 
 class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
@@ -42,27 +43,28 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
+    final currencyFormatter = NumberFormat.currency(
+      locale: 'vi_VN',
+      symbol: '₫',
+      decimalDigits: 0,
+    );
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
     final invoiceRepository = ref.watch(invoiceRepositoryProvider);
-    final transactionRepository = ref.watch(transactionRepositoryProvider);
-
     return FutureBuilder(
-      future: Future.wait([
-        invoiceRepository.getById(widget.invoiceId),
-        transactionRepository.getAll(),
-      ]),
+      future: invoiceRepository.getById(widget.invoiceId),
       builder: (context, snapshot) {
-        final data = snapshot.data;
-        final invoice = data != null ? data[0] as InvoiceEntity? : null;
+        final invoice = snapshot.data;
         final isIncoming = invoice?.type != InvoiceType.outgoing;
-        final transactions = data != null ? data[1] as List<TransactionEntity> : <TransactionEntity>[];
-        final hasTransaction = transactions.any((tx) => tx.invoiceId == widget.invoiceId);
+        final hasTransaction = invoice?.paymentStatus == PaymentStatus.paid;
 
         return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+          backgroundColor: isDark
+              ? const Color(0xFF06150F)
+              : const Color(0xFFF4FAF7),
           appBar: AppBar(
-            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+            backgroundColor: isDark
+                ? const Color(0xFF06150F)
+                : const Color(0xFFF4FAF7),
             elevation: 0,
             centerTitle: false,
             titleSpacing: 0,
@@ -72,7 +74,9 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                   if (Navigator.of(context).canPop()) {
                     Navigator.of(context).pop();
                   } else {
-                    context.go(isIncoming ? '/invoices/incoming' : '/invoices/outgoing');
+                    context.go(
+                      isIncoming ? '/invoices/incoming' : '/invoices/outgoing',
+                    );
                   }
                 },
                 child: Container(
@@ -89,13 +93,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                         ),
                     ],
                     border: Border.all(
-                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                      color: isDark
+                          ? const Color(0xFF1E3A2F)
+                          : const Color(0xFFEDF2F7),
                       width: 1,
                     ),
                   ),
                   child: Icon(
                     Icons.arrow_back_ios_new_rounded,
-                    color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                    color: isDark
+                        ? const Color(0xFF86EFAC)
+                        : const Color(0xFF00D09E),
                     size: 16,
                   ),
                 ),
@@ -121,7 +129,9 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
               if (invoice != null && invoice.type == InvoiceType.outgoing)
                 Center(
                   child: ScaleOnTap(
-                    onTap: () => context.push('/invoices/outgoing/preview/${invoice.id}'),
+                    onTap: () => context.push(
+                      '/invoices/outgoing/preview/${invoice.id}',
+                    ),
                     child: Container(
                       margin: const EdgeInsets.only(right: 20),
                       padding: const EdgeInsets.all(8),
@@ -137,13 +147,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                             ),
                         ],
                         border: Border.all(
-                          color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                          color: isDark
+                              ? const Color(0xFF1E3A2F)
+                              : const Color(0xFFEDF2F7),
                           width: 1,
                         ),
                       ),
                       child: Icon(
                         Icons.picture_as_pdf_rounded,
-                        color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF00D09E),
+                        color: isDark
+                            ? const Color(0xFF86EFAC)
+                            : const Color(0xFF00D09E),
                         size: 20,
                       ),
                     ),
@@ -152,35 +166,50 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             ],
           ),
           body: snapshot.connectionState == ConnectionState.waiting
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E)))
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF00D09E)),
+                )
               : invoice == null
-                  ? Center(
-                      child: Text(
-                        'Không tìm thấy hóa đơn hoặc có lỗi xảy ra.',
-                        style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
-                      ),
-                    )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      child: Screenshot(
-                        controller: _screenshotController,
-                        child: Container(
-                          color: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
+              ? Center(
+                  child: Text(
+                    'Không tìm thấy hóa đơn hoặc có lỗi xảy ra.',
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  child: Screenshot(
+                    controller: _screenshotController,
+                    child: Container(
+                      color: isDark
+                          ? const Color(0xFF06150F)
+                          : const Color(0xFFF4FAF7),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                           // Header Receipt Card
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                              color: isDark
+                                  ? const Color(0xFF0D251C)
+                                  : Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                                color: isDark
+                                    ? const Color(0xFF1E3A2F)
+                                    : const Color(0xFFE2E8F0),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+                                  color: isDark
+                                      ? Colors.black.withOpacity(0.2)
+                                      : Colors.black.withOpacity(0.04),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -189,13 +218,18 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                             child: Column(
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        isIncoming ? 'Hóa đơn đầu vào' : 'Hóa đơn đầu ra',
+                                        isIncoming
+                                            ? 'Hóa đơn đầu vào'
+                                            : 'Hóa đơn đầu ra',
                                         style: TextStyle(
-                                          color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
+                                          color: isIncoming
+                                              ? const Color(0xFFF97316)
+                                              : const Color(0xFF00D09E),
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
                                         ),
@@ -208,15 +242,64 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isDark 
-                                            ? (isIncoming ? const Color(0xFF431407) : const Color(0xFF064E3B)) 
-                                            : (isIncoming ? const Color(0xFFFFF7ED) : const Color(0xFFECFDF5)),
+                                        color:
+                                            invoice.paymentStatus ==
+                                                PaymentStatus.paid
+                                            ? const Color(
+                                                0xFF00D09E,
+                                              ).withValues(alpha: 0.1)
+                                            : const Color(
+                                                0xFFEF4444,
+                                              ).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color:
+                                              invoice.paymentStatus ==
+                                                  PaymentStatus.paid
+                                              ? const Color(0xFF00D09E)
+                                              : const Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        invoice.paymentStatus ==
+                                                PaymentStatus.paid
+                                            ? 'ĐÃ THANH TOÁN'
+                                            : 'CHƯA THANH TOÁN',
+                                        style: TextStyle(
+                                          color:
+                                              invoice.paymentStatus ==
+                                                  PaymentStatus.paid
+                                              ? const Color(0xFF00D09E)
+                                              : const Color(0xFFEF4444),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? (isIncoming
+                                                  ? const Color(0xFF431407)
+                                                  : const Color(0xFF064E3B))
+                                            : (isIncoming
+                                                  ? const Color(0xFFFFF7ED)
+                                                  : const Color(0xFFECFDF5)),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
-                                        _getOcrStatusText(invoice.ocrStatus).toUpperCase(),
+                                        _getOcrStatusText(
+                                          invoice.ocrStatus,
+                                        ).toUpperCase(),
                                         style: TextStyle(
-                                          color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
+                                          color: isIncoming
+                                              ? const Color(0xFFF97316)
+                                              : const Color(0xFF00D09E),
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -230,7 +313,9 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                   style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
-                                    color: isDark ? Colors.white : const Color(0xFF093021),
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF093021),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -239,7 +324,9 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                   style: TextStyle(
                                     fontSize: 26,
                                     fontWeight: FontWeight.w800,
-                                    color: isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E),
+                                    color: isIncoming
+                                        ? const Color(0xFFF97316)
+                                        : const Color(0xFF00D09E),
                                   ),
                                 ),
                               ],
@@ -251,14 +338,20 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                           Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                              color: isDark
+                                  ? const Color(0xFF0D251C)
+                                  : Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                                color: isDark
+                                    ? const Color(0xFF1E3A2F)
+                                    : const Color(0xFFE2E8F0),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+                                  color: isDark
+                                      ? Colors.black.withOpacity(0.2)
+                                      : Colors.black.withOpacity(0.04),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -272,11 +365,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 18,
-                                    color: isDark ? Colors.white : const Color(0xFF093021),
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF093021),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Divider(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
+                                Divider(
+                                  color: isDark
+                                      ? const Color(0xFF1E3A2F)
+                                      : const Color(0xFFE2E8F0),
+                                ),
                                 const SizedBox(height: 8),
                                 _DetailRow(
                                   label: 'Đối tác',
@@ -288,11 +387,15 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                 ),
                                 _DetailRow(
                                   label: 'Ngày phát hành',
-                                  value: dateFormatter.format(invoice.issuedDate),
+                                  value: dateFormatter.format(
+                                    invoice.issuedDate,
+                                  ),
                                 ),
                                 _DetailRow(
                                   label: 'Tiền trước thuế',
-                                  value: currencyFormatter.format(invoice.subtotal),
+                                  value: currencyFormatter.format(
+                                    invoice.subtotal,
+                                  ),
                                 ),
                                 _DetailRow(
                                   label: 'Thuế suất VAT',
@@ -300,12 +403,15 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                 ),
                                 _DetailRow(
                                   label: 'Tiền thuế VAT',
-                                  value: currencyFormatter.format(invoice.vatAmount),
+                                  value: currencyFormatter.format(
+                                    invoice.vatAmount,
+                                  ),
                                 ),
                                 if (invoice.ocrConfidence != null)
                                   _DetailRow(
                                     label: 'Độ tin cậy OCR',
-                                    value: '${(invoice.ocrConfidence! * 100).toStringAsFixed(1)}%',
+                                    value:
+                                        '${(invoice.ocrConfidence! * 100).toStringAsFixed(1)}%',
                                   ),
                               ],
                             ),
@@ -317,14 +423,21 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
+                                color: isDark
+                                    ? const Color(0xFF0D251C)
+                                    : const Color(0xFFF0FDF4),
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFF00D09E)),
+                                border: Border.all(
+                                  color: const Color(0xFF00D09E),
+                                ),
                               ),
                               child: const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.check_circle_rounded, color: Color(0xFF00D09E)),
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    color: Color(0xFF00D09E),
+                                  ),
                                   SizedBox(width: 8),
                                   Text(
                                     'Đã thanh toán',
@@ -343,15 +456,26 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     onPressed: () => _shareScreenshot(context),
-                                    icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                                    icon: const Icon(
+                                      Icons.share_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
                                     label: const Text(
                                       'Chia sẻ',
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF00D09E),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                       elevation: 0,
                                     ),
                                   ),
@@ -360,15 +484,26 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     onPressed: () => _saveScreenshot(context),
-                                    icon: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                                    icon: const Icon(
+                                      Icons.camera_alt_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
                                     label: const Text(
                                       'Chụp',
-                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF10B981),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                       elevation: 0,
                                     ),
                                   ),
@@ -379,13 +514,16 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                           ],
 
                           // Image View Section
-                          if (invoice.imagePath != null && invoice.imagePath!.isNotEmpty) ...[
+                          if (invoice.imagePath != null &&
+                              invoice.imagePath!.isNotEmpty) ...[
                             Text(
                               'Ảnh hóa đơn đính kèm',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
-                                color: isDark ? Colors.white : const Color(0xFF093021),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF093021),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -393,15 +531,21 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                               width: double.infinity,
                               constraints: const BoxConstraints(maxHeight: 400),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                                color: isDark
+                                    ? const Color(0xFF0D251C)
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                                  color: isDark
+                                      ? const Color(0xFF1E3A2F)
+                                      : const Color(0xFFE2E8F0),
                                 ),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(20),
-                                child: invoice.imagePath == 'mock_path_ocr.png' || !File(invoice.imagePath!).existsSync()
+                                child:
+                                    invoice.imagePath == 'mock_path_ocr.png' ||
+                                        !File(invoice.imagePath!).existsSync()
                                     ? const Padding(
                                         padding: EdgeInsets.all(40.0),
                                         child: Center(
@@ -458,7 +602,12 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(isIncoming ? Icons.add_card_rounded : Icons.payments_rounded, color: Colors.white),
+                            Icon(
+                              isIncoming
+                                  ? Icons.add_card_rounded
+                                  : Icons.payments_rounded,
+                              color: Colors.white,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               isIncoming ? 'Tạo khoản chi' : 'Tạo khoản thu',
@@ -487,12 +636,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         final directory = await getTemporaryDirectory();
         final imagePath = await File('${directory.path}/hoadon.png').create();
         await imagePath.writeAsBytes(imageBytes);
-        await Share.shareXFiles([XFile(imagePath.path)], text: 'Hóa đơn từ Smart Finance');
+        await Share.shareXFiles([
+          XFile(imagePath.path),
+        ], text: 'Hóa đơn từ Smart Finance');
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi chia sẻ: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Lỗi chia sẻ: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -508,11 +662,13 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         } else {
           directory = await getApplicationDocumentsDirectory();
         }
-        
+
         if (directory != null) {
-          final file = File('${directory.path}/hoadon_${DateTime.now().millisecondsSinceEpoch}.png');
+          final file = File(
+            '${directory.path}/hoadon_${DateTime.now().millisecondsSinceEpoch}.png',
+          );
           await file.writeAsBytes(imageBytes);
-          
+
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -527,7 +683,10 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi lưu ảnh: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Lỗi lưu ảnh: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -555,7 +714,7 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.black54, 
+                color: isDark ? Colors.white60 : Colors.black54,
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
@@ -568,7 +727,7 @@ class _DetailRow extends StatelessWidget {
               value,
               textAlign: TextAlign.end,
               style: TextStyle(
-                fontWeight: FontWeight.bold, 
+                fontWeight: FontWeight.bold,
                 fontSize: 15,
                 color: isDark ? Colors.white : const Color(0xFF093021),
               ),

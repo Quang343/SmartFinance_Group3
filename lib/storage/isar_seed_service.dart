@@ -133,6 +133,7 @@ class IsarSeedService {
         ..vatAmount = 250000
         ..totalAmount = 2750000
         ..ocrStatus = 'extracted'
+        ..paymentStatus = 'unpaid'
         ..ocrConfidence = 0.95
         ..type = 'incoming'
         ..issuedDate = DateTime.now()
@@ -148,6 +149,7 @@ class IsarSeedService {
         ..vatAmount = 40000
         ..totalAmount = 540000
         ..ocrStatus = 'extracted'
+        ..paymentStatus = 'unpaid'
         ..ocrConfidence = 0.88
         ..type = 'outgoing'
         ..issuedDate = DateTime.now()
@@ -189,6 +191,7 @@ class IsarSeedService {
         ..vatAmount = 1200000
         ..totalAmount = 13200000
         ..ocrStatus = 'extracted'
+        ..paymentStatus = 'unpaid'
         ..ocrConfidence = 0.98
         ..type = 'outgoing'
         ..issuedDate = DateTime.now().subtract(const Duration(days: 2))
@@ -207,6 +210,7 @@ class IsarSeedService {
         ..vatAmount = 680000
         ..totalAmount = 9180000
         ..ocrStatus = 'extracted'
+        ..paymentStatus = 'unpaid'
         ..ocrConfidence = 0.94
         ..type = 'outgoing'
         ..issuedDate = DateTime.now().subtract(const Duration(days: 1))
@@ -225,6 +229,7 @@ class IsarSeedService {
         ..vatAmount = 0
         ..totalAmount = 4000000
         ..ocrStatus = 'extracted'
+        ..paymentStatus = 'unpaid'
         ..ocrConfidence = 0.92
         ..type = 'outgoing'
         ..issuedDate = DateTime.now()
@@ -243,6 +248,7 @@ class IsarSeedService {
         ..vatAmount = 750000
         ..totalAmount = 8250000
         ..ocrStatus = 'extracted'
+        ..paymentStatus = 'unpaid'
         ..ocrConfidence = 0.96
         ..type = 'incoming'
         ..issuedDate = DateTime.now().subtract(const Duration(days: 3))

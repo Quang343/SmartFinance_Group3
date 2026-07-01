@@ -2,6 +2,8 @@ enum OcrStatus { notStarted, imageSelected, scanning, extracted, failed }
 
 enum InvoiceType { incoming, outgoing }
 
+enum PaymentStatus { unpaid, partiallyPaid, paid }
+
 class InvoiceEntity {
   final String id;
   final String invoiceNumber;
@@ -14,6 +16,7 @@ class InvoiceEntity {
   final String? imagePath;
   final OcrStatus ocrStatus;
   final double? ocrConfidence;
+  final PaymentStatus paymentStatus;
   final DateTime issuedDate;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -29,6 +32,7 @@ class InvoiceEntity {
     required this.vatAmount,
     required this.totalAmount,
     required this.ocrStatus,
+    required this.paymentStatus,
     required this.issuedDate,
     required this.createdAt,
     required this.updatedAt,

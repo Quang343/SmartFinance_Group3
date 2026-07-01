@@ -57,38 +57,43 @@ const IsarInvoiceSchema = CollectionSchema(
       name: r'partnerTaxCode',
       type: IsarType.string,
     ),
-    r'subtotal': PropertySchema(
+    r'paymentStatus': PropertySchema(
       id: 8,
+      name: r'paymentStatus',
+      type: IsarType.string,
+    ),
+    r'subtotal': PropertySchema(
+      id: 9,
       name: r'subtotal',
       type: IsarType.long,
     ),
     r'totalAmount': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'totalAmount',
       type: IsarType.long,
     ),
     r'type': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'type',
       type: IsarType.string,
     ),
     r'uid': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'uid',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'vatAmount': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'vatAmount',
       type: IsarType.long,
     ),
     r'vatRate': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'vatRate',
       type: IsarType.long,
     )
@@ -151,6 +156,19 @@ const IsarInvoiceSchema = CollectionSchema(
         )
       ],
     ),
+    r'paymentStatus': IndexSchema(
+      id: 7011973130100993011,
+      name: r'paymentStatus',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'paymentStatus',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
     r'type': IndexSchema(
       id: 5117122708147080838,
       name: r'type',
@@ -202,6 +220,7 @@ int _isarInvoiceEstimateSize(
   bytesCount += 3 + object.ocrStatus.length * 3;
   bytesCount += 3 + object.partnerName.length * 3;
   bytesCount += 3 + object.partnerTaxCode.length * 3;
+  bytesCount += 3 + object.paymentStatus.length * 3;
   bytesCount += 3 + object.type.length * 3;
   bytesCount += 3 + object.uid.length * 3;
   return bytesCount;
@@ -221,13 +240,14 @@ void _isarInvoiceSerialize(
   writer.writeString(offsets[5], object.ocrStatus);
   writer.writeString(offsets[6], object.partnerName);
   writer.writeString(offsets[7], object.partnerTaxCode);
-  writer.writeLong(offsets[8], object.subtotal);
-  writer.writeLong(offsets[9], object.totalAmount);
-  writer.writeString(offsets[10], object.type);
-  writer.writeString(offsets[11], object.uid);
-  writer.writeDateTime(offsets[12], object.updatedAt);
-  writer.writeLong(offsets[13], object.vatAmount);
-  writer.writeLong(offsets[14], object.vatRate);
+  writer.writeString(offsets[8], object.paymentStatus);
+  writer.writeLong(offsets[9], object.subtotal);
+  writer.writeLong(offsets[10], object.totalAmount);
+  writer.writeString(offsets[11], object.type);
+  writer.writeString(offsets[12], object.uid);
+  writer.writeDateTime(offsets[13], object.updatedAt);
+  writer.writeLong(offsets[14], object.vatAmount);
+  writer.writeLong(offsets[15], object.vatRate);
 }
 
 IsarInvoice _isarInvoiceDeserialize(
@@ -246,13 +266,14 @@ IsarInvoice _isarInvoiceDeserialize(
   object.ocrStatus = reader.readString(offsets[5]);
   object.partnerName = reader.readString(offsets[6]);
   object.partnerTaxCode = reader.readString(offsets[7]);
-  object.subtotal = reader.readLong(offsets[8]);
-  object.totalAmount = reader.readLong(offsets[9]);
-  object.type = reader.readString(offsets[10]);
-  object.uid = reader.readString(offsets[11]);
-  object.updatedAt = reader.readDateTime(offsets[12]);
-  object.vatAmount = reader.readLong(offsets[13]);
-  object.vatRate = reader.readLong(offsets[14]);
+  object.paymentStatus = reader.readString(offsets[8]);
+  object.subtotal = reader.readLong(offsets[9]);
+  object.totalAmount = reader.readLong(offsets[10]);
+  object.type = reader.readString(offsets[11]);
+  object.uid = reader.readString(offsets[12]);
+  object.updatedAt = reader.readDateTime(offsets[13]);
+  object.vatAmount = reader.readLong(offsets[14]);
+  object.vatRate = reader.readLong(offsets[15]);
   return object;
 }
 
@@ -280,18 +301,20 @@ P _isarInvoiceDeserializeProp<P>(
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
-      return (reader.readLong(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 9:
       return (reader.readLong(offset)) as P;
     case 10:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 11:
       return (reader.readString(offset)) as P;
     case 12:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 13:
-      return (reader.readLong(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 14:
+      return (reader.readLong(offset)) as P;
+    case 15:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -679,6 +702,51 @@ extension IsarInvoiceQueryWhere
               indexName: r'ocrStatus',
               lower: [],
               upper: [ocrStatus],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterWhereClause>
+      paymentStatusEqualTo(String paymentStatus) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'paymentStatus',
+        value: [paymentStatus],
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterWhereClause>
+      paymentStatusNotEqualTo(String paymentStatus) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'paymentStatus',
+              lower: [],
+              upper: [paymentStatus],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'paymentStatus',
+              lower: [paymentStatus],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'paymentStatus',
+              lower: [paymentStatus],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'paymentStatus',
+              lower: [],
+              upper: [paymentStatus],
               includeUpper: false,
             ));
       }
@@ -1771,6 +1839,142 @@ extension IsarInvoiceQueryFilter
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'paymentStatus',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'paymentStatus',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'paymentStatus',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'paymentStatus',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'paymentStatus',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'paymentStatus',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'paymentStatus',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'paymentStatus',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'paymentStatus',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition>
+      paymentStatusIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'paymentStatus',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QAfterFilterCondition> subtotalEqualTo(
       int value) {
     return QueryBuilder.apply(this, (query) {
@@ -2418,6 +2622,19 @@ extension IsarInvoiceQuerySortBy
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> sortByPaymentStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy>
+      sortByPaymentStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentStatus', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> sortBySubtotal() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'subtotal', Sort.asc);
@@ -2616,6 +2833,19 @@ extension IsarInvoiceQuerySortThenBy
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> thenByPaymentStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy>
+      thenByPaymentStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'paymentStatus', Sort.desc);
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QAfterSortBy> thenBySubtotal() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'subtotal', Sort.asc);
@@ -2758,6 +2988,14 @@ extension IsarInvoiceQueryWhereDistinct
     });
   }
 
+  QueryBuilder<IsarInvoice, IsarInvoice, QDistinct> distinctByPaymentStatus(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'paymentStatus',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<IsarInvoice, IsarInvoice, QDistinct> distinctBySubtotal() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'subtotal');
@@ -2856,6 +3094,12 @@ extension IsarInvoiceQueryProperty
   QueryBuilder<IsarInvoice, String, QQueryOperations> partnerTaxCodeProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'partnerTaxCode');
+    });
+  }
+
+  QueryBuilder<IsarInvoice, String, QQueryOperations> paymentStatusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'paymentStatus');
     });
   }
 
