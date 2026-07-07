@@ -120,24 +120,20 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           final double expenseRatio = totalSum > 0 ? totalExpense / totalSum : 0.5;
           final double savingRate = totalIncome > 0 ? (netBalance / totalIncome) * 100 : 0.0;
 
-          // Calculate itemized sums based on transaction notes (with category fallback)
+          // Calculate itemized sums based on categories
           final Map<String, double> categorySums = {};
           if (currentRole == UserRole.expenseAccountant) {
             final expenses = filtered.where((tx) => tx.type == TransactionType.expense);
             for (var tx in expenses) {
               final cat = catMap[tx.categoryId];
-              final label = (tx.note != null && tx.note!.trim().isNotEmpty)
-                  ? tx.note!.trim()
-                  : (cat?.name ?? 'Khác');
+              final label = cat?.name ?? 'Chưa phân loại';
               categorySums[label] = (categorySums[label] ?? 0.0) + tx.amount;
             }
           } else if (currentRole == UserRole.revenueAccountant) {
             final incomes = filtered.where((tx) => tx.type == TransactionType.income);
             for (var tx in incomes) {
               final cat = catMap[tx.categoryId];
-              final label = (tx.note != null && tx.note!.trim().isNotEmpty)
-                  ? tx.note!.trim()
-                  : (cat?.name ?? 'Khác');
+              final label = cat?.name ?? 'Chưa phân loại';
               categorySums[label] = (categorySums[label] ?? 0.0) + tx.amount;
             }
           }
@@ -159,7 +155,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
             }
           }
           if (otherSum > 0) {
-            displayCategories.add(MapEntry('Khác', otherSum));
+            displayCategories.add(MapEntry('Các mục khác', otherSum));
           }
 
           final bool hasData = currentRole == UserRole.financeManager 
@@ -529,7 +525,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         color: const Color(0xFF00D09E),
                         isDark: isDark,
                         onTap: () {
-                          context.go('/reports/detail?type=income');
+                          String url = '/reports/detail?type=income&period=$_selectedPeriod';
+                          if (_selectedPeriod == 'custom' && _customDateRange != null) {
+                            url += '&startDate=${_customDateRange!.start.toIso8601String()}&endDate=${_customDateRange!.end.toIso8601String()}';
+                          }
+                          context.go(url);
                         },
                       ),
                       const SizedBox(height: 16),
@@ -543,7 +543,11 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         color: const Color(0xFFEF4444),
                         isDark: isDark,
                         onTap: () {
-                          context.go('/reports/detail?type=expense');
+                          String url = '/reports/detail?type=expense&period=$_selectedPeriod';
+                          if (_selectedPeriod == 'custom' && _customDateRange != null) {
+                            url += '&startDate=${_customDateRange!.start.toIso8601String()}&endDate=${_customDateRange!.end.toIso8601String()}';
+                          }
+                          context.go(url);
                         },
                       ),
                       const SizedBox(height: 16),

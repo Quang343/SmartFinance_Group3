@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
@@ -23,6 +25,70 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
   int _subtotal = 0;
   int _vatRate = 10;
   int _totalAmount = 0;
+
+  final ImagePicker _picker = ImagePicker();
+  String? _selectedImagePath;
+
+  void _showImageSourcePicker() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E)),
+                  title: Text('Chụp ảnh (Camera)', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF00D09E)),
+                  title: Text('Chọn từ thư viện (Gallery)', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(source: source);
+      if (image != null) {
+        setState(() {
+          _selectedImagePath = image.path;
+        });
+        _simulateScan();
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMsg = 'Lỗi chọn ảnh: $e';
+        if (e.toString().contains('cameraDelegate')) {
+          errorMsg = 'Tính năng chụp ảnh chưa được hỗ trợ trên thiết bị này (Windows/Desktop). Vui lòng chọn từ Thư viện!';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   void _simulateScan() async {
     setState(() {
@@ -71,12 +137,13 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
       vatAmount: (_subtotal * _vatRate / 100).round(),
       totalAmount: _totalAmount,
       ocrStatus: OcrStatus.extracted,
+      paymentStatus: PaymentStatus.unpaid,
       ocrConfidence: 0.94,
       type: InvoiceType.incoming,
       issuedDate: DateTime.now(),
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      imagePath: 'mock_path_ocr.png',
+      imagePath: _selectedImagePath ?? 'mock_path_ocr.png',
     );
 
     await repo.create(invoice);
@@ -92,12 +159,13 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     }
   }
 
-  @override
   Widget _buildScannerTarget(Widget child, bool isDark) {
     final borderColor = const Color(0xFF00D09E);
     return Stack(
       children: [
-        child,
+        Positioned.fill(
+          child: Center(child: child),
+        ),
         // Top Left
         Positioned(
           top: 0,
@@ -223,7 +291,7 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
             const SizedBox(height: 24),
             if (_status == OcrStatus.notStarted)
               ScaleOnTap(
-                onTap: _simulateScan,
+                onTap: _showImageSourcePicker,
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -451,9 +519,30 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
               const SizedBox(height: 20),
               _buildExtractedField('Tên đối tác', _partnerName, isDark, (val) => _partnerName = val),
               _buildExtractedField('Mã số thuế', _partnerTaxCode, isDark, (val) => _partnerTaxCode = val),
-              _buildExtractedField('Tiền trước thuế (VND)', _subtotal.toString(), isDark, (val) => _subtotal = int.tryParse(val) ?? 0),
-              _buildExtractedField('Thuế suất (%)', _vatRate.toString(), isDark, (val) => _vatRate = int.tryParse(val) ?? 0),
-              _buildExtractedField('Tổng thanh toán (VND)', _totalAmount.toString(), isDark, (val) => _totalAmount = int.tryParse(val) ?? 0),
+              _buildExtractedField(
+                'Tiền trước thuế (VND)', 
+                _subtotal.toString(), 
+                isDark, 
+                (val) => _subtotal = int.tryParse(val) ?? 0,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              _buildExtractedField(
+                'Thuế suất (%)', 
+                _vatRate.toString(), 
+                isDark, 
+                (val) => _vatRate = int.tryParse(val) ?? 0,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              _buildExtractedField(
+                'Tổng thanh toán (VND)', 
+                _totalAmount.toString(), 
+                isDark, 
+                (val) => _totalAmount = int.tryParse(val) ?? 0,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
             ],
           ),
         );
@@ -462,7 +551,14 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     }
   }
 
-  Widget _buildExtractedField(String label, String value, bool isDark, Function(String) onChanged) {
+  Widget _buildExtractedField(
+    String label, 
+    String value, 
+    bool isDark, 
+    Function(String) onChanged, {
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
     final primaryColor = const Color(0xFF00D09E);
     final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
     final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
@@ -483,6 +579,8 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
           const SizedBox(height: 6),
           TextFormField(
             initialValue: value,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
             style: TextStyle(
               fontSize: 15,
               color: isDark ? Colors.white : Colors.black87,

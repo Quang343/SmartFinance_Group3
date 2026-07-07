@@ -68,6 +68,7 @@ class SettingsScreen extends ConsumerWidget {
                           description = 'Ghi nhận và báo cáo các khoản doanh thu';
                           activeColor = const Color(0xFF00D09E);
                           break;
+
                       }
 
                       return GestureDetector(

@@ -13,4 +13,46 @@ class TransactionModel extends TransactionEntity {
     super.note,
     super.invoiceId,
   });
+
+  factory TransactionModel.fromJson(Map<String, dynamic> json) {
+    return TransactionModel(
+      id: json['id'] as String? ?? '',
+      amount: json['amount'] as int? ?? 0,
+      type: TransactionType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => TransactionType.expense,
+      ),
+      categoryId: json['categoryId'] as String? ?? '',
+      transactionDate: json['transactionDate'] != null 
+          ? DateTime.parse(json['transactionDate'] as String) 
+          : DateTime.now(),
+      status: TransactionStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+        orElse: () => TransactionStatus.draft,
+      ),
+      note: json['note'] as String?,
+      invoiceId: json['invoiceId'] as String?,
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String) 
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null 
+          ? DateTime.parse(json['updatedAt'] as String) 
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'amount': amount,
+      'type': type.name,
+      'categoryId': categoryId,
+      'transactionDate': transactionDate.toIso8601String(),
+      'status': status.name,
+      'note': note,
+      'invoiceId': invoiceId,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
 }

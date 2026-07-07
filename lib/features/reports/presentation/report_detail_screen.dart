@@ -10,8 +10,37 @@ import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 
 class ReportDetailScreen extends ConsumerWidget {
   final String reportType; // 'income' or 'expense'
+  final String period;
+  final String? startDate;
+  final String? endDate;
 
-  const ReportDetailScreen({super.key, required this.reportType});
+  const ReportDetailScreen({
+    super.key, 
+    required this.reportType,
+    this.period = 'all',
+    this.startDate,
+    this.endDate,
+  });
+
+  bool _isWithinPeriod(DateTime date) {
+    final now = DateTime.now();
+    switch (period) {
+      case 'today':
+        return date.year == now.year && date.month == now.month && date.day == now.day;
+      case 'month':
+        return date.year == now.year && date.month == now.month;
+      case 'year':
+        return date.year == now.year;
+      case 'custom':
+        if (startDate == null || endDate == null) return true;
+        final start = DateTime.parse(startDate!);
+        final end = DateTime.parse(endDate!).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+        return date.isAfter(start.subtract(const Duration(seconds: 1))) && date.isBefore(end.add(const Duration(seconds: 1)));
+      case 'all':
+      default:
+        return true;
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,18 +59,18 @@ class ReportDetailScreen extends ConsumerWidget {
     // Curated color palette for sections
     final incomeColors = [
       const Color(0xFF00D09E),
-      const Color(0xFF34D399),
-      const Color(0xFF059669),
+      const Color(0xFF3B82F6),
+      const Color(0xFF06B6D4),
+      const Color(0xFF8B5CF6),
       const Color(0xFF10B981),
-      const Color(0xFF0284C7),
     ];
 
     final expenseColors = [
       const Color(0xFFEF4444),
-      const Color(0xFFF87171),
-      const Color(0xFFDC2626),
-      const Color(0xFFB91C1C),
       const Color(0xFFF97316),
+      const Color(0xFFF59E0B),
+      const Color(0xFFEC4899),
+      const Color(0xFF8B5CF6),
     ];
 
     final colors = isIncome ? incomeColors : expenseColors;
@@ -128,7 +157,8 @@ class ReportDetailScreen extends ConsumerWidget {
           final list = allTxs
               .where((tx) =>
                   tx.type == (isIncome ? TransactionType.income : TransactionType.expense) &&
-                  tx.status == TransactionStatus.confirmed)
+                  tx.status == TransactionStatus.confirmed &&
+                  _isWithinPeriod(tx.transactionDate))
               .toList();
 
           if (list.isEmpty) {
@@ -155,16 +185,19 @@ class ReportDetailScreen extends ConsumerWidget {
           final Map<String, int> categoryTotals = {};
           int totalSum = 0;
           for (var tx in list) {
-            categoryTotals[tx.categoryId] = (categoryTotals[tx.categoryId] ?? 0) + tx.amount.toInt();
+            final catName = categoryMap[tx.categoryId] ?? 'Chưa phân loại';
+            categoryTotals[catName] = (categoryTotals[catName] ?? 0) + tx.amount.toInt();
             totalSum += tx.amount.toInt();
           }
 
           int colorIndex = 0;
           final List<PieChartSectionData> pieSections = [];
+          final Map<String, Color> categoryColorMap = {};
           
-          categoryTotals.forEach((catId, amount) {
+          categoryTotals.forEach((catName, amount) {
             final percentage = totalSum > 0 ? (amount / totalSum * 100) : 0;
             final color = colors[colorIndex % colors.length];
+            categoryColorMap[catName] = color;
             colorIndex++;
 
             pieSections.add(
@@ -172,7 +205,7 @@ class ReportDetailScreen extends ConsumerWidget {
                 value: amount.toDouble(),
                 title: '${percentage.toStringAsFixed(1)}%',
                 color: color,
-                radius: 50,
+                radius: 40, // Slightly thinner donut
                 titleStyle: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -202,28 +235,41 @@ class ReportDetailScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      height: 180,
-                      child: PieChart(
+                child: SizedBox(
+                  height: 200,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      PieChart(
                         PieChartData(
                           sections: pieSections,
-                          centerSpaceRadius: 44,
+                          centerSpaceRadius: 60, // Increase space for center text
                           sectionsSpace: 3,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Tổng ${isIncome ? "doanh thu" : "chi phí"}: ${currencyFormatter.format(totalSum)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: isDark ? Colors.white : const Color(0xFF093021),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Tổng ${isIncome ? "doanh thu" : "chi phí"}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            currencyFormatter.format(totalSum),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: isDark ? Colors.white : const Color(0xFF093021),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -242,8 +288,9 @@ class ReportDetailScreen extends ConsumerWidget {
 
               // Category item lists in styled containers
               ...categoryTotals.entries.map((entry) {
-                final catName = categoryMap[entry.key] ?? 'Chưa phân loại';
+                final catName = entry.key;
                 final percentage = totalSum > 0 ? (entry.value / totalSum * 100) : 0.0;
+                final itemColor = categoryColorMap[catName] ?? (isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444));
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -260,12 +307,12 @@ class ReportDetailScreen extends ConsumerWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: (isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444)).withOpacity(0.12),
+                          color: itemColor.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                          color: isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                          color: itemColor,
                           size: 18,
                         ),
                       ),
@@ -297,7 +344,7 @@ class ReportDetailScreen extends ConsumerWidget {
                         currencyFormatter.format(entry.value),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                          color: itemColor,
                           fontSize: 15,
                         ),
                       ),

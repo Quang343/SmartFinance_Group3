@@ -5,9 +5,16 @@ import 'package:go_router/go_router.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class InvoicePreviewScreen extends ConsumerWidget {
-  const InvoicePreviewScreen({super.key});
+  final String invoiceId;
+
+  const InvoicePreviewScreen({super.key, required this.invoiceId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -87,17 +94,15 @@ class InvoicePreviewScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: FutureBuilder<List<InvoiceEntity>>(
-        future: invoiceRepo.getAll(),
+      body: FutureBuilder<InvoiceEntity?>(
+        future: invoiceRepo.getById(invoiceId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Color(0xFF00D09E)),
             );
           }
-          if (snapshot.hasError ||
-              !snapshot.hasData ||
-              snapshot.data!.isEmpty) {
+          if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
             return Center(
               child: Text(
                 'Không tìm thấy hóa đơn để xem trước.',
@@ -108,22 +113,7 @@ class InvoicePreviewScreen extends ConsumerWidget {
             );
           }
 
-          // Show the latest outgoing invoice
-          final list = snapshot.data!
-              .where((inv) => inv.type == InvoiceType.outgoing)
-              .toList();
-          if (list.isEmpty) {
-            return Center(
-              child: Text(
-                'Không có hóa đơn đầu ra nào được tìm thấy.',
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.black54,
-                ),
-              ),
-            );
-          }
-
-          final invoice = list.last;
+          final invoice = snapshot.data!;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -293,11 +283,11 @@ class InvoicePreviewScreen extends ConsumerWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Expanded(
+                              Expanded(
                                 flex: 3,
                                 child: Text(
-                                  'Dịch vụ phần mềm SmartFinance SaaS',
-                                  style: TextStyle(fontSize: 12),
+                                  'Cung cấp Sản phẩm/Dịch vụ cho ${invoice.partnerName}',
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                               ),
                               const Expanded(
@@ -384,31 +374,60 @@ class InvoicePreviewScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // Printing Action Button
-                ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Đang xuất PDF và in hóa đơn...'),
-                        backgroundColor: Color(0xFF00D09E),
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _shareInvoice(context, invoice),
+                        icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                        label: const Text(
+                          'Chia sẻ',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00D09E),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.print_rounded, color: Colors.white),
-                  label: const Text(
-                    'In / Xuất hóa đơn PDF',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00D09E),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _saveInvoice(context, invoice),
+                        icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                        label: const Text(
+                          'Lưu PDF',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981), // slightly different green or use a secondary color
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
                     ),
-                    elevation: 0,
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _printInvoice(context, invoice),
+                    icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
+                    label: const Text(
+                      'In Hóa Đơn',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3B82F6), // Blue to distinguish
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
                   ),
                 ),
               ],
@@ -417,5 +436,164 @@ class InvoicePreviewScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  Future<pw.Document> _generatePdfDocument(InvoiceEntity invoice) async {
+    final pdf = pw.Document();
+    final ttf = await PdfGoogleFonts.robotoRegular();
+    final ttfBold = await PdfGoogleFonts.robotoBold();
+    final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('HÓA ĐƠN BÁN RA', style: pw.TextStyle(font: ttfBold, fontSize: 24, color: PdfColors.green800)),
+              pw.SizedBox(height: 20),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Đơn vị bán: SmartFinance', style: pw.TextStyle(font: ttfBold, fontSize: 14)),
+                      pw.Text('Ngày lập: ${DateFormat('dd/MM/yyyy HH:mm').format(invoice.issuedDate)}', style: pw.TextStyle(font: ttf, fontSize: 12)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('Mã HĐ: ${invoice.invoiceNumber}', style: pw.TextStyle(font: ttfBold, fontSize: 12)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 30),
+              pw.Text('Thông tin khách hàng:', style: pw.TextStyle(font: ttfBold, fontSize: 14)),
+              pw.Text('Tên: ${invoice.partnerName}', style: pw.TextStyle(font: ttf, fontSize: 12)),
+              if (invoice.partnerTaxCode != null && invoice.partnerTaxCode!.isNotEmpty)
+                pw.Text('MST: ${invoice.partnerTaxCode}', style: pw.TextStyle(font: ttf, fontSize: 12)),
+              pw.SizedBox(height: 30),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Sản phẩm / Dịch vụ', style: pw.TextStyle(font: ttfBold))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('SL', textAlign: pw.TextAlign.center, style: pw.TextStyle(font: ttfBold))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Thành tiền', textAlign: pw.TextAlign.right, style: pw.TextStyle(font: ttfBold))),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Cung cấp cho ${invoice.partnerName}', style: pw.TextStyle(font: ttf))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('1', textAlign: pw.TextAlign.center, style: pw.TextStyle(font: ttf))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(currencyFormatter.format(invoice.subtotal), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: ttf))),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Tổng tiền chưa thuế (Subtotal)', style: pw.TextStyle(font: ttf))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('')),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(currencyFormatter.format(invoice.subtotal), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: ttf))),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Thuế VAT (${invoice.vatRate}%)', style: pw.TextStyle(font: ttf))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('')),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(currencyFormatter.format(invoice.vatAmount), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: ttf))),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('Tổng cộng', style: pw.TextStyle(font: ttfBold, color: PdfColors.green800))),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text('')),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(currencyFormatter.format(invoice.totalAmount), textAlign: pw.TextAlign.right, style: pw.TextStyle(font: ttfBold, color: PdfColors.green800))),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Spacer(),
+              pw.Center(
+                child: pw.Text('Cảm ơn quý khách!', style: pw.TextStyle(font: ttf, fontSize: 12, fontStyle: pw.FontStyle.italic)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return pdf;
+  }
+
+  Future<void> _shareInvoice(BuildContext context, InvoiceEntity invoice) async {
+    try {
+      final pdf = await _generatePdfDocument(invoice);
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'HoaDon_${invoice.invoiceNumber}.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chia sẻ PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveInvoice(BuildContext context, InvoiceEntity invoice) async {
+    try {
+      final pdf = await _generatePdfDocument(invoice);
+      final bytes = await pdf.save();
+      
+      Directory? directory;
+      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        directory = await getDownloadsDirectory();
+      } else {
+        directory = await getApplicationDocumentsDirectory();
+      }
+      
+      if (directory != null) {
+        final file = File('${directory.path}/HoaDon_${invoice.invoiceNumber}.pdf');
+        await file.writeAsBytes(bytes);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã lưu PDF tại:\n${file.path}'),
+              backgroundColor: const Color(0xFF10B981),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi lưu PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _printInvoice(BuildContext context, InvoiceEntity invoice) async {
+    try {
+      final pdf = await _generatePdfDocument(invoice);
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'HoaDon_${invoice.invoiceNumber}.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi in hóa đơn: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
