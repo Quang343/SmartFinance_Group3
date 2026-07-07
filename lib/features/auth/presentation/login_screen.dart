@@ -66,6 +66,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _handleGoogleLogin() async {
+    try {
+      final user = await ref.read(authRepositoryProvider).signInWithGoogle();
+      
+      if (user != null) {
+        ref.read(currentUserProvider.notifier).state = user;
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đăng nhập Google thành công!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/dashboard');
+      } else {
+        // User canceled the login
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã hủy đăng nhập Google'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi đăng nhập Google: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Widget _buildMockAccountChip(String label, String username, String password, Color primaryColor) {
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -268,9 +303,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: [
-                                        _buildMockAccountChip('Quản lý', 'manager', '123', primaryColor),
-                                        _buildMockAccountChip('KT Chi phí', 'expense', '123', primaryColor),
-                                        _buildMockAccountChip('KT Doanh thu', 'revenue', '123', primaryColor),
+                                        _buildMockAccountChip('Quản lý', 'admin', '123456', primaryColor),
+                                        _buildMockAccountChip('KT Chi phí', 'expense', '123456', primaryColor),
+                                        _buildMockAccountChip('KT Doanh thu', 'revenue', '123456', primaryColor),
                                       ],
                                     ),
                                   ],
@@ -473,7 +508,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               // 8. Social Login
                               Center(
                                 child: Text(
-                                  'hoặc đăng ký bằng',
+                                  'hoặc đăng nhập bằng',
                                   style: TextStyle(
                                     color: isDark
                                         ? Colors.white54
@@ -486,47 +521,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // Facebook Icon Button
-                                  GestureDetector(
-                                    onTap: () {},
-                                    child: Container(
-                                      width: 48,
-                                      height: 48,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1877F2),
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.1,
-                                            ),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      alignment: Alignment.bottomCenter,
-                                      child: const Text(
-                                        'f',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 36,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'Arial',
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 24),
                                   // Google Icon Button
                                   GestureDetector(
-                                    onTap: () {},
+                                    onTap: _handleGoogleLogin,
                                     child: Container(
                                       width: 48,
                                       height: 48,
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                      color: Colors.white,
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(

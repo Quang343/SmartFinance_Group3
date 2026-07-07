@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/widgets/scale_on_tap.dart';
-import '../../../data/local/isar_models/isar_user.dart';
 import '../../../data/repositories/auth_repository.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -50,15 +49,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
       
       try {
-        final newUser = IsarUser()
-          ..fullName = _fullNameController.text
-          ..company = _companyController.text
-          ..taxCode = _taxCodeController.text
-          ..email = _emailController.text
-          ..password = _passwordController.text
-          ..role = _selectedRole.name;
-          
-        await ref.read(authRepositoryProvider).register(newUser);
+        await ref.read(authRepositoryProvider).register(
+          _emailController.text,
+          _passwordController.text,
+          _fullNameController.text,
+          _companyController.text,
+          _taxCodeController.text,
+        );
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -579,36 +576,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  // Facebook Icon Button
-                                  GestureDetector(
-                                    onTap: () {},
-                                    child: Container(
-                                      width: 48,
-                                      height: 48,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1877F2),
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.1),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      alignment: Alignment.bottomCenter,
-                                      child: const Text(
-                                        'f',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 36,
-                                          fontWeight: FontWeight.bold,
-                                          fontFamily: 'Arial',
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 24),
                                   // Google Icon Button
                                   GestureDetector(
                                     onTap: () {},

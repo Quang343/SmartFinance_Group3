@@ -5,6 +5,7 @@ enum UserRole {
   financeManager,
   expenseAccountant,
   revenueAccountant,
+  viewer,
 }
 
 extension UserRoleExtension on UserRole {
@@ -16,6 +17,8 @@ extension UserRoleExtension on UserRole {
         return 'Kế toán chi phí';
       case UserRole.revenueAccountant:
         return 'Kế toán doanh thu';
+      case UserRole.viewer:
+        return 'Người xem';
     }
   }
 
