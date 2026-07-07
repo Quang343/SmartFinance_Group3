@@ -54,7 +54,7 @@ class AuthRepository {
   }
 
   // Đăng ký bằng Email & Password
-  Future<UserModel?> register(String email, String password, String fullName, String company, String taxCode, {String role = 'Viewer'}) async {
+  Future<UserModel?> register(String email, String password, String fullName, String company, String taxCode, {String role = 'financeManager'}) async {
     try {
       if (!email.contains('@')) {
         email = '$email@smartfinance.com';
@@ -98,10 +98,16 @@ class AuthRepository {
         userCredential = await _firebaseAuth.signInWithPopup(googleProvider);
       } else {
         // Trên nền Android / iOS, dùng google_sign_in native
-        final GoogleSignInAccount? account = await _googleSignIn.authenticate();
-        if (account == null) return null; // Bị hủy bởi người dùng
+        GoogleSignInAccount account;
+        try {
+          account = await _googleSignIn.authenticate();
+        } on Exception catch (e) {
+          // Bị hủy bởi người dùng hoặc lỗi khác
+          print('Google Sign-In canceled or failed: $e');
+          return null;
+        }
 
-        final GoogleSignInAuthentication googleAuth = await account.authentication;
+        final GoogleSignInAuthentication googleAuth = account.authentication;
         final OAuthCredential credential = GoogleAuthProvider.credential(
           idToken: googleAuth.idToken,
         );

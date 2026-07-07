@@ -56,13 +56,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
         ];
-      case UserRole.viewer:
-        return const [
-          NavigationItem(path: '/dashboard', label: 'Tổng quan', icon: Icons.dashboard),
-          NavigationItem(path: '/transactions', label: 'Dòng tiền', icon: Icons.compare_arrows),
-          NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
-          NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
-        ];
+
     }
   }
 

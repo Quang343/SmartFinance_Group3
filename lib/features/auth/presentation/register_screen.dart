@@ -55,6 +55,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _fullNameController.text,
           _companyController.text,
           _taxCodeController.text,
+          role: _selectedRole.name,
         );
 
         if (!mounted) return;

@@ -68,11 +68,7 @@ class SettingsScreen extends ConsumerWidget {
                           description = 'Ghi nhận và báo cáo các khoản doanh thu';
                           activeColor = const Color(0xFF00D09E);
                           break;
-                        case UserRole.viewer:
-                          roleIcon = Icons.visibility;
-                          description = 'Chỉ xem dữ liệu, không có quyền chỉnh sửa';
-                          activeColor = const Color(0xFF64748B);
-                          break;
+
                       }
 
                       return GestureDetector(
