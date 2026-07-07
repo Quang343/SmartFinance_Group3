@@ -1,45 +1,93 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/invoice_entity.dart';
 import '../../domain/repositories/invoice_repository.dart';
-import '../datasources/local_invoice_datasource.dart';
-import '../mappers/invoice_mapper.dart';
+import '../models/invoice_model.dart';
 
 class InvoiceRepositoryImpl implements InvoiceRepository {
-  final LocalInvoiceDataSource _dataSource;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
 
-  InvoiceRepositoryImpl(this._dataSource);
+  InvoiceRepositoryImpl(this._firestore, this._auth);
+
+  String get _userId => _auth.currentUser?.uid ?? '';
+  CollectionReference get _collection => _firestore.collection('users').doc(_userId).collection('invoices');
 
   @override
   Future<List<InvoiceEntity>> getAll() async {
-    final models = await _dataSource.getAll();
-    return models.map(InvoiceMapper.toEntity).toList();
+    if (_userId.isEmpty) return [];
+    final snapshot = await _collection.get();
+    return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<List<InvoiceEntity>> getByOcrStatus(OcrStatus status) async {
-    final models = await _dataSource.getByOcrStatus(status.name);
-    return models.map(InvoiceMapper.toEntity).toList();
+    if (_userId.isEmpty) return [];
+    final snapshot = await _collection.where('ocrStatus', isEqualTo: status.name).get();
+    return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<InvoiceEntity?> getById(String id) async {
-    final model = await _dataSource.getByUid(id);
-    return model != null ? InvoiceMapper.toEntity(model) : null;
+    if (_userId.isEmpty) return null;
+    final doc = await _collection.doc(id).get();
+    if (doc.exists) {
+      return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+    }
+    return null;
   }
 
   @override
   Future<void> create(InvoiceEntity invoice) async {
-    final model = InvoiceMapper.toIsarModel(invoice);
-    await _dataSource.create(model);
+    if (_userId.isEmpty) return;
+    final model = InvoiceModel(
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      partnerName: invoice.partnerName,
+      partnerTaxCode: invoice.partnerTaxCode,
+      subtotal: invoice.subtotal,
+      vatRate: invoice.vatRate,
+      vatAmount: invoice.vatAmount,
+      totalAmount: invoice.totalAmount,
+      ocrStatus: invoice.ocrStatus,
+      paymentStatus: invoice.paymentStatus,
+      issuedDate: invoice.issuedDate,
+      createdAt: invoice.createdAt,
+      updatedAt: invoice.updatedAt,
+      type: invoice.type,
+      imagePath: invoice.imagePath,
+      ocrConfidence: invoice.ocrConfidence,
+    );
+    await _collection.doc(invoice.id).set(model.toJson());
   }
 
   @override
   Future<void> update(InvoiceEntity invoice) async {
-    final model = InvoiceMapper.toIsarModel(invoice);
-    await _dataSource.update(model);
+    if (_userId.isEmpty) return;
+    final model = InvoiceModel(
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      partnerName: invoice.partnerName,
+      partnerTaxCode: invoice.partnerTaxCode,
+      subtotal: invoice.subtotal,
+      vatRate: invoice.vatRate,
+      vatAmount: invoice.vatAmount,
+      totalAmount: invoice.totalAmount,
+      ocrStatus: invoice.ocrStatus,
+      paymentStatus: invoice.paymentStatus,
+      issuedDate: invoice.issuedDate,
+      createdAt: invoice.createdAt,
+      updatedAt: invoice.updatedAt,
+      type: invoice.type,
+      imagePath: invoice.imagePath,
+      ocrConfidence: invoice.ocrConfidence,
+    );
+    await _collection.doc(invoice.id).update(model.toJson());
   }
 
   @override
   Future<void> delete(String id) async {
-    await _dataSource.delete(id);
+    if (_userId.isEmpty) return;
+    await _collection.doc(id).delete();
   }
 }

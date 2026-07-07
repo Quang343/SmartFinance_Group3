@@ -1,4 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/local/isar_models/isar_user.dart';
+import '../../data/models/user_model.dart';
 
-final currentUserProvider = StateProvider<IsarUser?>((ref) => null);
+final currentUserProvider = StateProvider<UserModel?>((ref) => null);
