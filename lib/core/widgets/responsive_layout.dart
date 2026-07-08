@@ -150,16 +150,11 @@ class _MobileScaffold extends ConsumerWidget {
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.person_rounded,
-                                size: 28,
-                                color: Colors.white,
+                            CircleAvatar(
+                              radius: 26,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              backgroundImage: NetworkImage(
+                                user?.avatarUrl ?? 'https://api.dicebear.com/8.x/adventurer-neutral/png?seed=${user?.id ?? 'SmartFinance'}&backgroundColor=e2e8f0',
                               ),
                             ),
                             const SizedBox(width: 14),

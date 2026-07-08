@@ -18,6 +18,7 @@ class MockCollectionReference extends Mock implements CollectionReference<Map<St
 class MockDocumentReference extends Mock implements DocumentReference<Map<String, dynamic>> {}
 class MockDocumentSnapshot extends Mock implements DocumentSnapshot<Map<String, dynamic>> {}
 
+// Unit Test by HoangDH
 void main() {
   late AuthRepository authRepository;
   late MockFirebaseAuth mockFirebaseAuth;
@@ -357,6 +358,95 @@ void main() {
       });
 
 
+    });
+
+    group('updateUserInfo', () {
+      test('cập nhật thành công thông tin user trên Firestore', () async {
+        // Arrange
+        final mockCollection = MockCollectionReference();
+        final mockDocRef = MockDocumentReference();
+        final updatedUser = UserModel.fromJson(tUserData, tUid).copyWith(fullName: 'New Name', avatarUrl: 'new_url');
+
+        when(() => mockFirebaseFirestore.collection('users')).thenReturn(mockCollection);
+        when(() => mockCollection.doc(tUid)).thenReturn(mockDocRef);
+        when(() => mockDocRef.update(updatedUser.toJson())).thenAnswer((_) async => {});
+
+        // Act
+        await authRepository.updateUserInfo(updatedUser);
+
+        // Assert
+        verify(() => mockFirebaseFirestore.collection('users').doc(tUid).update(updatedUser.toJson())).called(1);
+      });
+
+      test('ném ra Exception khi Firestore cập nhật thất bại', () async {
+        // Arrange
+        final mockCollection = MockCollectionReference();
+        final mockDocRef = MockDocumentReference();
+        final updatedUser = UserModel.fromJson(tUserData, tUid);
+
+        when(() => mockFirebaseFirestore.collection('users')).thenReturn(mockCollection);
+        when(() => mockCollection.doc(tUid)).thenReturn(mockDocRef);
+        when(() => mockDocRef.update(any())).thenThrow(Exception('Firestore error'));
+
+        // Act & Assert
+        expect(() => authRepository.updateUserInfo(updatedUser), throwsA(isA<Exception>()));
+      });
+    });
+
+    group('changePassword', () {
+      test('ném ra Exception khi người dùng chưa đăng nhập', () async {
+        // Arrange
+        when(() => mockFirebaseAuth.currentUser).thenReturn(null);
+
+        // Act & Assert
+        expect(() => authRepository.changePassword('old', 'new'), throwsA(isA<Exception>()));
+      });
+
+      test('đổi mật khẩu thành công khi mật khẩu cũ chính xác', () async {
+        // Arrange
+        final mockUser = MockUser();
+        when(() => mockFirebaseAuth.currentUser).thenReturn(mockUser);
+        when(() => mockUser.email).thenReturn(tEmail);
+        
+        // Mock reauthenticateWithCredential success
+        when(() => mockUser.reauthenticateWithCredential(any())).thenAnswer((_) async => MockUserCredential());
+        // Mock updatePassword success
+        when(() => mockUser.updatePassword('newPassword123')).thenAnswer((_) async => {});
+
+        // Act
+        await authRepository.changePassword('oldPassword123', 'newPassword123');
+
+        // Assert
+        verify(() => mockUser.reauthenticateWithCredential(any())).called(1);
+        verify(() => mockUser.updatePassword('newPassword123')).called(1);
+      });
+
+      test('ném ra Exception khi mật khẩu cũ sai', () async {
+        // Arrange
+        final mockUser = MockUser();
+        when(() => mockFirebaseAuth.currentUser).thenReturn(mockUser);
+        when(() => mockUser.email).thenReturn(tEmail);
+        
+        // Mock reauthenticate throwing wrong-password
+        when(() => mockUser.reauthenticateWithCredential(any())).thenThrow(FirebaseAuthException(code: 'wrong-password'));
+
+        // Act & Assert
+        expect(() => authRepository.changePassword('wrongOld', 'newPass'), throwsA(isA<Exception>()));
+      });
+
+      test('ném ra Exception khi mật khẩu mới quá yếu', () async {
+        // Arrange
+        final mockUser = MockUser();
+        when(() => mockFirebaseAuth.currentUser).thenReturn(mockUser);
+        when(() => mockUser.email).thenReturn(tEmail);
+        
+        when(() => mockUser.reauthenticateWithCredential(any())).thenAnswer((_) async => MockUserCredential());
+        // Mock updatePassword throwing weak-password
+        when(() => mockUser.updatePassword('123')).thenThrow(FirebaseAuthException(code: 'weak-password'));
+
+        // Act & Assert
+        expect(() => authRepository.changePassword('oldPass', '123'), throwsA(isA<Exception>()));
+      });
     });
 
     group('logout', () {

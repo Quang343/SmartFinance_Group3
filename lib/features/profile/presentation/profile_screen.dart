@@ -1,15 +1,67 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../data/repositories/storage_repository.dart';
+import '../../../data/repositories/auth_repository.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+// HoangDH
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _isUploading = false;
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _pickAndUploadAvatar() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 85);
+      if (image == null) return;
+
+      setState(() => _isUploading = true);
+
+      final user = ref.read(currentUserProvider);
+      if (user == null) throw Exception('Người dùng chưa đăng nhập');
+
+      final storageRepo = ref.read(storageRepositoryProvider);
+      
+      String? downloadUrl;
+      if (kIsWeb) {
+        final webFile = await image.readAsBytes();
+        downloadUrl = await storageRepo.uploadAvatar(user.id, webFile: webFile, fileName: image.name);
+      } else {
+        downloadUrl = await storageRepo.uploadAvatar(user.id, file: File(image.path), fileName: image.name);
+      }
+
+      if (downloadUrl != null) {
+        final updatedUser = user.copyWith(avatarUrl: downloadUrl);
+        await ref.read(authRepositoryProvider).updateUserInfo(updatedUser);
+        ref.read(currentUserProvider.notifier).state = updatedUser;
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cập nhật ảnh đại diện thành công'), backgroundColor: Colors.green));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi tải ảnh: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
     final user = ref.watch(currentUserProvider);
     final theme = Theme.of(context);
@@ -30,7 +82,7 @@ class ProfileScreen extends ConsumerWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Green Header (Matching the screenshot style)
+            // Green Header
             Container(
               width: double.infinity,
               height: 155,
@@ -84,7 +136,7 @@ class ProfileScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      // Floating Avatar (Centered at the bottom of header)
+                      // Floating Avatar
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: Transform.translate(
@@ -106,33 +158,16 @@ class ProfileScreen extends ConsumerWidget {
                                 child: CircleAvatar(
                                   radius: 50,
                                   backgroundColor: primaryColor.withOpacity(0.1),
-                                  child: Icon(
-                                    Icons.person_rounded,
-                                    size: 55,
-                                    color: primaryColor,
-                                  ),
+                                  backgroundImage: user?.avatarUrl != null ? NetworkImage(user!.avatarUrl!) : null,
+                                  child: user?.avatarUrl == null 
+                                      ? Icon(Icons.person_rounded, size: 55, color: primaryColor)
+                                      : null,
                                 ),
                               ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: ScaleOnTap(
-                                  onTap: () {},
-                                  child: Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color: primaryColor,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: cardBgColor, width: 2),
-                                    ),
-                                    child: const Icon(
-                                      Icons.edit,
-                                      color: Colors.white,
-                                      size: 14,
-                                    ),
-                                  ),
+                              if (_isUploading)
+                                const Positioned.fill(
+                                  child: CircularProgressIndicator(color: Colors.white),
                                 ),
-                              ),
                             ],
                           ),
                         ),
@@ -144,6 +179,21 @@ class ProfileScreen extends ConsumerWidget {
             ),
 
             const SizedBox(height: 55),
+
+            Center(
+              child: TextButton.icon(
+                onPressed: _pickAndUploadAvatar,
+                icon: const Icon(Icons.photo_camera, size: 18),
+                label: const Text('Đổi ảnh đại diện', style: TextStyle(fontWeight: FontWeight.w600)),
+                style: TextButton.styleFrom(
+                  foregroundColor: primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  backgroundColor: primaryColor.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
 
             // Profile info details
             Text(
@@ -186,7 +236,7 @@ class ProfileScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Permissions Card (Nội dung cũ chuyên nghiệp)
+                  // Permissions Card
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -256,7 +306,9 @@ class ProfileScreen extends ConsumerWidget {
                     iconBgColor: Colors.blue.shade100,
                     iconColor: Colors.blue.shade700,
                     title: 'Chỉnh sửa thông tin',
-                    onTap: () {},
+                    onTap: () {
+                      context.push('/profile/edit');
+                    },
                     isDark: isDark,
                   ),
                   _buildMenuOption(
@@ -264,7 +316,9 @@ class ProfileScreen extends ConsumerWidget {
                     iconBgColor: Colors.purple.shade100,
                     iconColor: Colors.purple.shade700,
                     title: 'Bảo mật tài khoản',
-                    onTap: () {},
+                    onTap: () {
+                      context.push('/profile/change-password');
+                    },
                     isDark: isDark,
                   ),
                   _buildMenuOption(
