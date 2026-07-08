@@ -11,7 +11,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     GoogleSignIn.instance,
   );
 });
-
+// HoangDH
 class AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
@@ -146,6 +146,46 @@ class AuthRepository {
       throw Exception('Đăng nhập Google thất bại: $e');
     }
     return null;
+  }
+  
+  // Cập nhật thông tin User
+  Future<void> updateUserInfo(UserModel updatedUser) async {
+    try {
+      await _firestore.collection('users').doc(updatedUser.id).update(updatedUser.toJson());
+    } catch (e) {
+      print('Update user info error: $e');
+      throw Exception('Cập nhật thông tin thất bại: $e');
+    }
+  }
+
+  // Đổi mật khẩu
+  Future<void> changePassword(String oldPassword, String newPassword) async {
+    try {
+      final user = _firebaseAuth.currentUser;
+      if (user == null || user.email == null) {
+        throw Exception('Người dùng chưa đăng nhập');
+      }
+
+      // 1. Xác thực lại bằng mật khẩu cũ (bắt buộc trước khi đổi MK)
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: oldPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      // 2. Cập nhật mật khẩu mới
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        throw Exception('Mật khẩu hiện tại không đúng');
+      } else if (e.code == 'weak-password') {
+        throw Exception('Mật khẩu mới quá yếu');
+      }
+      throw Exception('Lỗi đổi mật khẩu: ${e.message}');
+    } catch (e) {
+      print('Change password error: $e');
+      throw Exception('Đổi mật khẩu thất bại: $e');
+    }
   }
   
   // Đăng xuất

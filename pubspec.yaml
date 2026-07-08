@@ -55,6 +55,9 @@ dependencies:
   cloud_firestore: ^6.6.0
   firebase_auth: ^6.5.4
   google_sign_in: ^7.2.0
+  firebase_storage: ^13.4.3
+  http: ^1.6.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -83,6 +86,8 @@ flutter:
 
   assets:
     - assets/images/
+    - .env
+    - .env.example
 
 
   # An image asset can refer to one or more resolution-specific "variants", see
