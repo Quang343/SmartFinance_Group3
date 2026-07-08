@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/widgets/finsmart_logo.dart';
+import '../../../core/providers/auth_provider.dart';
+import '../../../data/repositories/auth_repository.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
@@ -17,10 +21,33 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _navigateToNext() async {
-    // Wait for splash timeout
+    // Wait for splash timeout to show off the cool logo
     await Future.delayed(const Duration(milliseconds: 2200));
+    
     if (mounted) {
-      context.go('/onboarding');
+      // Auto-login (Offline persistence support)
+      final firebaseUser = ref.read(firebaseAuthProvider).currentUser;
+      
+      if (firebaseUser != null) {
+        try {
+          // Fetch from Firestore (will use local cache if offline)
+          final userModel = await ref.read(authRepositoryProvider).getUserData(firebaseUser.uid);
+          
+          if (userModel != null && mounted) {
+            // Restore session
+            ref.read(currentUserProvider.notifier).state = userModel;
+            context.go('/dashboard');
+            return;
+          }
+        } catch (e) {
+          print('Lỗi khôi phục phiên đăng nhập: $e');
+        }
+      }
+      
+      // If no valid session, go to onboarding/login
+      if (mounted) {
+        context.go('/onboarding');
+      }
     }
   }
 

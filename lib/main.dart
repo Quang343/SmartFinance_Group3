@@ -5,8 +5,13 @@ import 'storage/firebase_seed_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load variables from .env file
+  await dotenv.load(fileName: ".env");
   
   // Khởi tạo Firebase
   await Firebase.initializeApp(

@@ -1,14 +1,14 @@
-# SmartFinance (Group 3)
+# 💸 SmartFinance (Group 3)
 
-A robust, offline-first Cash Flow Management Application designed specifically for Small and Medium Enterprises (SMEs).
+A robust, cloud-synced Cash Flow Management Application designed specifically for Small and Medium Enterprises (SMEs) to manage expenses, revenues, and invoices in real-time.
 
 ## 🏛 Architecture Overview
 
-This project strictly adheres to **Clean Architecture** principles to ensure scalability, testability, and separation of concerns. The codebase is organized into distinct layers:
+This project adheres to **Clean Architecture** principles and modular design to ensure scalability, testability, and separation of concerns.
 
-- **Presentation Layer (`features/`)**: Contains the UI widgets and state management.
-- **Domain Layer (`domain/`)**: The core of the application. Contains business logic, pure Dart Entities, and Repository interfaces. This layer is entirely independent of any external packages or frameworks (no Isar, no Flutter UI).
-- **Data Layer (`data/`)**: Implements the repository interfaces. Contains Data Sources (local/remote) and Mappers (converting between Domain Entities and Isar Models).
+- **Presentation Layer (`features/`)**: Contains the UI widgets, Riverpod providers, and state management logic.
+- **Domain Layer (`domain/`)**: The core of the application. Contains business logic, pure Dart Entities.
+- **Data Layer (`data/`)**: Implements Repositories and Data Sources (Firebase Firestore, Auth, and ImgBB APIs).
 - **Core Layer (`core/`)**: Shared constants, themes, error handling, and reusable UI components.
 
 ## 🛠 Tech Stack
@@ -16,28 +16,43 @@ This project strictly adheres to **Clean Architecture** principles to ensure sca
 - **Framework**: Flutter (Dart)
 - **State Management**: [Riverpod](https://riverpod.dev/) (`flutter_riverpod`)
 - **Routing**: `go_router`
-- **Local Database**: [Isar Database](https://isar.dev/) (Offline-first, high performance C++/Rust core)
-- **Code Generation**: `build_runner` (for Isar models)
+- **Backend & Database**: [Firebase Cloud Firestore](https://firebase.google.com/docs/firestore) (Realtime Cloud Sync)
+- **Authentication**: Firebase Auth (Email/Password & Google Sign-In)
+- **File Storage**: [ImgBB API](https://api.imgbb.com/) (Cloud storage for avatars and invoices)
+- **Environment Management**: `flutter_dotenv`
 
-## 🚀 Features
+## 🚀 Key Features
 
-- **Offline-First**: All data is securely stored locally using Isar Database. No internet connection is required.
-- **Dashboard**: Real-time aggregation of income, expenses, and net cash flow.
-- **Transaction Management**: Track cash flows with automated categorization.
-- **Invoice Tracking**: Manage and scan invoices.
-- **Reporting**: Generate cash flow summaries and export to PDF.
+- **Real-time Cloud Sync**: All data is securely stored and synchronized in real-time using Firebase Firestore. No more manual refreshing.
+- **Role-Based Access Control (RBAC)**: Distinct permissions for roles like "Quản lý tài chính" (Finance Manager) and "Kế toán chi phí" (Expense Accountant).
+- **Dashboard**: Live aggregation of income, expenses, and net cash flow with beautiful UI and charts.
+- **Transaction & Invoice Management**: Track cash flows, automated categorization, and upload invoices seamlessly to the cloud.
+- **Profile Customization**: Users can update their personal information and upload avatars (integrated with DiceBear for default cute avatars and ImgBB for custom uploads).
+- **Reporting & Export**: Generate cash flow summaries and export to PDF.
 
 ## ⚙️ Getting Started
 
-1. **Prerequisites**: Ensure you have Flutter ^3.0.0 installed.
-2. **Setup on Windows**: If you are developing on Windows, ensure you run VS Code as **Administrator** or enable **Developer Mode** in Windows settings. This is required for Flutter to create Symlinks during the C++ native compilation of the Isar Database.
-3. **Run the App**:
-   ```bash
-   flutter pub get
-   dart run build_runner build --delete-conflicting-outputs
-   flutter run
+### 1. Prerequisites
+- Flutter SDK ^3.0.0 installed.
+- A Firebase project configured (with Firestore and Authentication enabled).
+
+### 2. Environment Setup (API Keys)
+This project uses **ImgBB** for fast, free image hosting. You need to configure the API key before running the app.
+1. Create an account at [api.imgbb.com](https://api.imgbb.com/) and get a free API key.
+2. At the root of the project, create or rename `.env.example` to `.env`.
+3. Open `.env` and replace the placeholder with your actual key:
+   ```env
+   IMGBB_API_KEY=your_actual_api_key_here
    ```
+*(Note: `.env` is intentionally ignored by `.gitignore` to keep your secrets safe. Do not push this file to GitHub).*
 
-## 📦 Seed Data
+### 3. Run the App
+Install dependencies and run the app:
+```bash
+flutter pub get
+flutter run
+```
 
-Upon the first launch, the app will automatically inject sample transaction data (Salary, Coffee, Groceries, Freelance) into the local database to help you test the UI immediately.
+## 📦 Default Seed Data
+
+Upon the first launch, if the database is empty, the app will automatically run `FirebaseSeedService` to inject default Roles (Admin, Accountant, etc.) and a standard account into Firestore to help you test the UI and authorization flow immediately.

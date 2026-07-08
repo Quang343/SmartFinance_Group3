@@ -5,6 +5,7 @@ class UserModel {
   final String company;
   final String taxCode;
   final String role;
+  final String? avatarUrl;
 
   UserModel({
     required this.id,
@@ -13,6 +14,7 @@ class UserModel {
     required this.company,
     required this.taxCode,
     required this.role,
+    this.avatarUrl,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json, String id) {
@@ -23,6 +25,7 @@ class UserModel {
       company: json['company'] ?? '',
       taxCode: json['taxCode'] ?? '',
       role: json['role'] ?? 'Viewer',
+      avatarUrl: json['avatarUrl'],
     );
   }
 
@@ -33,6 +36,7 @@ class UserModel {
       'company': company,
       'taxCode': taxCode,
       'role': role,
+      if (avatarUrl != null) 'avatarUrl': avatarUrl,
     };
   }
 
@@ -43,6 +47,7 @@ class UserModel {
     String? company,
     String? taxCode,
     String? role,
+    String? avatarUrl,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -51,6 +56,7 @@ class UserModel {
       company: company ?? this.company,
       taxCode: taxCode ?? this.taxCode,
       role: role ?? this.role,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 }
