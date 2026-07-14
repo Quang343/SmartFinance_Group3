@@ -543,9 +543,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(20),
-                                child:
-                                    invoice.imagePath == 'mock_path_ocr.png' ||
-                                        !File(invoice.imagePath!).existsSync()
+                                child: invoice.imagePath == 'mock_path_ocr.png'
                                     ? const Padding(
                                         padding: EdgeInsets.all(40.0),
                                         child: Center(
@@ -556,10 +554,33 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                           ),
                                         ),
                                       )
-                                    : Image.file(
-                                        File(invoice.imagePath!),
-                                        fit: BoxFit.contain,
-                                      ),
+                                    : invoice.imagePath!.startsWith('http')
+                                        ? Image.network(
+                                            invoice.imagePath!,
+                                            fit: BoxFit.contain,
+                                            loadingBuilder: (context, child, progress) {
+                                              if (progress == null) return child;
+                                              return const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E)));
+                                            },
+                                            errorBuilder: (context, error, stackTrace) => const Center(
+                                              child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey),
+                                            ),
+                                          )
+                                        : (File(invoice.imagePath!).existsSync()
+                                            ? Image.file(
+                                                File(invoice.imagePath!),
+                                                fit: BoxFit.contain,
+                                              )
+                                            : const Padding(
+                                                padding: EdgeInsets.all(40.0),
+                                                child: Center(
+                                                  child: Icon(
+                                                    Icons.broken_image_rounded,
+                                                    size: 64,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              )),
                               ),
                             ),
                           ],

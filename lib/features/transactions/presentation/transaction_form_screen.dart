@@ -13,6 +13,7 @@ import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/attachment_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
+import '../../../data/repositories/storage_repository.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
@@ -56,6 +57,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   bool _showCategoryError = false;
   final _amountKey = GlobalKey();
   final _categoryKey = GlobalKey();
+
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -161,6 +164,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _saveTransaction() async {
+    if (_isSaving) return;
+
     final isAmountValid = _formKey.currentState!.validate();
     final isCategoryValid = _categoryId.isNotEmpty;
 
@@ -177,14 +182,41 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       return;
     }
 
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
       final repo = ref.read(transactionRepositoryProvider);
+      final storageRepo = ref.read(storageRepositoryProvider);
       
       final String id = widget.transactionId ?? const Uuid().v4();
       final int amount = int.parse(_amountController.text);
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync()) {
+      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
         _selectedImagePath = null;
+      }
+
+      // Upload image if it is a local file
+      String? finalImagePath = _selectedImagePath;
+      if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
+        try {
+          final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
+          if (uploadedUrl != null) {
+            finalImagePath = uploadedUrl;
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Không thể tải ảnh đính kèm lên Cloud: $e'), backgroundColor: Colors.red),
+            );
+          }
+          setState(() {
+            _isSaving = false;
+          });
+          return;
+        }
       }
 
       final transaction = TransactionEntity(
@@ -202,13 +234,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
       if (widget.transactionId == null) {
         await repo.create(transaction);
-        if (_selectedImagePath != null) {
+        if (finalImagePath != null) {
           final attachmentRepo = ref.read(attachmentRepositoryProvider);
           final attachment = AttachmentEntity(
             id: const Uuid().v4(),
             ownerId: id,
             ownerType: 'transaction',
-            filePath: _selectedImagePath!,
+            filePath: finalImagePath,
             createdAt: DateTime.now(),
           );
           await attachmentRepo.create(attachment);
@@ -220,10 +252,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
       } else {
         await repo.update(transaction);
-        if (_selectedImagePath != null) {
+        if (finalImagePath != null) {
           final attachmentRepo = ref.read(attachmentRepositoryProvider);
           final existing = await attachmentRepo.getByOwnerId(id);
-          if (existing.isEmpty || existing.first.filePath != _selectedImagePath) {
+          if (existing.isEmpty || existing.first.filePath != finalImagePath) {
             if (existing.isNotEmpty) {
               await attachmentRepo.delete(existing.first.id);
             }
@@ -231,7 +263,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               id: const Uuid().v4(),
               ownerId: id,
               ownerType: 'transaction',
-              filePath: _selectedImagePath!,
+              filePath: finalImagePath,
               createdAt: DateTime.now(),
             );
             await attachmentRepo.create(attachment);
@@ -278,11 +310,24 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
       if (mounted) {
         if (Navigator.canPop(context)) {
-          Navigator.pop(context, true);
+          context.pop(true);
         } else {
           context.go('/transactions');
         }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Có lỗi xảy ra: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   void _confirmDelete() {
@@ -1085,7 +1130,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ],
                     ),
                   ),
-                  if (_invoiceImagePath != null && File(_invoiceImagePath!).existsSync()) ...[
+                  if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
                     const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
@@ -1097,16 +1142,23 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(_invoiceImagePath!),
-                          fit: BoxFit.contain,
-                        ),
+                        child: _invoiceImagePath!.startsWith('http')
+                            ? Image.network(
+                                _invoiceImagePath!,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                              )
+                            : Image.file(
+                                File(_invoiceImagePath!),
+                                fit: BoxFit.contain,
+                              ),
                       ),
                     ),
                   ],
                 ],
               )
-            else if (_selectedImagePath != null && File(_selectedImagePath!).existsSync())
+            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
               Stack(
                 alignment: Alignment.topRight,
                 children: [
@@ -1120,10 +1172,17 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(_selectedImagePath!),
-                        fit: BoxFit.contain,
-                      ),
+                      child: _selectedImagePath!.startsWith('http')
+                          ? Image.network(
+                              _selectedImagePath!,
+                              fit: BoxFit.contain,
+                              loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                              errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                            )
+                          : Image.file(
+                              File(_selectedImagePath!),
+                              fit: BoxFit.contain,
+                            ),
                     ),
                   ),
                   Padding(
@@ -1211,14 +1270,20 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ],
                 ),
                 child: Center(
-                  child: Text(
-                    widget.transactionId == null ? 'Tạo giao dịch' : 'Cập nhật',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF060E0A),
-                    ),
-                  ),
+                  child: _isSaving 
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : const Text(
+                        'Lưu Giao Dịch',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                 ),
               ),
             ),

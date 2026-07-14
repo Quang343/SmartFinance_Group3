@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../data/repositories/storage_repository.dart';
+import 'dart:io';
 
 class InvoiceScanScreen extends ConsumerStatefulWidget {
   const InvoiceScanScreen({super.key});
@@ -18,6 +20,7 @@ class InvoiceScanScreen extends ConsumerStatefulWidget {
 class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
   OcrStatus _status = OcrStatus.notStarted;
   double _progress = 0.0;
+  bool _isSaving = false;
   
   // Simulated extracted data
   String _partnerName = '';
@@ -126,38 +129,83 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
   }
 
   void _saveExtractedInvoice() async {
-    final repo = ref.read(invoiceRepositoryProvider);
-    final invoice = InvoiceEntity(
-      id: const Uuid().v4(),
-      invoiceNumber: 'OCR-INV-${DateTime.now().year}-${1000 + DateTime.now().millisecond}',
-      partnerName: _partnerName,
-      partnerTaxCode: _partnerTaxCode,
-      subtotal: _subtotal,
-      vatRate: _vatRate,
-      vatAmount: (_subtotal * _vatRate / 100).round(),
-      totalAmount: _totalAmount,
-      ocrStatus: OcrStatus.extracted,
-      paymentStatus: PaymentStatus.unpaid,
-      ocrConfidence: 0.94,
-      type: InvoiceType.incoming,
-      issuedDate: DateTime.now(),
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      imagePath: _selectedImagePath ?? 'mock_path_ocr.png',
-    );
+    if (_isSaving) return;
 
-    await repo.create(invoice);
+    setState(() {
+      _isSaving = true;
+    });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hóa đơn đã được lưu vào hệ thống thành công!'),
-          backgroundColor: Colors.green,
-        ),
+    try {
+      final repo = ref.read(invoiceRepositoryProvider);
+      final storageRepo = ref.read(storageRepositoryProvider);
+      final id = const Uuid().v4();
+
+      String finalImagePath = _selectedImagePath ?? 'mock_path_ocr.png';
+      if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
+        try {
+          final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(_selectedImagePath!));
+          if (uploadedUrl != null) {
+            finalImagePath = uploadedUrl;
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Không thể tải ảnh hóa đơn lên Cloud: $e'), backgroundColor: Colors.red),
+            );
+          }
+          setState(() {
+            _isSaving = false;
+          });
+          return;
+        }
+      }
+
+      final invoice = InvoiceEntity(
+        id: id,
+        invoiceNumber: 'OCR-INV-${DateTime.now().year}-${1000 + DateTime.now().millisecond}',
+        partnerName: _partnerName,
+        partnerTaxCode: _partnerTaxCode,
+        subtotal: _subtotal,
+        vatRate: _vatRate,
+        vatAmount: (_subtotal * _vatRate / 100).round(),
+        totalAmount: _totalAmount,
+        ocrStatus: OcrStatus.extracted,
+        paymentStatus: PaymentStatus.unpaid,
+        ocrConfidence: 0.94,
+        type: InvoiceType.incoming,
+        issuedDate: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        imagePath: finalImagePath,
       );
-      context.go('/invoices/incoming');
+
+      await repo.create(invoice);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Hóa đơn đã được lưu vào hệ thống thành công!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/invoices/incoming');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Có lỗi xảy ra khi lưu: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
+
+
 
   Widget _buildScannerTarget(Widget child, bool isDark) {
     final borderColor = const Color(0xFF00D09E);
@@ -340,19 +388,25 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
                       ),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_circle_outline_rounded, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text(
-                        'Xác nhận & Lưu hóa đơn',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                      if (!_isSaving) const Icon(Icons.check_circle_outline_rounded, color: Colors.white),
+                      const SizedBox(width: 8),
+                      _isSaving
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                            )
+                          : const Text(
+                              'Xác nhận & Lưu hóa đơn',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                     ],
                   ),
                 ),

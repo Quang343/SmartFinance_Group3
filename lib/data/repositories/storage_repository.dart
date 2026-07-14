@@ -25,6 +25,11 @@ class StorageRepository {
     return _uploadToImgBB(file: file, webFile: webFile, fileName: fileName, name: 'invoice_$invoiceId');
   }
 
+  /// Uploads a transaction image to ImgBB and returns the direct image URL
+  Future<String?> uploadTransactionImage(String transactionId, {File? file, Uint8List? webFile, String? fileName}) async {
+    return _uploadToImgBB(file: file, webFile: webFile, fileName: fileName, name: 'transaction_$transactionId');
+  }
+
   Future<String?> _uploadToImgBB({File? file, Uint8List? webFile, String? fileName, String? name}) async {
     try {
       if (_imgbbApiKey.isEmpty || _imgbbApiKey.contains('YOUR_IMGBB_API_KEY')) {
