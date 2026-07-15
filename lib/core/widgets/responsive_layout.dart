@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
 import '../providers/auth_provider.dart';
 import 'scale_on_tap.dart';
+import '../../data/repositories/auth_repository.dart';
 
 class NavigationItem {
   final String path;
@@ -381,38 +382,66 @@ class _DesktopScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final primaryColor = Theme.of(context).colorScheme.primary;
+    final size = MediaQuery.of(context).size;
+    final useCompactNavigation = size.height < 550;
+
     return Scaffold(
       body: Row(
         children: [
-          Column(
-            children: [
-              Expanded(
-                child: NavigationRail(
-                  selectedIndex: _calculateSelectedIndex(context),
-                  onDestinationSelected: (index) => _onItemTapped(index, context),
-                  labelType: NavigationRailLabelType.all,
-                  selectedIconTheme: IconThemeData(color: primaryColor),
-                  selectedLabelTextStyle: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-                  destinations: items
-                      .map((item) => NavigationRailDestination(
-                            icon: Icon(item.icon),
-                            label: Text(item.label),
-                          ))
-                      .toList(),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SizedBox(
+                height: constraints.maxHeight,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: IntrinsicHeight(
+                          child: NavigationRail(
+                            selectedIndex: _calculateSelectedIndex(context),
+                            onDestinationSelected: (index) =>
+                                _onItemTapped(index, context),
+                            labelType: useCompactNavigation
+                                ? NavigationRailLabelType.selected
+                                : NavigationRailLabelType.all,
+                            selectedIconTheme:
+                                IconThemeData(color: primaryColor),
+                            selectedLabelTextStyle: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            destinations: items
+                                .map((item) => NavigationRailDestination(
+                                      icon: Icon(item.icon),
+                                      label: Text(item.label),
+                                    ))
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12.0),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.logout_rounded,
+                          color: Colors.red,
+                        ),
+                        tooltip: 'Đăng xuất',
+                        onPressed: () async {
+                          await ref.read(authRepositoryProvider).logout();
+                          ref.read(currentUserProvider.notifier).state = null;
+                          if (context.mounted) {
+                            context.go('/welcome');
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: IconButton(
-                  icon: const Icon(Icons.logout_rounded, color: Colors.red),
-                  tooltip: 'Đăng xuất',
-                  onPressed: () {
-                    ref.read(currentUserProvider.notifier).state = null;
-                    context.go('/welcome');
-                  },
-                ),
-              ),
-            ],
+              );
+            },
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(child: child),

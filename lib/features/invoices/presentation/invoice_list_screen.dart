@@ -176,8 +176,13 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ),
             ),
           ),
-          body: Column(
-            children: [
+          body: RefreshIndicator(
+            onRefresh: _refreshInvoices,
+            color: primaryColor,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                children: [
               // Period Filter Tabs
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -449,23 +454,20 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ),
 
               // Invoice List Area
-              Expanded(
-                child: list.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey.withOpacity(0.2)),
-                            const SizedBox(height: 16),
-                            const Text('Không có hóa đơn nào', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _refreshInvoices,
-                        color: primaryColor,
-                        child: ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
+              list.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.receipt_long_rounded, size: 80, color: Colors.grey.withOpacity(0.2)),
+                          const SizedBox(height: 16),
+                          const Text('Không có hóa đơn nào', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                           padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
                           itemCount: list.length,
                           itemBuilder: (context, index) {
@@ -602,12 +604,12 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                 ),
                               ),
                             );
-                          },
-                        ),
-                      ),
+                            },
+                          ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
           floatingActionButton: canManage
               ? ScaleOnTap(
                   onTap: () {

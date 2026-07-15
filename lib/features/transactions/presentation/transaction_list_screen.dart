@@ -395,8 +395,27 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final netBalance = totalIncome - totalExpense;
 
-          return Column(
-            children: [
+          return RefreshIndicator(
+            color: primaryColor,
+            onRefresh: () async {
+              _refreshData(showLoading: false);
+            },
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (ScrollNotification scrollInfo) {
+                if (scrollInfo.metrics.pixels ==
+                        scrollInfo.metrics.maxScrollExtent &&
+                    list.length > _displayLimit) {
+                  setState(() {
+                    _displayLimit += 15;
+                  });
+                  return true;
+                }
+                return false;
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
               // Period Filter Tabs
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -963,47 +982,30 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                 ),
 
               // List area
-              Expanded(
-                child: list.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.receipt_long_rounded,
-                              size: 64,
-                              color: isDark ? Colors.white24 : Colors.black12,
+              list.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.receipt_long_rounded,
+                            size: 64,
+                            color: isDark ? Colors.white24 : Colors.black12,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Không tìm thấy giao dịch nào',
+                            style: TextStyle(
+                              color: isDark ? Colors.white38 : Colors.black45,
+                              fontSize: 15,
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Không tìm thấy giao dịch nào',
-                              style: TextStyle(
-                                color: isDark ? Colors.white38 : Colors.black45,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        color: primaryColor,
-                        onRefresh: () async {
-                          _refreshData(showLoading: false);
-                          // Riverpod will rebuild automatically when invalidated
-                        },
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: (ScrollNotification scrollInfo) {
-                            if (scrollInfo.metrics.pixels ==
-                                    scrollInfo.metrics.maxScrollExtent &&
-                                list.length > _displayLimit) {
-                              setState(() {
-                                _displayLimit += 15;
-                              });
-                              return true;
-                            }
-                            return false;
-                          },
-                          child: ListView.builder(
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                             itemCount:
                                 min(_displayLimit, list.length) +
                                 (list.length > _displayLimit ? 1 : 0),
@@ -1361,10 +1363,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               );
                             },
                           ),
-                        ),
-                      ),
+                  ],
+                ),
               ),
-            ],
+            ),
           );
         },
       ),

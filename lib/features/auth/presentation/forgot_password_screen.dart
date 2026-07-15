@@ -37,6 +37,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final size = MediaQuery.of(context).size;
     final primaryColor = theme.colorScheme.primary;
     final isDark = theme.brightness == Brightness.dark;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     // Design-matched colors
     final Color topBgColor = primaryColor;
@@ -108,17 +109,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 children: [
                   // Top Header ("Quên mật khẩu" text)
                   Container(
-                    height: size.height * 0.25,
+                    height: isLandscape ? 70 : size.height * 0.25,
                     width: double.infinity,
-                    alignment: Alignment.center,
+                    alignment: isLandscape ? Alignment.bottomCenter : Alignment.center,
+                    padding: EdgeInsets.only(bottom: isLandscape ? 12 : 0),
                     child: SafeArea(
                       bottom: false,
                       child: Text(
                         'Quên mật khẩu',
-                        style: theme.textTheme.headlineLarge?.copyWith(
+                        style: (isLandscape ? theme.textTheme.titleLarge : theme.textTheme.headlineLarge)?.copyWith(
                           color: textColorDark,
                           fontWeight: FontWeight.w800,
-                          fontSize: 32,
                         ),
                       ),
                     ),

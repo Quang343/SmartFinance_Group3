@@ -283,6 +283,7 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final primaryColor = const Color(0xFF00D09E);
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF060E0A) : Colors.white,
@@ -294,12 +295,12 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
           'Smart OCR Scan',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: isLandscape ? 16 : 20,
             color: isDark ? Colors.white : Colors.black87,
           ),
         ),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white70 : Colors.black87, size: isLandscape ? 16 : 20),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -310,7 +311,7 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
         ),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(isLandscape ? 12.0 : 24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -328,7 +329,7 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
                   borderRadius: BorderRadius.circular(24),
                   child: _buildScannerTarget(
                     Padding(
-                      padding: const EdgeInsets.all(24.0),
+                      padding: EdgeInsets.all(isLandscape ? 12.0 : 24.0),
                       child: _buildMainContent(isDark),
                     ),
                     isDark,
@@ -336,13 +337,13 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: isLandscape ? 12 : 24),
             if (_status == OcrStatus.notStarted)
               ScaleOnTap(
                 onTap: _showImageSourcePicker,
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: isLandscape ? 12 : 16),
                   decoration: BoxDecoration(
                     color: primaryColor,
                     borderRadius: BorderRadius.circular(16),
@@ -376,7 +377,7 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
                 onTap: _saveExtractedInvoice,
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: isLandscape ? 12 : 16),
                   decoration: BoxDecoration(
                     color: Colors.green,
                     borderRadius: BorderRadius.circular(16),
@@ -411,12 +412,12 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: isLandscape ? 8 : 12),
               ScaleOnTap(
                 onTap: () => setState(() => _status = OcrStatus.notStarted),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: isLandscape ? 12 : 16),
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(16),
@@ -446,13 +447,14 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
 
   Widget _buildMainContent(bool isDark) {
     final primaryColor = const Color(0xFF00D09E);
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     switch (_status) {
       case OcrStatus.notStarted:
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isLandscape ? 12 : 24),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF060E0A) : Colors.white,
                 shape: BoxShape.circle,
@@ -463,32 +465,34 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
               ),
               child: Icon(
                 Icons.receipt_long_rounded,
-                size: 64,
+                size: isLandscape ? 36 : 64,
                 color: primaryColor.withOpacity(0.8),
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: isLandscape ? 8 : 24),
             Text(
               'Chưa chọn hóa đơn',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: isLandscape ? 16 : 20,
                 fontWeight: FontWeight.bold,
                 color: isDark ? Colors.white : Colors.black87,
               ),
             ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Tải lên hoặc chụp ảnh hóa đơn đầu vào để trích xuất thông tin tự động.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.black54,
-                  fontSize: 14,
-                  height: 1.4,
+            if (!isLandscape) ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Tải lên hoặc chụp ảnh hóa đơn đầu vào để trích xuất thông tin tự động.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isDark ? Colors.white60 : Colors.black54,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         );
       case OcrStatus.imageSelected:

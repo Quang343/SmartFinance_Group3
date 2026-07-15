@@ -72,6 +72,133 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             itemCount: _onboardingData.length,
             itemBuilder: (context, index) {
               final data = _onboardingData[index];
+              final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+              if (isLandscape) {
+                return Row(
+                  children: [
+                    // Left Column: Title, Buttons, Indicators
+                    Expanded(
+                      flex: 5,
+                      child: Container(
+                        color: topBgColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        child: SafeArea(
+                          right: false,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                data['title']!.replaceAll('\n', ' '),
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  color: textColorLight,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 24,
+                                  height: 1.3,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 20),
+                              ScaleOnTap(
+                                onTap: _onNextPage,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: textColorLight,
+                                    borderRadius: BorderRadius.circular(30),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    data['buttonText']!,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Page Indicators
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(
+                                  _onboardingData.length,
+                                  (dotIndex) => Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _currentPage == dotIndex
+                                          ? textColorLight
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: textColorLight,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Right Column: Image illustration inside the card
+                    Expanded(
+                      flex: 6,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: bottomCardColor,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(40),
+                            bottomLeft: Radius.circular(40),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                        child: SafeArea(
+                          left: false,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: 1.0,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: circleBgColor,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    data['image']!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Icon(
+                                        index == 0
+                                            ? Icons.account_balance_wallet
+                                            : Icons.phonelink_setup,
+                                        size: 60,
+                                        color: primaryColor,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
               return Column(
                 children: [
                   // Top Title Area (approx 40% height)
