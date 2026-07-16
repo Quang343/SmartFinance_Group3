@@ -1028,6 +1028,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                   tx.type == TransactionType.income;
                               final cat = catMap[tx.categoryId];
                               final catName = cat?.name ?? 'Chưa phân loại';
+                              final catColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isDark ? const Color(0xFF00D09E) : primaryColor);
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -1157,13 +1158,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                             vertical: 2,
                                                           ),
                                                       decoration: BoxDecoration(
-                                                        color: isDark
-                                                            ? const Color(
-                                                                0xFF152F23,
-                                                              )
-                                                            : const Color(
-                                                                0xFFEDF2F7,
-                                                              ),
+                                                        color: catColor.withOpacity(0.15),
                                                         borderRadius:
                                                             BorderRadius.circular(
                                                               6,
@@ -1175,11 +1170,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                           fontSize: 10,
                                                           fontWeight:
                                                               FontWeight.w600,
-                                                          color: isDark
-                                                              ? const Color(
-                                                                  0xFF00D09E,
-                                                                )
-                                                              : Colors.black54,
+                                                          color: catColor,
                                                         ),
                                                       ),
                                                     ),

@@ -12,6 +12,7 @@ class TransactionEntity {
   final String? invoiceId;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<String> tags;
 
   const TransactionEntity({
     required this.id,
@@ -24,5 +25,6 @@ class TransactionEntity {
     required this.updatedAt,
     this.note,
     this.invoiceId,
+    this.tags = const [],
   });
 }
