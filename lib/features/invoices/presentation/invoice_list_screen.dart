@@ -4,9 +4,23 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../domain/entities/transaction_entity.dart';
+import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+
+Color _parseColor(String? hexString) {
+  if (hexString == null || hexString.isEmpty) return Colors.grey;
+  try {
+    final buffer = StringBuffer();
+    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+    buffer.write(hexString.replaceFirst('#', ''));
+    return Color(int.parse(buffer.toString(), radix: 16));
+  } catch (e) {
+    return Colors.grey;
+  }
+}
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
   final String type; // 'incoming' or 'outgoing'
@@ -47,6 +61,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
+    final categoriesAsync = ref.watch(allCategoriesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isIncoming = widget.type == 'incoming';
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
@@ -122,7 +137,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         }
 
         final invoices = (snapshot.data?[0] as List<InvoiceEntity>?) ?? [];
-        final transactions = (snapshot.data?[1] as List<TransactionEntity>?) ?? [];
+        final categories = categoriesAsync.value ?? [];
 
         var list = invoices;
          // Filter by invoice type
@@ -134,7 +149,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         // Filter by search query
         if (_searchQuery.isNotEmpty) {
           list = list.where((inv) {
-            final partner = inv.partnerName.toLowerCase();
+            final partner = (inv.type == InvoiceType.incoming ? inv.sellerName : inv.buyerName).toLowerCase();
             final invNum = inv.invoiceNumber.toLowerCase();
             return partner.contains(_searchQuery) || invNum.contains(_searchQuery);
           }).toList();
@@ -523,21 +538,22 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                inv.partnerName,
+                                                'Số HĐ: ${inv.invoiceNumber}',
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: isDark ? Colors.white : const Color(0xFF093021),
-                                                  fontSize: 15,
+                                                  fontSize: 16,
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                'Số HĐ: ${inv.invoiceNumber} • ${dateFormatter.format(inv.issuedDate)}',
+                                                '${inv.type == InvoiceType.incoming ? inv.sellerName : inv.buyerName} • ${dateFormatter.format(inv.issuedDate)}',
                                                 style: TextStyle(
                                                   color: isDark ? Colors.white38 : Colors.black45,
                                                   fontSize: 12,
                                                 ),
                                               ),
+
                                             ],
                                           ),
                                         ),
@@ -563,39 +579,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                                 ),
                                               ),
                                             ],
-                                            const SizedBox(height: 4),
-                                            if (transactions.any((tx) => tx.invoiceId == inv.id))
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF00D09E).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: const Text(
-                                                  'Đã thanh toán',
-                                                  style: TextStyle(
-                                                    color: Color(0xFF00D09E),
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.red.withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                ),
-                                                child: const Text(
-                                                  'Chưa thanh toán',
-                                                  style: TextStyle(
-                                                    color: Colors.red,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
                                           ],
                                         ),
                                       ],
