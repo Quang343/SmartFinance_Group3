@@ -8,6 +8,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../../../data/repositories/storage_repository.dart';
+import '../../../domain/entities/invoice_item_entity.dart';
 import 'dart:io';
 
 class InvoiceScanScreen extends ConsumerStatefulWidget {
@@ -163,20 +164,33 @@ class _InvoiceScanScreenState extends ConsumerState<InvoiceScanScreen> {
       final invoice = InvoiceEntity(
         id: id,
         invoiceNumber: 'OCR-INV-${DateTime.now().year}-${1000 + DateTime.now().millisecond}',
-        partnerName: _partnerName,
-        partnerTaxCode: _partnerTaxCode,
+        sellerName: _partnerName,
+        sellerTaxCode: _partnerTaxCode,
+        buyerName: 'Smart Finance Corp',
+        buyerTaxCode: '222222',
         subtotal: _subtotal,
         vatRate: _vatRate,
         vatAmount: (_subtotal * _vatRate / 100).round(),
         totalAmount: _totalAmount,
         ocrStatus: OcrStatus.extracted,
-        paymentStatus: PaymentStatus.unpaid,
+        paymentStatus: PaymentStatus.paid,
         ocrConfidence: 0.94,
         type: InvoiceType.incoming,
         issuedDate: DateTime.now(),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         imagePath: finalImagePath,
+        items: [
+          InvoiceItemEntity(
+            id: const Uuid().v4(),
+            itemCode: 'VT-01',
+            itemName: 'Dịch vụ Vận tải biển',
+            quantity: 1,
+            unit: 'Chuyến',
+            unitPrice: _subtotal,
+            totalAmount: _subtotal,
+          ),
+        ],
       );
 
       await repo.create(invoice);

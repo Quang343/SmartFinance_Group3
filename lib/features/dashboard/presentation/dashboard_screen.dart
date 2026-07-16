@@ -139,7 +139,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .map((tx) => tx.amount)
         .fold(0, (sum, val) => sum + val);
 
+    final monthlyIncomeSum = allTxs
+        .where(
+          (tx) =>
+              tx.status == TransactionStatus.confirmed &&
+              tx.type == TransactionType.income &&
+              tx.transactionDate.month == now.month &&
+              tx.transactionDate.year == now.year,
+        )
+        .map((tx) => tx.amount)
+        .fold(0, (sum, val) => sum + val);
+
     const double budgetLimit = 20000000;
+    const double revenueKPI = 500000000; // 500 million VND
 
     // Use monthlyExpenseSum for Budget Progress
     final double expensePercentage = (monthlyExpenseSum / budgetLimit).clamp(
@@ -147,6 +159,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       1.0,
     );
     final int expensePercentInt = (expensePercentage * 100).toInt();
+
+    final double incomePercentage = (monthlyIncomeSum / revenueKPI).clamp(
+      0.0,
+      1.0,
+    );
+    final int incomePercentInt = (incomePercentage * 100).toInt();
 
     // Budget Insights
     final double remainingBudget = (budgetLimit - monthlyExpenseSum).toDouble();
@@ -647,19 +665,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 width: 72,
                                 height: 72,
                                 child: CircularProgressIndicator(
-                                  value: expensePercentage,
+                                  value: currentRole == UserRole.revenueAccountant ? incomePercentage : expensePercentage,
                                   strokeWidth: 6,
                                   backgroundColor: isDark
                                       ? Colors.white.withOpacity(0.1)
                                       : const Color(0xFFE8F6F1),
-                                  color: const Color(0xFF00D09E),
+                                  color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFF00D09E),
                                   strokeCap: StrokeCap.round,
                                 ),
                               ),
-                              const Icon(
-                                Icons
-                                    .savings_rounded, // Piggy bank icon for Savings Goal
-                                color: Color(0xFF00D09E),
+                              Icon(
+                                currentRole == UserRole.revenueAccountant
+                                    ? Icons.emoji_events_rounded // KPI icon
+                                    : Icons.savings_rounded, // Piggy bank icon for Savings Goal
+                                color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFF00D09E),
                                 size: 28,
                               ),
                             ],
@@ -667,7 +686,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           const SizedBox(height: 8),
                           Text(
                             currentRole == UserRole.revenueAccountant
-                                ? 'Hạn mức chi tiêu'
+                                ? 'Tiến độ KPI'
                                 : 'Phân tích Ngân sách',
                             style: TextStyle(
                               color: isDark
@@ -709,7 +728,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             const SizedBox(height: 4),
                             Text(
                               currentRole == UserRole.revenueAccountant
-                                  ? currencyFormatter.format(incomeSum)
+                                  ? currencyFormatter.format(monthlyIncomeSum)
                                   : currencyFormatter.format(remainingBudget),
                               style: TextStyle(
                                 color: remainingBudget < 0
@@ -732,9 +751,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                             Text(
                               currentRole == UserRole.revenueAccountant
-                                  ? (highestExpenseAmount > 0
-                                        ? 'Chi $highestExpenseCatName $timeFilterText'
-                                        : 'Tổng chi $timeFilterText')
+                                  ? 'KPI cần đạt mỗi tháng'
                                   : 'Chi trung bình/ngày',
                               style: TextStyle(
                                 color: isDark
@@ -747,10 +764,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             const SizedBox(height: 4),
                             Text(
                               currentRole == UserRole.revenueAccountant
-                                  ? '-${currencyFormatter.format(highestExpenseAmount > 0 ? highestExpenseAmount : expenseSum)}'
+                                  ? currencyFormatter.format(revenueKPI)
                                   : currencyFormatter.format(dailyAverage),
-                              style: const TextStyle(
-                                color: Color(0xFFE11D48),
+                              style: TextStyle(
+                                color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFFE11D48),
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
                               ),
@@ -861,34 +878,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
                     // Custom styling map for categories to make it extremely clean and professional
                     IconData leadingIcon = Icons.category_rounded;
-                    Color iconBgColor = isIncome
-                        ? const Color(0xFFE0F2FE)
-                        : const Color(0xFFFEE2E2);
-                    Color iconColor = isIncome ? Colors.blue : Colors.red;
-
+                    Color iconColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isIncome ? Colors.blue : Colors.red);
+                    Color iconBgColor = iconColor.withOpacity(0.15);
+                    
                     if (catName.contains('Lương')) {
                       leadingIcon = Icons.account_balance_wallet_rounded;
-                      iconBgColor = const Color(0xFFE0F2FE); // light blue
-                      iconColor = const Color(0xFF0284C7);
                     } else if (catName.contains('Mặt bằng') ||
                         catName.contains('Điện nước')) {
                       leadingIcon = Icons.home_work_rounded;
-                      iconBgColor = const Color(0xFFEEF2FF); // indigo
-                      iconColor = const Color(0xFF4F46E5);
                     } else if (catName.contains('bán hàng') ||
                         catName.contains('dịch vụ')) {
                       leadingIcon = Icons.storefront_rounded;
-                      iconBgColor = const Color(0xFFECFDF5); // light green
-                      iconColor = const Color(0xFF059669);
                     } else if (catName.contains('Mua hàng') ||
                         catName.contains('Vận hành')) {
                       leadingIcon = Icons.shopping_bag_rounded;
-                      iconBgColor = const Color(0xFFFFF7ED); // orange
-                      iconColor = const Color(0xFFEA580C);
                     } else if (catName.contains('Marketing')) {
                       leadingIcon = Icons.campaign_rounded;
-                      iconBgColor = const Color(0xFFFAF5FF); // purple
-                      iconColor = const Color(0xFF9333EA);
                     }
 
                     return ScaleOnTap(

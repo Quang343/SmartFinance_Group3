@@ -58,6 +58,7 @@ dependencies:
   firebase_storage: ^13.4.3
   http: ^1.6.0
   flutter_dotenv: ^6.0.1
+  gal: ^2.3.2
 
 dev_dependencies:
   flutter_test:
