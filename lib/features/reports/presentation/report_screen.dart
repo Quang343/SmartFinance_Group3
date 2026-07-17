@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../utils/report_pdf_generator.dart';
 
 class ReportScreen extends ConsumerStatefulWidget {
   const ReportScreen({super.key});
@@ -36,6 +39,22 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       case 'all':
       default:
         return true;
+    }
+  }
+
+  String _periodLabel() {
+    switch (_selectedPeriod) {
+      case 'today':
+        return 'Hôm nay';
+      case 'month':
+        return 'Tháng này';
+      case 'year':
+        return 'Năm nay';
+      case 'custom':
+        return 'Tùy chỉnh';
+      case 'all':
+      default:
+        return 'Tất cả';
     }
   }
 
@@ -594,13 +613,30 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                             Divider(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
                             const SizedBox(height: 12),
                             ScaleOnTap(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Đang tạo báo cáo PDF tổng hợp...'),
-                                    backgroundColor: Color(0xFF00D09E),
-                                  ),
-                                );
+                              onTap: () async {
+                                try {
+                                  final doc = await ReportPdfGenerator.buildReportPdf(
+                                    totalIncome: totalIncome,
+                                    totalExpense: totalExpense,
+                                    netBalance: netBalance,
+                                    categories: displayCategories,
+                                    periodLabel: _periodLabel(),
+                                  );
+                                  final bytes = await doc.save();
+                                  await Printing.sharePdf(
+                                    bytes: bytes,
+                                    filename: 'BaoCaoTaiChinh_$_selectedPeriod.pdf',
+                                  );
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Xuất PDF thất bại: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                }
                               },
                               child: Container(
                                 width: double.infinity,

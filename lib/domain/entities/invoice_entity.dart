@@ -39,6 +39,8 @@ class InvoiceEntity {
   final double? ocrConfidence;
   final PaymentStatus paymentStatus;
   final DateTime issuedDate;
+  final String createdByUid;
+  final String company;
   final DateTime createdAt;
   final DateTime updatedAt;
   final InvoiceType type;
@@ -67,6 +69,8 @@ class InvoiceEntity {
     required this.ocrStatus,
     required this.paymentStatus,
     required this.issuedDate,
+    this.createdByUid = '',
+    this.company = '',
     required this.createdAt,
     required this.updatedAt,
     required this.type,

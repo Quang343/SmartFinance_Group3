@@ -91,6 +91,12 @@ flutter:
     - .env
     - .env.example
 
+  fonts:
+    - family: RobotoPdf
+      fonts:
+        - asset: fonts/Roboto-Regular.ttf
+        - asset: fonts/Roboto-Bold.ttf
+          weight: 700
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

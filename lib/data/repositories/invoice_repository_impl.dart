@@ -3,33 +3,49 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/invoice_entity.dart';
 import '../../domain/repositories/invoice_repository.dart';
 import '../models/invoice_model.dart';
+import '../models/user_model.dart';
 
 class InvoiceRepositoryImpl implements InvoiceRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final UserModel? _currentUser;
 
-  InvoiceRepositoryImpl(this._firestore, this._auth);
+  InvoiceRepositoryImpl(this._firestore, this._auth, this._currentUser);
 
-  String get _userId => _auth.currentUser?.uid ?? '';
-  CollectionReference get _collection => _firestore.collection('users').doc(_userId).collection('invoices');
+  String get _uid => _currentUser?.id ?? _auth.currentUser?.uid ?? '';
+  String get _company => _currentUser?.company ?? '';
+  String get _role => _currentUser?.role ?? '';
+  CollectionReference get _collection => _firestore.collection('invoices');
 
   @override
   Future<List<InvoiceEntity>> getAll() async {
-    if (_userId.isEmpty) return [];
-    final snapshot = await _collection.get();
+    if (_uid.isEmpty) return [];
+    Query query = _collection;
+    if (_role == 'financeManager') {
+      query = query.where('company', isEqualTo: _company);
+    } else {
+      query = query.where('createdByUid', isEqualTo: _uid);
+    }
+    final snapshot = await query.get();
     return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<List<InvoiceEntity>> getByOcrStatus(OcrStatus status) async {
-    if (_userId.isEmpty) return [];
-    final snapshot = await _collection.where('ocrStatus', isEqualTo: status.name).get();
+    if (_uid.isEmpty) return [];
+    Query query = _collection.where('ocrStatus', isEqualTo: status.name);
+    if (_role == 'financeManager') {
+      query = query.where('company', isEqualTo: _company);
+    } else {
+      query = query.where('createdByUid', isEqualTo: _uid);
+    }
+    final snapshot = await query.get();
     return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<InvoiceEntity?> getById(String id) async {
-    if (_userId.isEmpty) return null;
+    if (_uid.isEmpty) return null;
     final doc = await _collection.doc(id).get();
     if (doc.exists) {
       return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
@@ -39,7 +55,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
 
   @override
   Future<void> create(InvoiceEntity invoice) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     final model = InvoiceModel(
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
@@ -64,6 +80,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       ocrStatus: invoice.ocrStatus,
       paymentStatus: invoice.paymentStatus,
       issuedDate: invoice.issuedDate,
+      createdByUid: _uid,
+      company: _company,
       createdAt: invoice.createdAt,
       updatedAt: invoice.updatedAt,
       type: invoice.type,
@@ -75,7 +93,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
 
   @override
   Future<void> update(InvoiceEntity invoice) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     final model = InvoiceModel(
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
@@ -100,6 +118,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       ocrStatus: invoice.ocrStatus,
       paymentStatus: invoice.paymentStatus,
       issuedDate: invoice.issuedDate,
+      createdByUid: invoice.createdByUid.isNotEmpty ? invoice.createdByUid : _uid,
+      company: invoice.company.isNotEmpty ? invoice.company : _company,
       createdAt: invoice.createdAt,
       updatedAt: invoice.updatedAt,
       type: invoice.type,
@@ -111,7 +131,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
 
   @override
   Future<void> delete(String id) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     await _collection.doc(id).delete();
   }
 }

@@ -316,6 +316,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             updatedAt: invoice.updatedAt,
             type: invoice.type,
             imagePath: invoice.imagePath,
+            createdByUid: invoice.createdByUid,
+            company: invoice.company,
             ocrConfidence: invoice.ocrConfidence,
           );
           await invoiceRepo.update(updatedInvoice);
