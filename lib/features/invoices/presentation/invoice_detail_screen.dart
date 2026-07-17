@@ -7,6 +7,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
@@ -753,13 +754,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                     label: 'Mở ngay',
                     textColor: Colors.white,
                     onPressed: () {
-                      if (Platform.isWindows) {
-                        Process.run('explorer.exe', [file.path]);
-                      } else if (Platform.isMacOS) {
-                        Process.run('open', [file.path]);
-                      } else if (Platform.isLinux) {
-                        Process.run('xdg-open', [file.path]);
-                      }
+                      OpenFilex.open(file.path);
                     },
                   ),
                 ),

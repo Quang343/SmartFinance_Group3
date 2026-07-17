@@ -10,6 +10,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 
 class InvoicePreviewScreen extends ConsumerWidget {
   final String invoiceId;
@@ -740,9 +742,15 @@ class InvoicePreviewScreen extends ConsumerWidget {
   Future<void> _shareInvoice(BuildContext context, InvoiceEntity invoice) async {
     try {
       final pdf = await _generatePdfDocument(invoice);
-      await Printing.sharePdf(
-        bytes: await pdf.save(),
-        filename: 'HoaDon_${invoice.invoiceNumber}.pdf',
+      final bytes = await pdf.save();
+      
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/HoaDon_${invoice.invoiceNumber}.pdf');
+      await file.writeAsBytes(bytes);
+      
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Hóa đơn ${invoice.invoiceNumber} từ Smart Finance',
       );
     } catch (e) {
       if (context.mounted) {
@@ -779,13 +787,7 @@ class InvoicePreviewScreen extends ConsumerWidget {
                 label: 'Mở ngay',
                 textColor: Colors.white,
                 onPressed: () {
-                  if (Platform.isWindows) {
-                    Process.run('explorer.exe', [file.path]);
-                  } else if (Platform.isMacOS) {
-                    Process.run('open', [file.path]);
-                  } else if (Platform.isLinux) {
-                    Process.run('xdg-open', [file.path]);
-                  }
+                  OpenFilex.open(file.path);
                 },
               ),
             ),
