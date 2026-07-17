@@ -1,4 +1,6 @@
-class InvoiceItemEntity {
+import 'package:equatable/equatable.dart';
+
+class InvoiceItemEntity extends Equatable {
   final String id;
   final String itemCode;
   final String itemName;
@@ -16,4 +18,35 @@ class InvoiceItemEntity {
     required this.unitPrice,
     required this.totalAmount,
   });
+
+  InvoiceItemEntity copyWith({
+    String? id,
+    String? itemCode,
+    String? itemName,
+    String? unit,
+    double? quantity,
+    int? unitPrice,
+    int? totalAmount,
+  }) {
+    return InvoiceItemEntity(
+      id: id ?? this.id,
+      itemCode: itemCode ?? this.itemCode,
+      itemName: itemName ?? this.itemName,
+      unit: unit ?? this.unit,
+      quantity: quantity ?? this.quantity,
+      unitPrice: unitPrice ?? this.unitPrice,
+      totalAmount: totalAmount ?? this.totalAmount,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        id,
+        itemCode,
+        itemName,
+        unit,
+        quantity,
+        unitPrice,
+        totalAmount,
+      ];
 }

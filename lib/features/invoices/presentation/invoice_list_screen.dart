@@ -597,7 +597,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ? ScaleOnTap(
                   onTap: () {
                     if (isIncoming) {
-                      context.go('/invoices/scan');
+                      context.go('/invoices/capture');
                     } else {
                       context.go('/invoices/outgoing/new');
                     }
