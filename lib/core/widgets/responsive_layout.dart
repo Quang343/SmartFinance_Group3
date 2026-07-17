@@ -41,7 +41,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/transactions', label: 'Chi phí', icon: Icons.trending_down),
           NavigationItem(path: '/categories', label: 'Danh mục chi', icon: Icons.category),
           NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
-          NavigationItem(path: '/invoices/scan', label: 'Quét hóa đơn', icon: Icons.qr_code_scanner),
+          NavigationItem(path: '/invoices/capture', label: 'Quét hóa đơn', icon: Icons.qr_code_scanner),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),

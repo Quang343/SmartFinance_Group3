@@ -7,6 +7,7 @@ class RouteNames {
   static const String categories = 'categories';
   static const String incomingInvoices = 'incomingInvoices';
   static const String outgoingInvoices = 'outgoingInvoices';
+  static const String invoiceCapture = 'invoiceCapture';
   static const String invoiceScan = 'invoiceScan';
   static const String invoiceDetail = 'invoiceDetail';
   static const String invoiceCreate = 'invoiceCreate';

@@ -12,8 +12,10 @@ import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/transactions/presentation/transaction_list_screen.dart';
 import '../features/transactions/presentation/transaction_form_screen.dart';
+import 'package:smart_finance/features/invoices/presentation/screens/invoice_capture_screen.dart';
+import 'package:smart_finance/features/invoices/presentation/ocr_verify_screen.dart';
+import 'dart:io';
 import '../features/invoices/presentation/invoice_list_screen.dart';
-import '../features/invoices/presentation/invoice_scan_screen.dart';
 import '../features/invoices/presentation/invoice_detail_screen.dart';
 import '../features/invoices/presentation/invoice_create_screen.dart';
 import '../features/invoices/presentation/invoice_preview_screen.dart';
@@ -26,6 +28,7 @@ import '../features/profile/presentation/edit_profile_screen.dart';
 import '../features/profile/presentation/change_password_screen.dart';
 import '../features/notifications/presentation/notification_screen.dart';
 import '../core/widgets/responsive_layout.dart';
+import '../domain/entities/invoice_entity.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -111,9 +114,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const InvoiceListScreen(type: 'incoming'),
           ),
           GoRoute(
+            path: '/invoices/capture',
+            name: RouteNames.invoiceCapture,
+            builder: (context, state) => const InvoiceCaptureScreen(),
+          ),
+          GoRoute(
             path: '/invoices/scan',
             name: RouteNames.invoiceScan,
-            builder: (context, state) => const InvoiceScanScreen(),
+            builder: (context, state) {
+              final file = state.extra as File?;
+              return OcrVerifyScreen(file: file);
+            },
           ),
           GoRoute(
             path: '/invoices/incoming/:id',
@@ -130,7 +141,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/invoices/outgoing/new',
             name: RouteNames.invoiceCreate,
-            builder: (context, state) => const InvoiceCreateScreen(),
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return InvoiceCreateScreen(
+                invoiceType: extra?['invoiceType'] as InvoiceType? ?? InvoiceType.outgoing,
+                scannedImagePath: extra?['imagePath'] as String?,
+                scannedSellerName: extra?['sellerName'] as String?,
+                scannedTaxCode: extra?['taxCode'] as String?,
+                scannedSubtotal: extra?['subtotal'] as int?,
+                scannedVatRate: extra?['vatRate'] as int?,
+                scannedTotalAmount: extra?['totalAmount'] as int?,
+              );
+            },
           ),
           GoRoute(
             path: '/invoices/outgoing/preview/:id',

@@ -1117,46 +1117,46 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             
-            // Hide attachment upload if coming from an invoice and is income, as it's already linked
-            if (_invoiceId != null && _type == TransactionType.income)
+            // Hide attachment upload if coming from an invoice, as it's already linked
+            if (_invoiceId != null)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFF00D09E).withOpacity(0.3),
+                  Text('Đính kèm', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF093021))),
+                  const SizedBox(height: 8),
+                  
+                  if (_type == TransactionType.income) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF00D09E).withValues(alpha: 0.3)),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF00D09E)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Giao dịch được tạo từ Hóa đơn. Bạn có thể xem và tải bản PDF gốc.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark ? Colors.white70 : const Color(0xFF093021),
-                              fontWeight: FontWeight.w500,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF00D09E)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Giao dịch được tạo từ Hóa đơn. Bạn có thể xem và tải bản PDF gốc.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDark ? Colors.white70 : const Color(0xFF093021),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ScaleOnTap(
-                    onTap: () {
-                      context.pushNamed(
-                        RouteNames.invoicePreview,
-                        pathParameters: {'id': _invoiceId!},
-                      );
-                    },
+                    const SizedBox(height: 16),
+                    ScaleOnTap(
+                      onTap: () {
+                        context.pushNamed(
+                          RouteNames.invoicePreview,
+                          pathParameters: {'id': _invoiceId!},
+                        );
+                      },
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1182,8 +1182,57 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         ),
                       ),
                     ),
+                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF00D09E).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.link_rounded, color: Color(0xFF00D09E)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDark ? Colors.white70 : const Color(0xFF093021),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: inputFillColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: inputBorderColor, width: 1.5),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _invoiceImagePath!.startsWith('http')
+                            ? Image.network(
+                                _invoiceImagePath!,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                              )
+                            : Image.file(
+                                File(_invoiceImagePath!),
+                                fit: BoxFit.contain,
+                              ),
+                      ),
+                    ),
                   ],
-                )
+                ],
+              )
             else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
               Stack(
                 alignment: Alignment.topRight,
