@@ -1,10 +1,12 @@
 class AttachmentEntity {
   final String id;
   final String ownerId;
-  final String ownerType; // 'transaction' or 'invoice'
+  final String ownerType;
   final String filePath;
   final String? fileName;
   final String? mimeType;
+  final String createdByUid;
+  final String company;
   final DateTime createdAt;
 
   const AttachmentEntity({
@@ -15,5 +17,7 @@ class AttachmentEntity {
     required this.createdAt,
     this.fileName,
     this.mimeType,
+    this.createdByUid = '',
+    this.company = '',
   });
 }

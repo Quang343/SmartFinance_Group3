@@ -1,12 +1,14 @@
 class CategoryEntity {
   final String id;
   final String name;
-  final String type; // 'income' or 'expense'
+  final String type;
   final String? iconCode;
   final String? colorHex;
   final bool isDefault;
   final bool isActive;
   final int orderIndex;
+  final String createdByUid;
+  final String company;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -19,6 +21,8 @@ class CategoryEntity {
     required this.isDefault,
     required this.isActive,
     this.orderIndex = 0,
+    this.createdByUid = '',
+    this.company = '',
     required this.createdAt,
     required this.updatedAt,
   });
