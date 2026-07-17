@@ -9,6 +9,8 @@ class AttachmentModel extends AttachmentEntity {
     required super.createdAt,
     super.fileName,
     super.mimeType,
+    super.createdByUid,
+    super.company,
   });
 
   factory AttachmentModel.fromJson(Map<String, dynamic> json) {
@@ -18,6 +20,8 @@ class AttachmentModel extends AttachmentEntity {
       ownerType: json['ownerType'] as String? ?? '',
       filePath: json['filePath'] as String? ?? '',
       fileName: json['fileName'] as String?,
+      createdByUid: json['createdByUid'] as String? ?? '',
+      company: json['company'] as String? ?? '',
       mimeType: json['mimeType'] as String?,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
@@ -33,6 +37,8 @@ class AttachmentModel extends AttachmentEntity {
       'filePath': filePath,
       'fileName': fileName,
       'mimeType': mimeType,
+      'createdByUid': createdByUid,
+      'company': company,
       'createdAt': createdAt.toIso8601String(),
     };
   }

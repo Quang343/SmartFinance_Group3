@@ -6,6 +6,8 @@ class UserModel {
   final String taxCode;
   final String role;
   final String? avatarUrl;
+  final int budgetLimit;
+  final int revenueKpi;
 
   UserModel({
     required this.id,
@@ -15,6 +17,8 @@ class UserModel {
     required this.taxCode,
     required this.role,
     this.avatarUrl,
+    this.budgetLimit = 20000000,
+    this.revenueKpi = 500000000,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json, String id) {
@@ -26,6 +30,8 @@ class UserModel {
       taxCode: json['taxCode'] ?? '',
       role: json['role'] ?? 'Viewer',
       avatarUrl: json['avatarUrl'],
+      budgetLimit: (json['budgetLimit'] as num?)?.toInt() ?? 20000000,
+      revenueKpi: (json['revenueKpi'] as num?)?.toInt() ?? 500000000,
     );
   }
 
@@ -36,6 +42,8 @@ class UserModel {
       'company': company,
       'taxCode': taxCode,
       'role': role,
+      'budgetLimit': budgetLimit,
+      'revenueKpi': revenueKpi,
       if (avatarUrl != null) 'avatarUrl': avatarUrl,
     };
   }
@@ -48,6 +56,8 @@ class UserModel {
     String? taxCode,
     String? role,
     String? avatarUrl,
+    int? budgetLimit,
+    int? revenueKpi,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -57,6 +67,8 @@ class UserModel {
       taxCode: taxCode ?? this.taxCode,
       role: role ?? this.role,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      budgetLimit: budgetLimit ?? this.budgetLimit,
+      revenueKpi: revenueKpi ?? this.revenueKpi,
     );
   }
 }

@@ -11,8 +11,10 @@ class FakeInvoiceRepository extends Mock implements InvoiceRepository {}
 InvoiceEntity _inv(String id) => InvoiceEntity(
       id: id,
       invoiceNumber: 'INV-$id',
-      partnerName: 'Đối tác',
-      partnerTaxCode: '000',
+      sellerName: 'Đối tác',
+      sellerTaxCode: '000',
+      buyerName: 'Người mua',
+      buyerTaxCode: '001',
       subtotal: 100,
       vatRate: 10,
       vatAmount: 10,

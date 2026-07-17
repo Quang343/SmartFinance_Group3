@@ -11,30 +11,58 @@ import '../../domain/repositories/category_repository.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../../domain/repositories/invoice_repository.dart';
 import '../../domain/repositories/attachment_repository.dart';
+import 'auth_provider.dart';
 
-// Repositories
 final categoryRepositoryProvider = Provider<CategoryRepository>((ref) {
-  return CategoryRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance);
+  final user = ref.watch(currentUserProvider);
+  return CategoryRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance, user);
 });
 
 final categoryStreamProvider = StreamProvider<List<CategoryEntity>>((ref) {
   final auth = FirebaseAuth.instance;
-  final userId = auth.currentUser?.uid ?? '';
-  if (userId.isEmpty) return Stream.value([]);
-  return FirebaseFirestore.instance.collection('users').doc(userId).collection('categories').snapshots().map(
+  final uid = auth.currentUser?.uid ?? '';
+  if (uid.isEmpty) return Stream.value([]);
+  final user = ref.watch(currentUserProvider);
+  final company = user?.company ?? '';
+  if (company.isEmpty) return Stream.value([]);
+  return FirebaseFirestore.instance.collection('categories').where('company', isEqualTo: company).snapshots().map(
     (snapshot) => snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data())).toList()
   );
 });
 
 final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
-  return TransactionRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance);
+  final user = ref.watch(currentUserProvider);
+  return TransactionRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance, user);
 });
 
 final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
-  return InvoiceRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance);
+  final user = ref.watch(currentUserProvider);
+  return InvoiceRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance, user);
 });
 
 final attachmentRepositoryProvider = Provider<AttachmentRepository>((ref) {
-  return AttachmentRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance);
+  final user = ref.watch(currentUserProvider);
+  return AttachmentRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance, user);
 });
 
+final companyBudgetLimitProvider = FutureProvider.autoDispose<int>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  final company = user?.company;
+  if (company == null || company.isEmpty) return 20000000;
+  final doc = await FirebaseFirestore.instance.collection('companySettings').doc(company).get();
+  if (doc.exists && doc.data() != null) {
+    return (doc.data()!['budgetLimit'] as num?)?.toInt() ?? 20000000;
+  }
+  return 20000000;
+});
+
+final companyRevenueKpiProvider = FutureProvider.autoDispose<int>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  final company = user?.company;
+  if (company == null || company.isEmpty) return 500000000;
+  final doc = await FirebaseFirestore.instance.collection('companySettings').doc(company).get();
+  if (doc.exists && doc.data() != null) {
+    return (doc.data()!['revenueKpi'] as num?)?.toInt() ?? 500000000;
+  }
+  return 500000000;
+});
