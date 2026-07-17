@@ -7,6 +7,8 @@ import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/domain/entities/invoice_item_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
+import 'package:smart_finance/data/repositories/storage_repository.dart';
+import 'dart:io';
 
 class _ItemFormState {
   final TextEditingController nameController;
@@ -31,7 +33,24 @@ class _ItemFormState {
 }
 
 class InvoiceCreateScreen extends ConsumerStatefulWidget {
-  const InvoiceCreateScreen({super.key});
+  final InvoiceType invoiceType;
+  final String? scannedImagePath;
+  final String? scannedSellerName;
+  final String? scannedTaxCode;
+  final int? scannedSubtotal;
+  final int? scannedVatRate;
+  final int? scannedTotalAmount;
+
+  const InvoiceCreateScreen({
+    super.key,
+    this.invoiceType = InvoiceType.outgoing,
+    this.scannedImagePath,
+    this.scannedSellerName,
+    this.scannedTaxCode,
+    this.scannedSubtotal,
+    this.scannedVatRate,
+    this.scannedTotalAmount,
+  });
 
   @override
   ConsumerState<InvoiceCreateScreen> createState() => _InvoiceCreateScreenState();
@@ -46,12 +65,12 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   final _bankNameController = TextEditingController();
   final _bankAccountController = TextEditingController();
   
-  final _sellerNameController = TextEditingController(text: 'Smart Finance Corp');
-  final _sellerTaxCodeController = TextEditingController(text: '222222');
-  final _sellerAddressController = TextEditingController(text: '123 Đường Tương Lai, Quận 1, TP. HCM');
-  final _sellerPhoneController = TextEditingController(text: '0909123456');
-  final _sellerBankNameController = TextEditingController(text: 'Ngân hàng Techcombank');
-  final _sellerBankAccountController = TextEditingController(text: '19031234567890');
+  final _sellerNameController = TextEditingController();
+  final _sellerTaxCodeController = TextEditingController();
+  final _sellerAddressController = TextEditingController();
+  final _sellerPhoneController = TextEditingController();
+  final _sellerBankNameController = TextEditingController();
+  final _sellerBankAccountController = TextEditingController();
 
   String _paymentMethod = 'TM';
   
@@ -65,9 +84,29 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   int get _vatAmount => (_subtotal * _vatRate / 100).round();
   int get _totalAmount => _subtotal + _vatAmount;
 
+  bool _isSaving = false;
+
   @override
   void initState() {
     super.initState();
+    if (widget.invoiceType == InvoiceType.outgoing) {
+      _sellerNameController.text = 'Smart Finance Corp';
+      _sellerTaxCodeController.text = '222222';
+      _sellerAddressController.text = '123 Đường Tương Lai, Quận 1, TP. HCM';
+      _sellerPhoneController.text = '0909123456';
+      _sellerBankNameController.text = 'Ngân hàng Techcombank';
+      _sellerBankAccountController.text = '19031234567890';
+    } else {
+      _partnerNameController.text = 'Smart Finance Corp';
+      _partnerTaxCodeController.text = '222222';
+      _partnerAddressController.text = '123 Đường Tương Lai, Quận 1, TP. HCM';
+      
+      _sellerNameController.text = widget.scannedSellerName ?? '';
+      _sellerTaxCodeController.text = widget.scannedTaxCode ?? '';
+      if (widget.scannedVatRate != null) {
+        _vatRateController.text = widget.scannedVatRate.toString();
+      }
+    }
   }
 
   @override
@@ -85,6 +124,8 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   }
 
   void _saveInvoice() async {
+    if (_isSaving) return;
+    
     if (_formKey.currentState!.validate()) {
       if (_items.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -93,65 +134,102 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         return;
       }
 
-      final repo = ref.read(invoiceRepositoryProvider);
+      setState(() {
+        _isSaving = true;
+      });
+
+      try {
+        final repo = ref.read(invoiceRepositoryProvider);
+        final storageRepo = ref.read(storageRepositoryProvider);
+        final id = const Uuid().v4();
+        
+        String? finalImagePath;
+        
+        if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) {
+          if (!widget.scannedImagePath!.startsWith('http')) {
+             final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
+             if (uploadedUrl != null) {
+               finalImagePath = uploadedUrl;
+             }
+          } else {
+             finalImagePath = widget.scannedImagePath;
+          }
+        }
       
-      final invoiceItems = _items.map((item) {
-        final itemId = const Uuid().v4();
-        return InvoiceItemEntity(
-          id: itemId,
-          itemCode: itemId.substring(0, 8).toUpperCase(),
-          itemName: item.nameController.text,
-          unit: item.unitController.text,
-          quantity: double.tryParse(item.quantityController.text) ?? 0.0,
-          unitPrice: int.tryParse(item.priceController.text) ?? 0,
-          totalAmount: item.amount,
+        final invoiceItems = _items.map((item) {
+          final itemId = const Uuid().v4();
+          return InvoiceItemEntity(
+            id: itemId,
+            itemCode: itemId.substring(0, 8).toUpperCase(),
+            itemName: item.nameController.text,
+            unit: item.unitController.text,
+            quantity: double.tryParse(item.quantityController.text) ?? 0.0,
+            unitPrice: int.tryParse(item.priceController.text) ?? 0,
+            totalAmount: item.amount,
+          );
+        }).toList();
+
+        final newInvoice = InvoiceEntity(
+          id: const Uuid().v4(),
+          invoiceNumber: 'INV-${DateTime.now().year}-${1000 + DateTime.now().millisecond}',
+          sellerName: _sellerNameController.text,
+          sellerTaxCode: _sellerTaxCodeController.text,
+          sellerAddress: _sellerAddressController.text,
+          sellerPhone: _sellerPhoneController.text,
+          sellerBankName: _sellerBankNameController.text.isNotEmpty ? _sellerBankNameController.text : null,
+          sellerBankAccount: _sellerBankAccountController.text.isNotEmpty ? _sellerBankAccountController.text : null,
+          buyerContactName: _partnerContactNameController.text.isNotEmpty ? _partnerContactNameController.text : null,
+          buyerName: _partnerNameController.text,
+          buyerTaxCode: _partnerTaxCodeController.text,
+          buyerAddress: _partnerAddressController.text.isNotEmpty ? _partnerAddressController.text : null,
+          buyerBankName: _bankNameController.text.isNotEmpty ? _bankNameController.text : null,
+          buyerBankAccount: _bankAccountController.text.isNotEmpty ? _bankAccountController.text : null,
+          paymentMethod: _paymentMethod,
+          items: invoiceItems,
+          subtotal: _subtotal,
+          vatRate: _vatRate,
+          vatAmount: _vatAmount,
+          totalAmount: _totalAmount,
+          ocrStatus: OcrStatus.extracted,
+          paymentStatus: PaymentStatus.unpaid,
+          ocrConfidence: 1.0,
+          type: widget.invoiceType,
+          issuedDate: DateTime.now(),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          imagePath: finalImagePath,
         );
-      }).toList();
 
-      final newInvoice = InvoiceEntity(
-        id: const Uuid().v4(),
-        invoiceNumber: 'INV-${DateTime.now().year}-${1000 + DateTime.now().millisecond}',
-        sellerName: _sellerNameController.text,
-        sellerTaxCode: _sellerTaxCodeController.text,
-        sellerAddress: _sellerAddressController.text,
-        sellerPhone: _sellerPhoneController.text,
-        sellerBankName: _sellerBankNameController.text.isNotEmpty ? _sellerBankNameController.text : null,
-        sellerBankAccount: _sellerBankAccountController.text.isNotEmpty ? _sellerBankAccountController.text : null,
-        buyerContactName: _partnerContactNameController.text.isNotEmpty ? _partnerContactNameController.text : null,
-        buyerName: _partnerNameController.text,
-        buyerTaxCode: _partnerTaxCodeController.text,
-        buyerAddress: _partnerAddressController.text.isNotEmpty ? _partnerAddressController.text : null,
-        buyerBankName: _bankNameController.text.isNotEmpty ? _bankNameController.text : null,
-        buyerBankAccount: _bankAccountController.text.isNotEmpty ? _bankAccountController.text : null,
-        paymentMethod: _paymentMethod,
-        items: invoiceItems,
-        subtotal: _subtotal,
-        vatRate: _vatRate,
-        vatAmount: _vatAmount,
-        totalAmount: _totalAmount,
-        ocrStatus: OcrStatus.extracted,
-        paymentStatus: PaymentStatus.unpaid,
-        ocrConfidence: 1.0,
-        type: InvoiceType.outgoing,
-        issuedDate: DateTime.now(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+        await repo.create(newInvoice);
 
-      await repo.create(newInvoice);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Hóa đơn đã được ghi nhận!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        context.pushReplacement('/invoices/outgoing/${newInvoice.id}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.invoiceType == InvoiceType.outgoing ? 'Hóa đơn đã được tạo thành công!' : 'Hóa đơn đã được lưu thành công!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          if (widget.invoiceType == InvoiceType.outgoing) {
+            context.go('/invoices/outgoing');
+          } else {
+            context.go('/invoices/incoming');
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Có lỗi xảy ra: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
+        }
       }
     }
   }
-
   void _addSampleData(String type) {
     setState(() {
       if (type == 'it') {
@@ -229,7 +307,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           ),
         ),
         title: Text(
-          'Tạo hóa đơn bán ra',
+          widget.invoiceType == InvoiceType.outgoing ? 'Tạo hóa đơn bán ra' : 'Hóa đơn đầu vào (OCR)',
           style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
         ),
         actions: [
@@ -261,11 +339,24 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           children: [
+            if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) ...[
+              const Text('ẢNH HÓA ĐƠN ĐÃ QUÉT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: widget.scannedImagePath!.startsWith('http')
+                    ? Image.network(widget.scannedImagePath!, height: 200, width: double.infinity, fit: BoxFit.cover)
+                    : Image.file(File(widget.scannedImagePath!), height: 200, width: double.infinity, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             // Đơn vị bán
             const Text('THÔNG TIN ĐƠN VỊ BÁN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             TextFormField(
               controller: _sellerNameController,
+              readOnly: widget.invoiceType == InvoiceType.outgoing,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Tên đơn vị bán', Icons.storefront_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
               validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
@@ -273,18 +364,21 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _sellerTaxCodeController,
+              readOnly: widget.invoiceType == InvoiceType.outgoing,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Mã số thuế', Icons.credit_card_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _sellerAddressController,
+              readOnly: widget.invoiceType == InvoiceType.outgoing,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Địa chỉ', Icons.location_on_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _sellerPhoneController,
+              readOnly: widget.invoiceType == InvoiceType.outgoing,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Số điện thoại', Icons.phone_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
@@ -294,6 +388,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _sellerBankNameController,
+                    readOnly: widget.invoiceType == InvoiceType.outgoing,
                     style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
                     decoration: _buildInputDeco('Ngân hàng', Icons.account_balance_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
                   ),
@@ -302,6 +397,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _sellerBankAccountController,
+                    readOnly: widget.invoiceType == InvoiceType.outgoing,
                     style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
                     decoration: _buildInputDeco('Số tài khoản', Icons.numbers_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
                   ),
@@ -315,12 +411,14 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _partnerContactNameController,
+              readOnly: widget.invoiceType == InvoiceType.incoming,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Họ tên người mua hàng', Icons.person_outline, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _partnerNameController,
+              readOnly: widget.invoiceType == InvoiceType.incoming,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Tên đơn vị', Icons.business_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
               validator: (value) => value == null || value.isEmpty ? 'Nhập tên đối tác' : null,
@@ -328,6 +426,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _partnerTaxCodeController,
+              readOnly: widget.invoiceType == InvoiceType.incoming,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Mã số thuế', Icons.credit_card_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
               validator: (value) => value == null || value.isEmpty ? 'Nhập mã số thuế' : null,
@@ -335,6 +434,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _partnerAddressController,
+              readOnly: widget.invoiceType == InvoiceType.incoming,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Địa chỉ', Icons.location_on_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
@@ -348,7 +448,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                 DropdownMenuItem(value: 'CK', child: Text('Chuyển khoản (CK)')),
                 DropdownMenuItem(value: 'TM/CK', child: Text('TM/CK')),
               ],
-              onChanged: (val) {
+              onChanged: widget.invoiceType == InvoiceType.incoming ? null : (val) {
                 if (val != null) setState(() => _paymentMethod = val);
               },
             ),
@@ -356,6 +456,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _bankNameController,
+                readOnly: widget.invoiceType == InvoiceType.incoming,
                 style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
                 decoration: _buildInputDeco('Ngân hàng gì?', Icons.account_balance_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
                 validator: (value) => _paymentMethod != 'TM' && (value == null || value.isEmpty) ? 'Nhập tên ngân hàng' : null,
@@ -363,6 +464,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _bankAccountController,
+                readOnly: widget.invoiceType == InvoiceType.incoming,
                 style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
                 decoration: _buildInputDeco('Số tài khoản', Icons.numbers_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
                 validator: (value) => _paymentMethod != 'TM' && (value == null || value.isEmpty) ? 'Nhập số tài khoản' : null,

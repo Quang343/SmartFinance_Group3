@@ -1045,7 +1045,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Quét hóa đơn OCR',
           subtitle: 'Nhập tự động',
           color: const Color(0xFF00D09E),
-          onTap: () => context.go('/invoices/scan'),
+          onTap: () => context.go('/invoices/capture'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
