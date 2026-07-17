@@ -7,9 +7,11 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
+import 'package:smart_finance/core/constants/route_names.dart';
 import '../../../domain/entities/attachment_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
@@ -47,7 +49,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   String? _invoiceImagePath;
   final _picker = ImagePicker();
   String? _selectedImagePath;
-
+  
   DateTime _transactionDate = DateTime.now();
   DateTime? _createdAt;
 
@@ -230,6 +232,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         invoiceId: _invoiceId,
         createdAt: _createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
+        tags: const [],
       );
 
       if (widget.transactionId == null) {
@@ -289,8 +292,19 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           final updatedInvoice = InvoiceEntity(
             id: invoice.id,
             invoiceNumber: invoice.invoiceNumber,
-            partnerName: invoice.partnerName,
-            partnerTaxCode: invoice.partnerTaxCode,
+            sellerName: invoice.sellerName,
+            sellerTaxCode: invoice.sellerTaxCode,
+            sellerAddress: invoice.sellerAddress,
+            sellerPhone: invoice.sellerPhone,
+            sellerBankName: invoice.sellerBankName,
+            sellerBankAccount: invoice.sellerBankAccount,
+            buyerName: invoice.buyerName,
+            buyerTaxCode: invoice.buyerTaxCode,
+            buyerAddress: invoice.buyerAddress,
+            buyerBankName: invoice.buyerBankName,
+            buyerBankAccount: invoice.buyerBankAccount,
+            paymentMethod: invoice.paymentMethod,
+            items: invoice.items,
             subtotal: invoice.subtotal,
             vatRate: invoice.vatRate,
             vatAmount: invoice.vatAmount,
@@ -299,7 +313,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             paymentStatus: PaymentStatus.paid,
             issuedDate: invoice.issuedDate,
             createdAt: invoice.createdAt,
-            updatedAt: DateTime.now(),
+            updatedAt: invoice.updatedAt,
             type: invoice.type,
             imagePath: invoice.imagePath,
             ocrConfidence: invoice.ocrConfidence,
@@ -1013,6 +1027,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
             const SizedBox(height: 24),
+            
+
+            const SizedBox(height: 24),
 
              // Notes
             TextFormField(
@@ -1098,8 +1115,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             
-            // Hide attachment upload if coming from an invoice, as it's already linked
-            if (_invoiceId != null)
+            // Hide attachment upload if coming from an invoice and is income, as it's already linked
+            if (_invoiceId != null && _type == TransactionType.income)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1115,11 +1132,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.link_rounded, color: Color(0xFF00D09E)),
+                        const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF00D09E)),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
+                            'Giao dịch được tạo từ Hóa đơn. Bạn có thể xem và tải bản PDF gốc.',
                             style: TextStyle(
                               fontSize: 14,
                               color: isDark ? Colors.white70 : const Color(0xFF093021),
@@ -1130,34 +1147,41 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ],
                     ),
                   ),
-                  if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: inputFillColor,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: inputBorderColor, width: 1.5),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _invoiceImagePath!.startsWith('http')
-                            ? Image.network(
-                                _invoiceImagePath!,
-                                fit: BoxFit.contain,
-                                loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                              )
-                            : Image.file(
-                                File(_invoiceImagePath!),
-                                fit: BoxFit.contain,
+                  const SizedBox(height: 16),
+                  ScaleOnTap(
+                    onTap: () {
+                      context.pushNamed(
+                        RouteNames.invoicePreview,
+                        pathParameters: {'id': _invoiceId!},
+                      );
+                    },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF00D09E), width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.remove_red_eye_rounded, color: Color(0xFF00D09E), size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Xem / Tải Hóa đơn PDF',
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
                               ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
-                ],
-              )
+                )
             else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
               Stack(
                 alignment: Alignment.topRight,
