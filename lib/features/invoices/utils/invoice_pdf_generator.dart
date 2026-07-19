@@ -79,13 +79,13 @@ class InvoicePdfGenerator {
               // Customer Info
               if (invoice.buyerContactName != null && invoice.buyerContactName!.isNotEmpty) ...[
                 pw.Text(
-                  'Người mua hàng: ${invoice.buyerContactName}',
+                  'Họ tên người mua hàng: ${invoice.buyerContactName}',
                   style: pw.TextStyle(font: fontRegular, fontSize: 12),
                 ),
                 pw.SizedBox(height: 4),
               ],
               pw.Text(
-                'Đơn vị mua hàng: ${invoice.buyerName}',
+                'Tên đơn vị: ${invoice.buyerName}',
                 style: pw.TextStyle(font: fontBold, fontSize: 14),
               ),
               pw.SizedBox(height: 4),

@@ -511,9 +511,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                   onTap: () {
                                     if (isIncoming) {
-                                      context.go('/invoices/incoming/${inv.id}');
+                                      context.push('/invoices/incoming/${inv.id}');
                                     } else {
-                                      context.go('/invoices/outgoing/${inv.id}');
+                                      context.push('/invoices/outgoing/${inv.id}');
                                     }
                                   },
                                   child: Padding(
@@ -597,9 +597,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ? ScaleOnTap(
                   onTap: () {
                     if (isIncoming) {
-                      context.go('/invoices/capture');
+                      context.push('/invoices/capture');
                     } else {
-                      context.go('/invoices/outgoing/new');
+                      context.push('/invoices/outgoing/new');
                     }
                   },
                   child: FloatingActionButton.extended(
