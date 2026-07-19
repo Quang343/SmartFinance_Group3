@@ -8,6 +8,54 @@ import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
+const List<String> vibrantColors = [
+  '#00D09E', // Primary Teal
+  '#F44336', // Red
+  '#E91E63', // Pink
+  '#9C27B0', // Purple
+  '#2196F3', // Blue
+  '#00BCD4', // Cyan
+  '#4CAF50', // Green
+  '#FF9800', // Orange
+];
+
+const List<IconData> categoryIcons = [
+  Icons.category,
+  Icons.restaurant,
+  Icons.shopping_cart,
+  Icons.local_gas_station,
+  Icons.flight,
+  Icons.attach_money,
+  Icons.home,
+  Icons.electrical_services,
+  Icons.water_drop,
+  Icons.medical_services,
+  Icons.school,
+  Icons.sports_esports,
+  Icons.devices,
+  Icons.fitness_center,
+];
+
+IconData _parseIcon(String? iconCode, String type) {
+  if (iconCode != null && iconCode.isNotEmpty) {
+    final code = int.tryParse(iconCode);
+    if (code != null) return IconData(code, fontFamily: 'MaterialIcons');
+  }
+  return type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+}
+
+Color _parseColor(String? hexString) {
+  if (hexString == null || hexString.isEmpty) return const Color(0xFF00D09E);
+  try {
+    final buffer = StringBuffer();
+    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+    buffer.write(hexString.replaceFirst('#', ''));
+    return Color(int.parse(buffer.toString(), radix: 16));
+  } catch (e) {
+    return const Color(0xFF00D09E);
+  }
+}
+
 class CategoryManagementScreen extends ConsumerStatefulWidget {
   const CategoryManagementScreen({super.key});
 
@@ -68,7 +116,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
     }
   }
 
-  void _addCategory(String type) async {
+  void _addCategory(String type, String colorHex, String iconCode) async {
     final name = _newCategoryController.text.trim();
     if (name.isEmpty) return;
 
@@ -77,6 +125,8 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
       id: 'cat_${const Uuid().v4().substring(0, 8)}',
       name: name,
       type: type,
+      iconCode: iconCode,
+      colorHex: colorHex,
       isDefault: false,
       isActive: true,
       createdAt: DateTime.now(),
@@ -91,76 +141,139 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
   }
 
   void _showAddCategoryDialog(String type) {
+    String selectedColor = vibrantColors.first;
+    String selectedIcon = categoryIcons.first.codePoint.toString();
     showDialog(
       context: context,
       builder: (dialogContext) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final primaryColor = const Color(0xFF00D09E);
-        final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
-        final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primaryColor = const Color(0xFF00D09E);
+            final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
+            final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
 
-        return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            'Thêm danh mục ${type == 'income' ? 'Doanh thu' : 'Chi phí'}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          content: TextField(
-            controller: _newCategoryController,
-            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-            decoration: InputDecoration(
-              hintText: 'Nhập tên danh mục...',
-              hintStyle: const TextStyle(color: Colors.grey),
-              filled: true,
-              fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: inputBorderColor, width: 1.5),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: primaryColor, width: 2),
-              ),
-            ),
-          ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (dialogContext.canPop()) dialogContext.pop();
-              },
-              child: Text(
-                'Hủy',
-                style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
-              ),
-            ),
-            ScaleOnTap(
-              onTap: () {
-                if (dialogContext.canPop()) dialogContext.pop();
-                _addCategory(type);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(10),
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                'Thêm danh mục ${type == 'income' ? 'Doanh thu' : 'Chi phí'}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
-                child: const Text(
-                  'Thêm',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF060E0A),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _newCategoryController,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                      hintText: 'Nhập tên danh mục...',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: inputFillColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Màu thẻ danh mục', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: vibrantColors.map((color) {
+                      final isSelected = selectedColor == color;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedColor = color),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _parseColor(color),
+                            shape: BoxShape.circle,
+                            border: isSelected ? Border.all(color: isDark ? Colors.white : Colors.black, width: 2) : null,
+                          ),
+                          child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Biểu tượng', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categoryIcons.map((icon) {
+                      final iconCodeStr = icon.codePoint.toString();
+                      final isSelected = selectedIcon == iconCodeStr;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedIcon = iconCodeStr),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryColor.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected ? Border.all(color: primaryColor, width: 2) : null,
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                            size: 20,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    if (dialogContext.canPop()) dialogContext.pop();
+                  },
+                  child: Text(
+                    'Hủy',
+                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   ),
                 ),
-              ),
-            ),
-          ],
+                ScaleOnTap(
+                  onTap: () {
+                    if (dialogContext.canPop()) dialogContext.pop();
+                    _addCategory(type, selectedColor, selectedIcon);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'Thêm',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF060E0A),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
         );
       },
     );
@@ -168,93 +281,159 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
 
   void _showEditCategoryDialog(CategoryEntity cat) {
     _newCategoryController.text = cat.name;
+    String selectedColor = cat.colorHex ?? vibrantColors.first;
+    if (!vibrantColors.contains(selectedColor)) selectedColor = vibrantColors.first;
+    String selectedIcon = cat.iconCode ?? categoryIcons.first.codePoint.toString();
+
     showDialog(
       context: context,
       builder: (dialogContext) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final primaryColor = const Color(0xFF00D09E);
-        final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
-        final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primaryColor = const Color(0xFF00D09E);
+            final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
+            final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
 
-        return AlertDialog(
-          backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(
-            'Sửa tên danh mục',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          content: TextField(
-            controller: _newCategoryController,
-            style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-            decoration: InputDecoration(
-              hintText: 'Nhập tên danh mục...',
-              hintStyle: const TextStyle(color: Colors.grey),
-              filled: true,
-              fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: inputBorderColor, width: 1.5),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: primaryColor, width: 2),
-              ),
-            ),
-          ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _newCategoryController.clear();
-                if (dialogContext.canPop()) dialogContext.pop();
-              },
-              child: Text(
-                'Hủy',
-                style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
-              ),
-            ),
-            ScaleOnTap(
-              onTap: () async {
-                final newName = _newCategoryController.text.trim();
-                if (newName.isNotEmpty) {
-                  final updated = CategoryEntity(
-                    id: cat.id,
-                    name: newName,
-                    type: cat.type,
-                    iconCode: cat.iconCode,
-                    colorHex: cat.colorHex,
-                    isDefault: cat.isDefault,
-                    isActive: cat.isActive,
-                    createdAt: cat.createdAt,
-                    updatedAt: DateTime.now(),
-                  );
-                  await ref.read(categoryRepositoryProvider).update(updated);
-                  _newCategoryController.clear();
-                  if (mounted) _loadData(withDelay: false);
-                }
-                if (dialogContext.canPop()) dialogContext.pop();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(10),
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                'Sửa danh mục',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
-                child: const Text(
-                  'Lưu',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF060E0A),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _newCategoryController,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                      hintText: 'Nhập tên danh mục...',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: inputFillColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Màu thẻ danh mục', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: vibrantColors.map((color) {
+                      final isSelected = selectedColor == color;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedColor = color),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _parseColor(color),
+                            shape: BoxShape.circle,
+                            border: isSelected ? Border.all(color: isDark ? Colors.white : Colors.black, width: 2) : null,
+                          ),
+                          child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Biểu tượng', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categoryIcons.map((icon) {
+                      final iconCodeStr = icon.codePoint.toString();
+                      final isSelected = selectedIcon == iconCodeStr;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedIcon = iconCodeStr),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryColor.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected ? Border.all(color: primaryColor, width: 2) : null,
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                            size: 20,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _newCategoryController.clear();
+                    if (dialogContext.canPop()) dialogContext.pop();
+                  },
+                  child: Text(
+                    'Hủy',
+                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   ),
                 ),
-              ),
-            ),
-          ],
+                ScaleOnTap(
+                  onTap: () async {
+                    if (dialogContext.canPop()) dialogContext.pop();
+                    final name = _newCategoryController.text.trim();
+                    if (name.isNotEmpty) {
+                      final repo = ref.read(categoryRepositoryProvider);
+                      final updatedCat = CategoryEntity(
+                        id: cat.id,
+                        name: name,
+                        type: cat.type,
+                        iconCode: selectedIcon,
+                        colorHex: selectedColor,
+                        isDefault: cat.isDefault,
+                        isActive: cat.isActive,
+                        createdAt: cat.createdAt,
+                        updatedAt: DateTime.now(),
+                      );
+                      await repo.update(updatedCat);
+                      _newCategoryController.clear();
+                      if (mounted) _loadData(withDelay: false);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'Lưu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF060E0A),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
         );
       },
     );
@@ -595,14 +774,12 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: cat.type == 'income' 
-                    ? const Color(0x1500D09E) 
-                    : const Color(0x15EF4444),
+                color: _parseColor(cat.colorHex).withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                cat.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                color: cat.type == 'income' ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                _parseIcon(cat.iconCode, cat.type),
+                color: _parseColor(cat.colorHex),
                 size: 20,
               ),
             ),

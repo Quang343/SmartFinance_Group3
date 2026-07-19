@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
+import '../../../data/models/user_model.dart';
 import '../../../core/providers/transaction_providers.dart';
 import '../../../core/providers/category_providers.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/services/offline_sync_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -22,8 +27,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _timeFilter = 'monthly';
 
   @override
+  void initState() {
+    super.initState();
+    // Kích hoạt đồng bộ ngoại tuyến (Background Sync) cho ảnh hóa đơn bị kẹt
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        ref.read(offlineSyncServiceProvider).syncOfflineImages(user.company);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final company = currentUser?.company ?? '';
+    final budgetLimitAsync = ref.watch(companyBudgetLimitProvider);
+    final revenueKpiAsync = ref.watch(companyRevenueKpiProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(
       locale: 'vi_VN',
@@ -139,27 +160,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .map((tx) => tx.amount)
         .fold(0, (sum, val) => sum + val);
 
-    const double budgetLimit = 20000000;
+    final monthlyIncomeSum = allTxs
+        .where(
+          (tx) =>
+              tx.status == TransactionStatus.confirmed &&
+              tx.type == TransactionType.income &&
+              tx.transactionDate.month == now.month &&
+              tx.transactionDate.year == now.year,
+        )
+        .map((tx) => tx.amount)
+        .fold(0, (sum, val) => sum + val);
 
-    // Use monthlyExpenseSum for Budget Progress
-    final double expensePercentage = (monthlyExpenseSum / budgetLimit).clamp(
-      0.0,
-      1.0,
-    );
+    final double budgetLimit = (budgetLimitAsync.valueOrNull ?? 20000000).toDouble();
+    final double revenueKPI = (revenueKpiAsync.valueOrNull ?? 500000000).toDouble();
+
+    final double expensePercentage = monthlyExpenseSum / budgetLimit;
     final int expensePercentInt = (expensePercentage * 100).toInt();
+
+    final double incomePercentage = monthlyIncomeSum / revenueKPI;
+    final int incomePercentInt = (incomePercentage * 100).toInt();
 
     // Budget Insights
     final double remainingBudget = (budgetLimit - monthlyExpenseSum).toDouble();
-    final int currentDay = now.day;
-    final double dailyAverage = currentDay > 0
-        ? (monthlyExpenseSum / currentDay).toDouble()
-        : 0.0;
-    String timeFilterText = 'trong tháng';
-    if (_timeFilter == 'daily') {
-      timeFilterText = 'hôm nay';
-    } else if (_timeFilter == 'weekly') {
-      timeFilterText = 'tuần này';
-    }
+
 
     String highestExpenseCatName = 'chưa có dữ liệu';
     double highestExpenseAmount = 0;
@@ -501,94 +524,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         ],
 
-                        // Budget progress bar (Only show for FM and EA roles, as RA doesn't manage expense budgets)
                         if (currentRole == UserRole.financeManager ||
                             currentRole == UserRole.expenseAccountant) ...[
                           const SizedBox(height: 12),
-                          // Custom split progress bar (Stadium pill style)
-                          Container(
-                            height: 28,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              color: isDark
-                                  ? const Color(0xFF06150F)
-                                  : const Color(0xFFF1F5F9),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white10
-                                    : Colors.black.withOpacity(0.04),
-                              ),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Row(
-                                children: [
-                                  if (expensePercentInt > 0)
-                                    Expanded(
-                                      flex: expensePercentInt,
-                                      child: Container(
-                                        color: const Color(
-                                          0xFF1E293B,
-                                        ), // Dark slate
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          '$expensePercentInt%',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  Expanded(
-                                    flex: (100 - expensePercentInt).clamp(
-                                      1,
-                                      100,
-                                    ),
-                                    child: Container(
-                                      alignment: Alignment.centerRight,
-                                      padding: const EdgeInsets.only(right: 12),
-                                      child: Text(
-                                        currencyFormatter.format(budgetLimit),
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white70
-                                              : const Color(0xFF1E293B),
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          _buildCompactBar(
+                            label: 'Ngân sách chi tiêu',
+                            percent: expensePercentInt,
+                            used: monthlyExpenseSum,
+                            target: budgetLimit,
+                            remaining: remainingBudget,
+                            currencyFormatter: currencyFormatter,
+                            isDark: isDark,
+                            fillColor: const Color(0xFF1E293B),
+                            accentColor: const Color(0xFF059669),
+                            showEdit: currentRole == UserRole.financeManager,
+                            onEdit: () => _showEditValueDialog(context, isDark, 'Ngân sách tháng', budgetLimitAsync.valueOrNull ?? 20000000, (_) {}),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.check_circle_rounded,
-                                color: isDark
-                                    ? const Color(0xFF86EFAC)
-                                    : const Color(0xFF008060),
-                                size: 15,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Đã sử dụng $expensePercentInt% ngân sách tháng, trạng thái tốt.',
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? Colors.white70
-                                        : Colors.black87,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        ],
+                        if (currentRole == UserRole.financeManager) ...[
+                          const SizedBox(height: 12),
+                          _buildCompactBar(
+                            label: 'KPI doanh thu',
+                            percent: incomePercentInt,
+                            used: monthlyIncomeSum,
+                            target: revenueKPI,
+                            remaining: revenueKPI - monthlyIncomeSum,
+                            currencyFormatter: currencyFormatter,
+                            isDark: isDark,
+                            fillColor: Colors.blueAccent,
+                            accentColor: Colors.amber,
+                            showEdit: true,
+                            overIsBad: false,
+                            onEdit: () => _showEditValueDialog(context, isDark, 'KPI doanh thu', revenueKpiAsync.valueOrNull ?? 500000000, (_) {}),
                           ),
                         ],
                       ],
@@ -611,156 +578,127 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   isDark,
                   const Color(0xFF00D09E),
                 ),
-                const SizedBox(height: 24),
-
-                // Savings & Goal progress card
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0C2C1F) : Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.black.withOpacity(0.3)
-                            : Colors.black.withOpacity(0.04),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.05)
-                          : Colors.grey.shade100,
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      // Left Circular indicator with car icon
-                      Column(
-                        children: [
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox(
-                                width: 72,
-                                height: 72,
-                                child: CircularProgressIndicator(
-                                  value: expensePercentage,
-                                  strokeWidth: 6,
-                                  backgroundColor: isDark
-                                      ? Colors.white.withOpacity(0.1)
-                                      : const Color(0xFFE8F6F1),
-                                  color: const Color(0xFF00D09E),
-                                  strokeCap: StrokeCap.round,
-                                ),
-                              ),
-                              const Icon(
-                                Icons
-                                    .savings_rounded, // Piggy bank icon for Savings Goal
-                                color: Color(0xFF00D09E),
-                                size: 28,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            currentRole == UserRole.revenueAccountant
-                                ? 'Hạn mức chi tiêu'
-                                : 'Phân tích Ngân sách',
-                            style: TextStyle(
-                              color: isDark
-                                  ? Colors.white70
-                                  : const Color(0xFF1E293B),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 20),
-                      // Vertical divider
-                      Container(
-                        height: 80,
+                if (currentRole != UserRole.financeManager) ...[
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
+                          blurRadius: 15,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
                         width: 1,
-                        color: isDark
-                            ? Colors.white.withOpacity(0.1)
-                            : Colors.grey.shade200,
                       ),
-                      const SizedBox(width: 20),
-                      // Right text stats
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    child: Row(
+                      children: [
+                        Column(
                           children: [
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 72,
+                                  height: 72,
+                                  child: CircularProgressIndicator(
+                                    value: currentRole == UserRole.revenueAccountant ? incomePercentage : expensePercentage,
+                                    strokeWidth: 6,
+                                    backgroundColor: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE8F6F1),
+                                    color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFF00D09E),
+                                    strokeCap: StrokeCap.round,
+                                  ),
+                                ),
+                                Icon(
+                                  currentRole == UserRole.revenueAccountant ? Icons.emoji_events_rounded : Icons.savings_rounded,
+                                  color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFF00D09E),
+                                  size: 28,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                             Text(
-                              currentRole == UserRole.revenueAccountant
-                                  ? 'Doanh thu $timeFilterText'
-                                  : 'Ngân sách còn lại',
+                              currentRole == UserRole.revenueAccountant ? 'Tiến độ KPI' : 'Phân tích Ngân sách',
                               style: TextStyle(
-                                color: isDark
-                                    ? Colors.white60
-                                    : Colors.grey.shade600,
+                                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
                                 fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              currentRole == UserRole.revenueAccountant
-                                  ? currencyFormatter.format(incomeSum)
-                                  : currencyFormatter.format(remainingBudget),
-                              style: TextStyle(
-                                color: remainingBudget < 0
-                                    ? const Color(0xFFE11D48)
-                                    : (isDark
-                                          ? const Color(0xFF00D09E)
-                                          : const Color(0xFF059669)),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Divider(
-                                color: isDark
-                                    ? Colors.white.withOpacity(0.1)
-                                    : Colors.grey.shade100,
-                                height: 1,
-                              ),
-                            ),
-                            Text(
-                              currentRole == UserRole.revenueAccountant
-                                  ? (highestExpenseAmount > 0
-                                        ? 'Chi $highestExpenseCatName $timeFilterText'
-                                        : 'Tổng chi $timeFilterText')
-                                  : 'Chi trung bình/ngày',
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.white60
-                                    : Colors.grey.shade600,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              currentRole == UserRole.revenueAccountant
-                                  ? '-${currencyFormatter.format(highestExpenseAmount > 0 ? highestExpenseAmount : expenseSum)}'
-                                  : currencyFormatter.format(dailyAverage),
-                              style: const TextStyle(
-                                color: Color(0xFFE11D48),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 20),
+                        Container(
+                          height: 80,
+                          width: 1,
+                          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                currentRole == UserRole.revenueAccountant ? 'Doanh thu' : 'Ngân sách còn lại',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                currentRole == UserRole.revenueAccountant
+                                    ? currencyFormatter.format(monthlyIncomeSum)
+                                    : currencyFormatter.format(remainingBudget),
+                                style: TextStyle(
+                                  color: remainingBudget < 0
+                                      ? const Color(0xFFE11D48)
+                                      : (isDark ? const Color(0xFF00D09E) : const Color(0xFF059669)),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Divider(
+                                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade100,
+                                  height: 1,
+                                ),
+                              ),
+                              Text(
+                                currentRole == UserRole.revenueAccountant ? 'KPI cần đạt mỗi tháng' : 'Chi trung bình/ngày',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                currentRole == UserRole.revenueAccountant
+                                    ? currencyFormatter.format(revenueKPI)
+                                    : currencyFormatter.format(monthlyExpenseSum / (DateTime.now().day > 0 ? DateTime.now().day : 1)),
+                                style: TextStyle(
+                                  color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFFE11D48),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
+
                 const SizedBox(height: 24),
 
                 // Filter selector (Daily, Weekly, Monthly)
@@ -859,42 +797,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     final cat = catMap[tx.categoryId];
                     final catName = cat?.name ?? 'Khác';
 
-                    // Custom styling map for categories to make it extremely clean and professional
-                    IconData leadingIcon = Icons.category_rounded;
-                    Color iconBgColor = isIncome
-                        ? const Color(0xFFE0F2FE)
-                        : const Color(0xFFFEE2E2);
-                    Color iconColor = isIncome ? Colors.blue : Colors.red;
-
-                    if (catName.contains('Lương')) {
-                      leadingIcon = Icons.account_balance_wallet_rounded;
-                      iconBgColor = const Color(0xFFE0F2FE); // light blue
-                      iconColor = const Color(0xFF0284C7);
-                    } else if (catName.contains('Mặt bằng') ||
-                        catName.contains('Điện nước')) {
-                      leadingIcon = Icons.home_work_rounded;
-                      iconBgColor = const Color(0xFFEEF2FF); // indigo
-                      iconColor = const Color(0xFF4F46E5);
-                    } else if (catName.contains('bán hàng') ||
-                        catName.contains('dịch vụ')) {
-                      leadingIcon = Icons.storefront_rounded;
-                      iconBgColor = const Color(0xFFECFDF5); // light green
-                      iconColor = const Color(0xFF059669);
-                    } else if (catName.contains('Mua hàng') ||
-                        catName.contains('Vận hành')) {
-                      leadingIcon = Icons.shopping_bag_rounded;
-                      iconBgColor = const Color(0xFFFFF7ED); // orange
-                      iconColor = const Color(0xFFEA580C);
-                    } else if (catName.contains('Marketing')) {
-                      leadingIcon = Icons.campaign_rounded;
-                      iconBgColor = const Color(0xFFFAF5FF); // purple
-                      iconColor = const Color(0xFF9333EA);
+                    IconData leadingIcon = cat?.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+                    if (cat?.iconCode != null && cat!.iconCode!.isNotEmpty) {
+                      final code = int.tryParse(cat.iconCode!);
+                      if (code != null) leadingIcon = IconData(code, fontFamily: 'MaterialIcons');
                     }
+                    Color iconColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isIncome ? Colors.blue : Colors.red);
+                    Color iconBgColor = iconColor.withOpacity(0.15);
 
                     return ScaleOnTap(
                       onTap: () {
                         if (currentRole.canEditTransactions) {
-                          context.go(
+                          context.push(
                             '/transactions/form',
                             extra: {'transactionId': tx.id},
                           );
@@ -952,12 +866,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    '${timeFormatter.format(tx.transactionDate)} - ${dateFormatter.format(tx.transactionDate)} | $catName',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                    ),
+                                  Wrap(
+                                    spacing: 8,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        '${timeFormatter.format(tx.transactionDate)} - ${dateFormatter.format(tx.transactionDate)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: iconBgColor,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          catName,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: iconColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -1040,7 +975,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Quét hóa đơn OCR',
           subtitle: 'Nhập tự động',
           color: const Color(0xFF00D09E),
-          onTap: () => context.go('/invoices/scan'),
+          onTap: () => context.push('/invoices/capture'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -1051,7 +986,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Ghi nhận chi phí',
           subtitle: 'Nhập thủ công',
           color: Colors.redAccent,
-          onTap: () => context.go('/transactions/form'),
+          onTap: () => context.push('/transactions/form'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -1065,7 +1000,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Tạo hóa đơn đầu ra',
           subtitle: 'Xuất PDF nhanh',
           color: const Color(0xFF00D09E),
-          onTap: () => context.go('/invoices/outgoing/new'),
+          onTap: () => context.push('/invoices/outgoing/new'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -1076,7 +1011,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Ghi nhận doanh thu',
           subtitle: 'Nhập thủ công',
           color: Colors.blueAccent,
-          onTap: () => context.go('/transactions/form'),
+          onTap: () => context.push('/transactions/form'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -1202,5 +1137,268 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildCompactBar({
+    required String label,
+    required int percent,
+    required int used,
+    required double target,
+    required double remaining,
+    required NumberFormat currencyFormatter,
+    required bool isDark,
+    required Color fillColor,
+    required Color accentColor,
+    required bool showEdit,
+    bool overIsBad = true,
+    VoidCallback? onEdit,
+  }) {
+    final displayPct = percent.clamp(0, 100);
+    final usedFmt = currencyFormatter.format(used);
+    final targetFmt = currencyFormatter.format(target);
+    final isOver = remaining < 0;
+
+    Color barColor;
+    if (isOver && overIsBad) {
+      barColor = const Color(0xFFE11D48);
+    } else if (isOver && !overIsBad) {
+      barColor = const Color(0xFF059669);
+    } else {
+      barColor = fillColor;
+    }
+
+    Color statusColor;
+    IconData statusIcon;
+    if (isOver && overIsBad) {
+      statusColor = const Color(0xFFE11D48);
+      statusIcon = Icons.warning_amber_rounded;
+    } else if (isOver && !overIsBad) {
+      statusColor = const Color(0xFF059669);
+      statusIcon = Icons.emoji_events_rounded;
+    } else {
+      statusColor = isDark ? Colors.white60 : Colors.black54;
+      statusIcon = Icons.check_circle_rounded;
+    }
+
+    String statusText;
+    if (isOver && overIsBad) {
+      statusText = 'Đã vượt ${currencyFormatter.format(remaining.abs())}';
+    } else if (isOver && !overIsBad) {
+      statusText = 'Xuất sắc! Vượt ${percent - 100}% chỉ tiêu!';
+    } else {
+      statusText = 'Còn ${currencyFormatter.format(remaining)}';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '$usedFmt / $targetFmt',
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (showEdit && onEdit != null) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onEdit,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: fillColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.edit_square, size: 16, color: isDark ? Colors.white54 : fillColor),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          height: 24,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: isDark ? const Color(0xFF06150F) : const Color(0xFFF1F5F9),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: displayPct / 100),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => Stack(
+                children: [
+                  FractionallySizedBox(
+                    widthFactor: value,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isOver && overIsBad
+                              ? [const Color(0xFFE11D48), const Color(0xFFFB7185)]
+                              : isOver && !overIsBad
+                                  ? [const Color(0xFF059669), const Color(0xFF34D399)]
+                                  : [fillColor, fillColor.withValues(alpha: 0.7)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (percent > 0)
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Text(
+                            '$percent%',
+                            style: TextStyle(
+                              color: displayPct > 20 ? Colors.white : (isDark ? Colors.white54 : const Color(0xFF64748B)),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Icon(statusIcon, color: statusColor, size: 14),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                statusText,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showEditValueDialog(
+    BuildContext context,
+    bool isDark,
+    String label,
+    int currentValue,
+    Function(int) onSave,
+  ) async {
+    const int maxValue = 99999999999;
+    final controller = TextEditingController(text: currentValue.toString());
+    String? error;
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            label,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                decoration: InputDecoration(
+                  suffixText: '₫',
+                  suffixStyle: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF00D09E), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF1F5F9),
+                ),
+                onChanged: (_) {
+                  final v = int.tryParse(controller.text);
+                  final err = (v != null && v > maxValue) ? 'Số tiền tối đa là 99.999.999.999₫' : null;
+                  setDialogState(() => error = err);
+                },
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Huỷ', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                final v = int.tryParse(controller.text);
+                if (v == null || v <= 0) {
+                  setDialogState(() => error = 'Vui lòng nhập số hợp lệ');
+                  return;
+                }
+                if (v > maxValue) {
+                  setDialogState(() => error = 'Số tiền tối đa là 99.999.999.999₫');
+                  return;
+                }
+                Navigator.pop(context, v);
+              },
+              style: TextButton.styleFrom(foregroundColor: const Color(0xFF00D09E)),
+              child: const Text('Lưu', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != null) {
+      final user = ref.read(currentUserProvider);
+      final company = user?.company;
+      if (company == null || company.isEmpty) return;
+      final currentBudget = ref.read(companyBudgetLimitProvider).valueOrNull ?? 20000000;
+      final currentKpi = ref.read(companyRevenueKpiProvider).valueOrNull ?? 500000000;
+
+      await FirebaseFirestore.instance.collection('companySettings').doc(company).set({
+        'budgetLimit': label == 'Ngân sách tháng' ? result : currentBudget,
+        'revenueKpi': label == 'KPI doanh thu' ? result : currentKpi,
+      });
+      ref.invalidate(companyBudgetLimitProvider);
+      ref.invalidate(companyRevenueKpiProvider);
+    }
   }
 }

@@ -71,6 +71,10 @@ class AuthRepository {
           fullName: fullName,
           company: company,
           taxCode: taxCode,
+          phone: '0909123456',
+          address: 'Tầng 3, Tòa nhà FPT, Khu Công nghệ cao Hòa Lạc',
+          bankName: 'Vietcombank',
+          bankAccount: '1010101010',
           role: role, // Role được truyền vào
         );
         
@@ -135,6 +139,10 @@ class AuthRepository {
             fullName: defaultName,
             company: 'N/A', // Mặc định
             taxCode: 'N/A', // Mặc định
+            phone: '0909123456',
+            address: 'Tầng 3, Tòa nhà FPT, Khu Công nghệ cao Hòa Lạc',
+            bankName: 'Vietcombank',
+            bankAccount: '1010101010',
             role: 'financeManager', // Theo yêu cầu hardcode thành Quản lý cho tiện demo
           );
           await _firestore.collection('users').doc(userModel.id).set(userModel.toJson());

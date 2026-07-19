@@ -4,15 +4,19 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
+import 'package:smart_finance/core/constants/route_names.dart';
 import '../../../domain/entities/attachment_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
+import '../../../data/repositories/storage_repository.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
@@ -46,7 +50,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   String? _invoiceImagePath;
   final _picker = ImagePicker();
   String? _selectedImagePath;
-
+  
   DateTime _transactionDate = DateTime.now();
   DateTime? _createdAt;
 
@@ -56,6 +60,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   bool _showCategoryError = false;
   final _amountKey = GlobalKey();
   final _categoryKey = GlobalKey();
+
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -153,6 +159,26 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _selectedImagePath = result.files.single.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chọn file: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _amountController.dispose();
@@ -161,6 +187,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _saveTransaction() async {
+    if (_isSaving) return;
+
     final isAmountValid = _formKey.currentState!.validate();
     final isCategoryValid = _categoryId.isNotEmpty;
 
@@ -177,14 +205,41 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       return;
     }
 
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
       final repo = ref.read(transactionRepositoryProvider);
+      final storageRepo = ref.read(storageRepositoryProvider);
       
       final String id = widget.transactionId ?? const Uuid().v4();
       final int amount = int.parse(_amountController.text);
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync()) {
+      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
         _selectedImagePath = null;
+      }
+
+      // Upload image if it is a local file
+      String? finalImagePath = _selectedImagePath;
+      if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
+        try {
+          final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
+          if (uploadedUrl != null) {
+            finalImagePath = uploadedUrl;
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Không thể tải ảnh đính kèm lên Cloud: $e'), backgroundColor: Colors.red),
+            );
+          }
+          setState(() {
+            _isSaving = false;
+          });
+          return;
+        }
       }
 
       final transaction = TransactionEntity(
@@ -198,17 +253,18 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         invoiceId: _invoiceId,
         createdAt: _createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
+        tags: const [],
       );
 
       if (widget.transactionId == null) {
         await repo.create(transaction);
-        if (_selectedImagePath != null) {
+        if (finalImagePath != null) {
           final attachmentRepo = ref.read(attachmentRepositoryProvider);
           final attachment = AttachmentEntity(
             id: const Uuid().v4(),
             ownerId: id,
             ownerType: 'transaction',
-            filePath: _selectedImagePath!,
+            filePath: finalImagePath,
             createdAt: DateTime.now(),
           );
           await attachmentRepo.create(attachment);
@@ -220,10 +276,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
       } else {
         await repo.update(transaction);
-        if (_selectedImagePath != null) {
+        if (finalImagePath != null) {
           final attachmentRepo = ref.read(attachmentRepositoryProvider);
           final existing = await attachmentRepo.getByOwnerId(id);
-          if (existing.isEmpty || existing.first.filePath != _selectedImagePath) {
+          if (existing.isEmpty || existing.first.filePath != finalImagePath) {
             if (existing.isNotEmpty) {
               await attachmentRepo.delete(existing.first.id);
             }
@@ -231,7 +287,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               id: const Uuid().v4(),
               ownerId: id,
               ownerType: 'transaction',
-              filePath: _selectedImagePath!,
+              filePath: finalImagePath,
               createdAt: DateTime.now(),
             );
             await attachmentRepo.create(attachment);
@@ -257,8 +313,19 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           final updatedInvoice = InvoiceEntity(
             id: invoice.id,
             invoiceNumber: invoice.invoiceNumber,
-            partnerName: invoice.partnerName,
-            partnerTaxCode: invoice.partnerTaxCode,
+            sellerName: invoice.sellerName,
+            sellerTaxCode: invoice.sellerTaxCode,
+            sellerAddress: invoice.sellerAddress,
+            sellerPhone: invoice.sellerPhone,
+            sellerBankName: invoice.sellerBankName,
+            sellerBankAccount: invoice.sellerBankAccount,
+            buyerName: invoice.buyerName,
+            buyerTaxCode: invoice.buyerTaxCode,
+            buyerAddress: invoice.buyerAddress,
+            buyerBankName: invoice.buyerBankName,
+            buyerBankAccount: invoice.buyerBankAccount,
+            paymentMethod: invoice.paymentMethod,
+            items: invoice.items,
             subtotal: invoice.subtotal,
             vatRate: invoice.vatRate,
             vatAmount: invoice.vatAmount,
@@ -267,9 +334,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             paymentStatus: PaymentStatus.paid,
             issuedDate: invoice.issuedDate,
             createdAt: invoice.createdAt,
-            updatedAt: DateTime.now(),
+            updatedAt: invoice.updatedAt,
             type: invoice.type,
             imagePath: invoice.imagePath,
+            createdByUid: invoice.createdByUid,
+            company: invoice.company,
             ocrConfidence: invoice.ocrConfidence,
           );
           await invoiceRepo.update(updatedInvoice);
@@ -278,11 +347,24 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
       if (mounted) {
         if (Navigator.canPop(context)) {
-          Navigator.pop(context, true);
+          context.pop(true);
         } else {
           context.go('/transactions');
         }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Có lỗi xảy ra: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   void _confirmDelete() {
@@ -306,7 +388,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
                 );
+              if (Navigator.canPop(context)) {
+                context.pop();
+              } else {
                 context.go('/transactions');
+              }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -377,7 +463,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     if (id.isEmpty) return Icons.category_rounded;
     try {
       final cat = _categories.firstWhere((c) => c.id == id);
-      // Since icons aren't stored natively, use a generic icon based on type
+      if (cat.iconCode != null && cat.iconCode!.isNotEmpty) {
+        final code = int.tryParse(cat.iconCode!);
+        if (code != null) return IconData(code, fontFamily: 'MaterialIcons');
+      }
       return cat.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
     } catch (_) {
       return Icons.category_rounded;
@@ -477,6 +566,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         itemBuilder: (context, index) {
                           final cat = categories[index];
                           final isSelected = _categoryId == cat.id;
+                          final catColor = cat.colorHex != null 
+                              ? Color(int.parse(cat.colorHex!.replaceFirst('#', '0xFF'))) 
+                              : const Color(0xFF00D09E);
+                              
                           return InkWell(
                             onTap: () {
                               setState(() => _categoryId = cat.id);
@@ -487,20 +580,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               decoration: BoxDecoration(
                                 color: isSelected 
-                                    ? const Color(0x1500D09E) 
+                                    ? catColor.withOpacity(0.1) 
                                     : inputFillColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF00D09E) : inputBorderColor,
+                                  color: isSelected ? catColor : inputBorderColor,
                                   width: 1.5,
                                 ),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    _getCategoryIcon(cat.id),
-                                    color: isSelected ? const Color(0xFF00D09E) : (isDark ? Colors.white60 : Colors.black54),
-                                    size: 22,
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: catColor.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _getCategoryIcon(cat.id),
+                                      color: catColor,
+                                      size: 18,
+                                    ),
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
@@ -510,13 +610,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                                         fontSize: 15,
                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                         color: isSelected 
-                                            ? const Color(0xFF00D09E) 
+                                            ? catColor 
                                             : (isDark ? Colors.white : Colors.black87),
                                       ),
                                     ),
                                   ),
                                   if (isSelected)
-                                    const Icon(Icons.check_rounded, color: Color(0xFF00D09E), size: 20),
+                                    Icon(Icons.check_rounded, color: catColor, size: 20),
                                 ],
                               ),
                             ),
@@ -736,11 +836,18 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
               validator: (val) {
-                if (val == null || int.tryParse(val) == null) {
+                if (val == null || val.isEmpty) {
                   return 'Vui lòng nhập số tiền hợp lệ';
                 }
-                if (int.parse(val) <= 0) {
+                final numVal = int.tryParse(val.replaceAll(RegExp(r'[^0-9]'), ''));
+                if (numVal == null) {
+                  return 'Số tiền quá lớn hoặc không hợp lệ';
+                }
+                if (numVal <= 0) {
                   return 'Số tiền phải lớn hơn 0';
+                }
+                if (numVal > 999999999999999) {
+                  return 'Số tiền vượt quá giới hạn (tối đa 15 chữ số)';
                 }
                 return null;
               },
@@ -968,6 +1075,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
             const SizedBox(height: 24),
+            
+
+            const SizedBox(height: 24),
 
              // Notes
             TextFormField(
@@ -1058,34 +1168,90 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF0FDF4),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFF00D09E).withOpacity(0.3),
+                  Text('Đính kèm', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : const Color(0xFF093021))),
+                  const SizedBox(height: 8),
+                  
+                  if (_type == TransactionType.income) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF00D09E).withValues(alpha: 0.3)),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.link_rounded, color: Color(0xFF00D09E)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark ? Colors.white70 : const Color(0xFF093021),
-                              fontWeight: FontWeight.w500,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFF00D09E)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Giao dịch được tạo từ Hóa đơn. Bạn có thể xem và tải bản PDF gốc.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDark ? Colors.white70 : const Color(0xFF093021),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  if (_invoiceImagePath != null && File(_invoiceImagePath!).existsSync()) ...[
+                    const SizedBox(height: 16),
+                    ScaleOnTap(
+                      onTap: () {
+                        context.pushNamed(
+                          RouteNames.invoicePreview,
+                          pathParameters: {'id': _invoiceId!},
+                        );
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF00D09E), width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.remove_red_eye_rounded, color: Color(0xFF00D09E), size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Xem / Tải Hóa đơn PDF',
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF00D09E).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.link_rounded, color: Color(0xFF00D09E)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: isDark ? Colors.white70 : const Color(0xFF093021),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
@@ -1097,16 +1263,23 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(_invoiceImagePath!),
-                          fit: BoxFit.contain,
-                        ),
+                        child: _invoiceImagePath!.startsWith('http')
+                            ? Image.network(
+                                _invoiceImagePath!,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                              )
+                            : Image.file(
+                                File(_invoiceImagePath!),
+                                fit: BoxFit.contain,
+                              ),
                       ),
                     ),
                   ],
                 ],
               )
-            else if (_selectedImagePath != null && File(_selectedImagePath!).existsSync())
+            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
               Stack(
                 alignment: Alignment.topRight,
                 children: [
@@ -1120,10 +1293,36 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(_selectedImagePath!),
-                        fit: BoxFit.contain,
-                      ),
+                      child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
+                          ? Container(
+                              color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _selectedImagePath!.split(Platform.pathSeparator).last,
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white70 : const Color(0xFF093021),
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : _selectedImagePath!.startsWith('http')
+                              ? Image.network(
+                                  _selectedImagePath!,
+                                  fit: BoxFit.contain,
+                                  loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                  errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                                )
+                              : Image.file(
+                                  File(_selectedImagePath!),
+                                  fit: BoxFit.contain,
+                                ),
                     ),
                   ),
                   Padding(
@@ -1161,13 +1360,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           children: [
                             Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
                             SizedBox(width: 8),
-                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: InkWell(
                       onTap: () => _pickImage(ImageSource.gallery),
@@ -1184,7 +1383,30 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           children: [
                             Icon(Icons.image_rounded, color: Color(0xFF00D09E), size: 20),
                             SizedBox(width: 8),
-                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickFile,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorderColor, width: 1.5),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.attach_file_rounded, color: Color(0xFF00D09E), size: 20),
+                            SizedBox(width: 8),
+                            Text('File', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
@@ -1211,14 +1433,20 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ],
                 ),
                 child: Center(
-                  child: Text(
-                    widget.transactionId == null ? 'Tạo giao dịch' : 'Cập nhật',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF060E0A),
-                    ),
-                  ),
+                  child: _isSaving 
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : const Text(
+                        'Lưu Giao Dịch',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                 ),
               ),
             ),

@@ -20,8 +20,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late TextEditingController _fullNameController;
   late TextEditingController _companyController;
   late TextEditingController _taxCodeController;
+  late TextEditingController _phoneController;
   late TextEditingController _emailController;
   late TextEditingController _roleController;
+  late TextEditingController _addressController;
+  late TextEditingController _bankController;
+  late TextEditingController _bankAccountController;
 
   bool _isLoading = false;
 
@@ -34,8 +38,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _fullNameController = TextEditingController(text: user?.fullName ?? '');
     _companyController = TextEditingController(text: user?.company ?? '');
     _taxCodeController = TextEditingController(text: user?.taxCode ?? '');
+    _phoneController = TextEditingController(text: user?.phone ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
     _roleController = TextEditingController(text: role.nameVi);
+    _addressController = TextEditingController(text: user?.address ?? '');
+    _bankController = TextEditingController(text: user?.bankName ?? '');
+    _bankAccountController = TextEditingController(text: user?.bankAccount ?? '');
   }
 
   @override
@@ -43,8 +51,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _fullNameController.dispose();
     _companyController.dispose();
     _taxCodeController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _roleController.dispose();
+    _addressController.dispose();
+    _bankController.dispose();
+    _bankAccountController.dispose();
     super.dispose();
   }
 
@@ -61,8 +73,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       
       final updatedUser = user.copyWith(
         fullName: _fullNameController.text.trim(),
-        company: _companyController.text.trim(),
-        taxCode: _taxCodeController.text.trim(),
+        // Các trường công ty được giữ nguyên qua copyWith
       );
 
       await authRepo.updateUserInfo(updatedUser);
@@ -93,6 +104,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chỉnh sửa thông tin'),
@@ -106,13 +119,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionTitle('Thông tin không thể thay đổi', Icons.lock_outline),
+              _buildSectionTitle('Thông tin không thể thay đổi', Icons.lock_outline, isDark),
               const SizedBox(height: 16),
               _buildTextField(
                 controller: _emailController,
                 label: 'Email',
                 icon: Icons.email_outlined,
                 enabled: false,
+                isDark: isDark,
               ),
               const SizedBox(height: 16),
               _buildTextField(
@@ -120,37 +134,67 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 label: 'Chức vụ',
                 icon: Icons.badge_outlined,
                 enabled: false,
-              ),
-              
-              const SizedBox(height: 32),
-              _buildSectionTitle('Thông tin có thể thay đổi', Icons.edit_outlined),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _fullNameController,
-                label: 'Họ và tên',
-                icon: Icons.person_outline,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập họ tên';
-                  return null;
-                },
+                isDark: isDark,
               ),
               const SizedBox(height: 16),
               _buildTextField(
                 controller: _companyController,
                 label: 'Tên Doanh nghiệp',
                 icon: Icons.business_outlined,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập tên doanh nghiệp';
-                  return null;
-                },
+                enabled: false,
+                isDark: isDark,
               ),
               const SizedBox(height: 16),
               _buildTextField(
                 controller: _taxCodeController,
                 label: 'Mã số thuế',
                 icon: Icons.receipt_long_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _phoneController,
+                label: 'Số điện thoại',
+                icon: Icons.phone_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _addressController,
+                label: 'Địa chỉ',
+                icon: Icons.location_on_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _bankController,
+                label: 'Ngân hàng',
+                icon: Icons.account_balance_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _bankAccountController,
+                label: 'Số tài khoản',
+                icon: Icons.numbers_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              
+              const SizedBox(height: 32),
+              _buildSectionTitle('Thông tin có thể thay đổi', Icons.edit_outlined, isDark),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _fullNameController,
+                label: 'Họ và tên',
+                icon: Icons.person_outline,
+                isDark: isDark,
                 validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập mã số thuế';
+                  if (value == null || value.isEmpty) return 'Vui lòng nhập họ tên';
                   return null;
                 },
               ),
@@ -188,17 +232,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title, IconData icon) {
+  Widget _buildSectionTitle(String title, IconData icon, bool isDark) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: Colors.grey.shade600),
+        Icon(icon, size: 20, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
         const SizedBox(width: 8),
         Text(
           title,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Colors.grey.shade700,
+            color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
             letterSpacing: 0.5,
           ),
         ),
@@ -211,28 +255,38 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     required String label,
     required IconData icon,
     bool enabled = true,
+    required bool isDark,
     String? Function(String?)? validator,
   }) {
+    final borderColor = isDark ? const Color(0xFF1E3A2F) : Colors.grey.shade300;
+    
     return TextFormField(
       controller: controller,
       enabled: enabled,
       validator: validator,
       style: TextStyle(
-        color: enabled ? null : Colors.grey.shade600,
+        color: enabled ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.grey.shade500 : Colors.grey.shade600),
       ),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: enabled ? null : Colors.grey.shade400),
+        labelStyle: TextStyle(
+          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+        ),
+        prefixIcon: Icon(icon, color: enabled ? (isDark ? Colors.grey.shade300 : Colors.grey.shade600) : Colors.grey.shade500),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: borderColor),
         ),
         filled: !enabled,
-        fillColor: enabled ? Colors.transparent : Colors.grey.shade100,
+        fillColor: enabled ? Colors.transparent : (isDark ? const Color(0xFF0D251C) : Colors.grey.shade100),
       ),
     );
   }

@@ -153,6 +153,7 @@ class ReportDetailScreen extends ConsumerWidget {
           final allCats = snapshot.data![1] as List<CategoryEntity>;
           
           final categoryMap = {for (var c in allCats) c.id: c.name};
+          final categoryIconMap = {for (var c in allCats) c.name: c.iconCode};
 
           final list = allTxs
               .where((tx) =>
@@ -310,10 +311,20 @@ class ReportDetailScreen extends ConsumerWidget {
                           color: itemColor.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                          color: itemColor,
-                          size: 18,
+                        child: Builder(
+                          builder: (context) {
+                            IconData catIcon = isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+                            final iconCode = categoryIconMap[catName];
+                            if (iconCode != null && iconCode.isNotEmpty) {
+                              final code = int.tryParse(iconCode);
+                              if (code != null) catIcon = IconData(code, fontFamily: 'MaterialIcons');
+                            }
+                            return Icon(
+                              catIcon,
+                              color: itemColor,
+                              size: 18,
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 14),

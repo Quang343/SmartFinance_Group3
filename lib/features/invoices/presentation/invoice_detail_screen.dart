@@ -6,11 +6,25 @@ import 'package:intl/intl.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:gal/gal.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
+
+Color _parseColor(String? hexString) {
+  if (hexString == null || hexString.isEmpty) return Colors.grey;
+  try {
+    final buffer = StringBuffer();
+    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+    buffer.write(hexString.replaceFirst('#', ''));
+    return Color(int.parse(buffer.toString(), radix: 16));
+  } catch (e) {
+    return Colors.grey;
+  }
+}
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
@@ -40,15 +54,64 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     }
   }
 
+  Widget _buildSection({
+    required String title,
+    required List<Widget> children,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0D251C) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: isDark ? Colors.white : const Color(0xFF093021),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Divider(
+            color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+          ),
+          const SizedBox(height: 8),
+          ...children,
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(
       locale: 'vi_VN',
-      symbol: '₫',
+      symbol: 'đ',
       decimalDigits: 0,
     );
     final dateFormatter = DateFormat('dd/MM/yyyy HH:mm');
+
+    String formatQuantity(double q) {
+      return q == q.toInt() ? q.toInt().toString() : q.toString().replaceAll('.', ',');
+    }
+
     final invoiceRepository = ref.watch(invoiceRepositoryProvider);
     return FutureBuilder(
       future: invoiceRepository.getById(widget.invoiceId),
@@ -235,47 +298,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            invoice.paymentStatus ==
-                                                PaymentStatus.paid
-                                            ? const Color(
-                                                0xFF00D09E,
-                                              ).withValues(alpha: 0.1)
-                                            : const Color(
-                                                0xFFEF4444,
-                                              ).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color:
-                                              invoice.paymentStatus ==
-                                                  PaymentStatus.paid
-                                              ? const Color(0xFF00D09E)
-                                              : const Color(0xFFEF4444),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        invoice.paymentStatus ==
-                                                PaymentStatus.paid
-                                            ? 'ĐÃ THANH TOÁN'
-                                            : 'CHƯA THANH TOÁN',
-                                        style: TextStyle(
-                                          color:
-                                              invoice.paymentStatus ==
-                                                  PaymentStatus.paid
-                                              ? const Color(0xFF00D09E)
-                                              : const Color(0xFFEF4444),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
+
                                     const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -335,122 +358,157 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                           const SizedBox(height: 20),
 
                           // Detail Fields Card
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? const Color(0xFF0D251C)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
+                          _buildSection(
+                            title: 'Thông tin đơn vị bán',
+                            isDark: isDark,
+                            children: [
+                              _DetailRow(label: 'Tên đơn vị bán', value: invoice.sellerName),
+                              _DetailRow(label: 'Mã số thuế', value: invoice.sellerTaxCode),
+                              if (invoice.sellerAddress != null && invoice.sellerAddress!.isNotEmpty)
+                                _DetailRow(label: 'Địa chỉ', value: invoice.sellerAddress!),
+                              if (invoice.sellerPhone != null && invoice.sellerPhone!.isNotEmpty)
+                                _DetailRow(label: 'Số điện thoại', value: invoice.sellerPhone!),
+                              if (invoice.sellerBankName != null && invoice.sellerBankName!.isNotEmpty)
+                                _DetailRow(label: 'Ngân hàng', value: '${invoice.sellerBankName} - ${invoice.sellerBankAccount ?? ""}'),
+                            ],
+                          ),
+                          _buildSection(
+                            title: 'Thông tin người mua',
+                            isDark: isDark,
+                            children: [
+                              if (invoice.buyerContactName != null && invoice.buyerContactName!.isNotEmpty)
+                                _DetailRow(label: 'Họ tên người mua', value: invoice.buyerContactName!),
+                              _DetailRow(label: 'Tên đơn vị', value: invoice.buyerName),
+                              _DetailRow(label: 'Mã số thuế', value: invoice.buyerTaxCode),
+                              if (invoice.buyerAddress != null && invoice.buyerAddress!.isNotEmpty)
+                                _DetailRow(label: 'Địa chỉ', value: invoice.buyerAddress!),
+                            ],
+                          ),
+                          _buildSection(
+                            title: 'Chi tiết thanh toán',
+                            isDark: isDark,
+                            children: [
+                              _DetailRow(label: 'Ngày phát hành', value: dateFormatter.format(invoice.issuedDate)),
+                              _DetailRow(label: 'Hình thức thanh toán', value: invoice.paymentMethod ?? 'TM/CK'),
+                              _DetailRow(label: 'Tiền trước thuế', value: currencyFormatter.format(invoice.subtotal)),
+                              _DetailRow(label: 'Thuế suất VAT', value: '${invoice.vatRate}%'),
+                              _DetailRow(label: 'Tiền thuế VAT', value: currencyFormatter.format(invoice.vatAmount)),
+                              if (invoice.ocrConfidence != null && invoice.type == InvoiceType.incoming)
+                                _DetailRow(label: 'Độ tin cậy OCR', value: '${(invoice.ocrConfidence! * 100).toStringAsFixed(1)}%'),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          
+                          if (invoice.items.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
                                 color: isDark
-                                    ? const Color(0xFF1E3A2F)
-                                    : const Color(0xFFE2E8F0),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: isDark
-                                      ? Colors.black.withOpacity(0.2)
-                                      : Colors.black.withOpacity(0.04),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Thông tin chung',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF093021),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Divider(
+                                    ? const Color(0xFF0D251C)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
                                   color: isDark
                                       ? const Color(0xFF1E3A2F)
                                       : const Color(0xFFE2E8F0),
                                 ),
-                                const SizedBox(height: 8),
-                                _DetailRow(
-                                  label: 'Đối tác',
-                                  value: invoice.partnerName,
-                                ),
-                                _DetailRow(
-                                  label: 'Mã số thuế đối tác',
-                                  value: invoice.partnerTaxCode,
-                                ),
-                                _DetailRow(
-                                  label: 'Ngày phát hành',
-                                  value: dateFormatter.format(
-                                    invoice.issuedDate,
-                                  ),
-                                ),
-                                _DetailRow(
-                                  label: 'Tiền trước thuế',
-                                  value: currencyFormatter.format(
-                                    invoice.subtotal,
-                                  ),
-                                ),
-                                _DetailRow(
-                                  label: 'Thuế suất VAT',
-                                  value: '${invoice.vatRate}%',
-                                ),
-                                _DetailRow(
-                                  label: 'Tiền thuế VAT',
-                                  value: currencyFormatter.format(
-                                    invoice.vatAmount,
-                                  ),
-                                ),
-                                if (invoice.ocrConfidence != null)
-                                  _DetailRow(
-                                    label: 'Độ tin cậy OCR',
-                                    value:
-                                        '${(invoice.ocrConfidence! * 100).toStringAsFixed(1)}%',
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          if (hasTransaction) ...[
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? const Color(0xFF0D251C)
-                                    : const Color(0xFFF0FDF4),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: const Color(0xFF00D09E),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.check_circle_rounded,
-                                    color: Color(0xFF00D09E),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Đã thanh toán',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF00D09E),
-                                    ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: isDark
+                                        ? Colors.black.withOpacity(0.2)
+                                        : Colors.black.withOpacity(0.04),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Danh sách dịch vụ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF093021),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Divider(
+                                    color: isDark
+                                        ? const Color(0xFF1E3A2F)
+                                        : const Color(0xFFE2E8F0),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ...invoice.items.map((item) {
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF153326) : const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  item.itemName,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isDark
+                                                        ? Colors.white
+                                                        : const Color(0xFF093021),
+                                                  ),
+                                                ),
+                                              ),
+                                              Text(
+                                                currencyFormatter.format(item.totalAmount),
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : const Color(0xFF093021),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'SL: ${formatQuantity(item.quantity)} ${item.unit} x ${currencyFormatter.format(item.unitPrice)}',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: isDark
+                                                      ? Colors.white54
+                                                      : Colors.black54,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 20),
+                          ],
+
+                          if (hasTransaction) ...[
                             Row(
                               children: [
                                 Expanded(
@@ -543,9 +601,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(20),
-                                child:
-                                    invoice.imagePath == 'mock_path_ocr.png' ||
-                                        !File(invoice.imagePath!).existsSync()
+                                child: invoice.imagePath == 'mock_path_ocr.png'
                                     ? const Padding(
                                         padding: EdgeInsets.all(40.0),
                                         child: Center(
@@ -556,10 +612,33 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                           ),
                                         ),
                                       )
-                                    : Image.file(
-                                        File(invoice.imagePath!),
-                                        fit: BoxFit.contain,
-                                      ),
+                                    : invoice.imagePath!.startsWith('http')
+                                        ? Image.network(
+                                            invoice.imagePath!,
+                                            fit: BoxFit.contain,
+                                            loadingBuilder: (context, child, progress) {
+                                              if (progress == null) return child;
+                                              return const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E)));
+                                            },
+                                            errorBuilder: (context, error, stackTrace) => const Center(
+                                              child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey),
+                                            ),
+                                          )
+                                        : (File(invoice.imagePath!).existsSync()
+                                            ? Image.file(
+                                                File(invoice.imagePath!),
+                                                fit: BoxFit.contain,
+                                              )
+                                            : const Padding(
+                                                padding: EdgeInsets.all(40.0),
+                                                child: Center(
+                                                  child: Icon(
+                                                    Icons.broken_image_rounded,
+                                                    size: 64,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              )),
                               ),
                             ),
                           ],
@@ -631,7 +710,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
   Future<void> _shareScreenshot(BuildContext context) async {
     try {
-      final imageBytes = await _screenshotController.capture();
+      final imageBytes = await _screenshotController.capture(pixelRatio: 2.0, delay: const Duration(milliseconds: 100));
       if (imageBytes != null) {
         final directory = await getTemporaryDirectory();
         final imagePath = await File('${directory.path}/hoadon.png').create();
@@ -654,27 +733,53 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
   Future<void> _saveScreenshot(BuildContext context) async {
     try {
-      final imageBytes = await _screenshotController.capture();
+      final imageBytes = await _screenshotController.capture(pixelRatio: 2.0, delay: const Duration(milliseconds: 100));
       if (imageBytes != null) {
         Directory? directory;
         if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
           directory = await getDownloadsDirectory();
-        } else {
-          directory = await getApplicationDocumentsDirectory();
-        }
+          if (directory != null) {
+            final file = File(
+              '${directory.path}/hoadon_${DateTime.now().millisecondsSinceEpoch}.png',
+            );
+            await file.writeAsBytes(imageBytes);
 
-        if (directory != null) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Đã lưu ảnh tại:\n${file.path}'),
+                  backgroundColor: const Color(0xFF10B981),
+                  duration: const Duration(seconds: 5),
+                  action: SnackBarAction(
+                    label: 'Mở ngay',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      OpenFilex.open(file.path);
+                    },
+                  ),
+                ),
+              );
+            }
+          }
+        } else {
+          directory = await getTemporaryDirectory();
           final file = File(
             '${directory.path}/hoadon_${DateTime.now().millisecondsSinceEpoch}.png',
           );
           await file.writeAsBytes(imageBytes);
-
+          
+          final hasAccess = await Gal.hasAccess();
+          if (!hasAccess) {
+            await Gal.requestAccess();
+          }
+          await Gal.putImage(file.path);
+          
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Đã lưu ảnh tại:\n${file.path}'),
-                backgroundColor: const Color(0xFF10B981),
-                duration: const Duration(seconds: 4),
+              const SnackBar(
+                content: Text('Đã lưu ảnh vào thư viện trên điện thoại!'),
+                backgroundColor: Color(0xFF10B981),
+                duration: Duration(seconds: 3),
               ),
             );
           }

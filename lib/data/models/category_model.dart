@@ -10,6 +10,8 @@ class CategoryModel extends CategoryEntity {
     required super.isDefault,
     required super.isActive,
     super.orderIndex,
+    super.createdByUid,
+    super.company,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -24,6 +26,8 @@ class CategoryModel extends CategoryEntity {
       isDefault: json['isDefault'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       orderIndex: json['orderIndex'] as int? ?? 0,
+      createdByUid: json['createdByUid'] as String? ?? '',
+      company: json['company'] as String? ?? '',
       createdAt: json['createdAt'] != null 
           ? DateTime.parse(json['createdAt'] as String) 
           : DateTime.now(),
@@ -43,6 +47,8 @@ class CategoryModel extends CategoryEntity {
       'isDefault': isDefault,
       'isActive': isActive,
       'orderIndex': orderIndex,
+      'createdByUid': createdByUid,
+      'company': company,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };

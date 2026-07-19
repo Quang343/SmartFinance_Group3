@@ -4,40 +4,51 @@ import '../../domain/entities/category_entity.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../domain/repositories/category_repository.dart';
 import '../models/category_model.dart';
+import '../models/user_model.dart';
 
 class CategoryRepositoryImpl implements CategoryRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final UserModel? _currentUser;
 
-  CategoryRepositoryImpl(this._firestore, this._auth);
+  CategoryRepositoryImpl(this._firestore, this._auth, this._currentUser);
 
-  String get _userId => _auth.currentUser?.uid ?? '';
-  CollectionReference get _collection => _firestore.collection('users').doc(_userId).collection('categories');
+  String get _uid => _currentUser?.id ?? _auth.currentUser?.uid ?? '';
+  String get _company => _currentUser?.company ?? '';
+  String get _role => _currentUser?.role ?? '';
+  CollectionReference get _collection => _firestore.collection('categories');
+
+  Query _scopeQuery(Query query) {
+    if (_role == 'financeManager') {
+      return query.where('company', isEqualTo: _company);
+    }
+    return query.where('createdByUid', isEqualTo: _uid);
+  }
 
   @override
   Future<List<CategoryEntity>> getAll() async {
-    if (_userId.isEmpty) return [];
-    final snapshot = await _collection.get();
+    if (_uid.isEmpty) return [];
+    final snapshot = await _scopeQuery(_collection).get();
     return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<List<CategoryEntity>> getActive() async {
-    if (_userId.isEmpty) return [];
-    final snapshot = await _collection.where('isActive', isEqualTo: true).get();
+    if (_uid.isEmpty) return [];
+    final snapshot = await _scopeQuery(_collection).where('isActive', isEqualTo: true).get();
     return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<List<CategoryEntity>> getByType(TransactionType type) async {
-    if (_userId.isEmpty) return [];
-    final snapshot = await _collection.where('type', isEqualTo: type.name).where('isActive', isEqualTo: true).get();
+    if (_uid.isEmpty) return [];
+    final snapshot = await _scopeQuery(_collection).where('type', isEqualTo: type.name).where('isActive', isEqualTo: true).get();
     return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<CategoryEntity?> getById(String id) async {
-    if (_userId.isEmpty) return null;
+    if (_uid.isEmpty) return null;
     final doc = await _collection.doc(id).get();
     if (doc.exists) {
       return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
@@ -47,7 +58,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
   @override
   Future<void> create(CategoryEntity category) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     final model = CategoryModel(
       id: category.id,
       name: category.name,
@@ -57,6 +68,8 @@ class CategoryRepositoryImpl implements CategoryRepository {
       isDefault: category.isDefault,
       isActive: category.isActive,
       orderIndex: category.orderIndex,
+      createdByUid: _uid,
+      company: _company,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     );
@@ -65,7 +78,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
   @override
   Future<void> update(CategoryEntity category) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     final model = CategoryModel(
       id: category.id,
       name: category.name,
@@ -75,6 +88,8 @@ class CategoryRepositoryImpl implements CategoryRepository {
       isDefault: category.isDefault,
       isActive: category.isActive,
       orderIndex: category.orderIndex,
+      createdByUid: category.createdByUid.isNotEmpty ? category.createdByUid : _uid,
+      company: category.company.isNotEmpty ? category.company : _company,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     );
@@ -83,7 +98,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
   @override
   Future<void> deactivate(String id) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     await _collection.doc(id).update({
       'isActive': false,
       'updatedAt': DateTime.now().toIso8601String(),
@@ -92,7 +107,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
   @override
   Future<void> delete(String id) async {
-    if (_userId.isEmpty) return;
+    if (_uid.isEmpty) return;
     await _collection.doc(id).delete();
   }
 }

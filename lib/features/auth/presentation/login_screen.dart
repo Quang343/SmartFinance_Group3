@@ -119,6 +119,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final size = MediaQuery.of(context).size;
     final primaryColor = theme.colorScheme.primary;
     final isDark = theme.brightness == Brightness.dark;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     // Design-matched colors
     final Color topBgColor = primaryColor;
@@ -198,62 +199,90 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   // Top Header (Animated Logo and Welcome text)
                   Container(
-                    height: size.height * 0.3,
+                    height: isLandscape ? 60 : size.height * 0.3,
                     width: double.infinity,
                     alignment: Alignment.center,
                     child: SafeArea(
                       bottom: false,
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 1000),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, value, child) {
-                          return Transform.translate(
-                            offset: Offset(0, 40 * (1 - value)),
-                            child: Opacity(
-                              opacity: value,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // Financial Logo
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: textColorDark.withOpacity(0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.auto_graph_rounded,
-                                      size: 56,
-                                      color: textColorDark,
+                      child: isLandscape
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.auto_graph_rounded,
+                                  size: 20,
+                                  color: textColorDark,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'FinSmart',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: textColorDark,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '•  Đăng nhập để tiếp tục',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: textColorDark.withOpacity(0.8),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0.0, end: 1.0),
+                              duration: const Duration(milliseconds: 1000),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, value, child) {
+                                return Transform.translate(
+                                  offset: Offset(0, 40 * (1 - value)),
+                                  child: Opacity(
+                                    opacity: value,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        // Financial Logo
+                                        Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: textColorDark.withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.auto_graph_rounded,
+                                            size: 56,
+                                            color: textColorDark,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        // App Name
+                                        Text(
+                                          'FinSmart',
+                                          style: theme.textTheme.headlineLarge?.copyWith(
+                                            color: textColorDark,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 32,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Subtitle
+                                        Text(
+                                          'Đăng nhập để tiếp tục',
+                                          style: theme.textTheme.titleMedium?.copyWith(
+                                            color: textColorDark.withOpacity(0.8),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
-                                  // App Name
-                                  Text(
-                                    'FinSmart',
-                                    style: theme.textTheme.headlineLarge?.copyWith(
-                                      color: textColorDark,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 32,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  // Subtitle
-                                  Text(
-                                    'Đăng nhập để tiếp tục',
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      color: textColorDark.withOpacity(0.8),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ),
 

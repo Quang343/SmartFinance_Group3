@@ -10,8 +10,11 @@ class TransactionEntity {
   final String? note;
   final TransactionStatus status;
   final String? invoiceId;
+  final String createdByUid;
+  final String company;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<String> tags;
 
   const TransactionEntity({
     required this.id,
@@ -24,5 +27,8 @@ class TransactionEntity {
     required this.updatedAt,
     this.note,
     this.invoiceId,
+    this.createdByUid = '',
+    this.company = '',
+    this.tags = const [],
   });
 }

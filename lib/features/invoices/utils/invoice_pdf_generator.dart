@@ -77,13 +77,20 @@ class InvoicePdfGenerator {
               pw.SizedBox(height: 30),
 
               // Customer Info
+              if (invoice.buyerContactName != null && invoice.buyerContactName!.isNotEmpty) ...[
+                pw.Text(
+                  'Họ tên người mua hàng: ${invoice.buyerContactName}',
+                  style: pw.TextStyle(font: fontRegular, fontSize: 12),
+                ),
+                pw.SizedBox(height: 4),
+              ],
               pw.Text(
-                'Đơn vị mua hàng: ${invoice.partnerName}',
+                'Tên đơn vị: ${invoice.buyerName}',
                 style: pw.TextStyle(font: fontBold, fontSize: 14),
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                'Mã số thuế: ${invoice.partnerTaxCode}',
+                'Mã số thuế: ${invoice.buyerTaxCode}',
                 style: pw.TextStyle(font: fontRegular, fontSize: 12),
               ),
               pw.SizedBox(height: 4),
@@ -119,27 +126,32 @@ class InvoicePdfGenerator {
                       ),
                     ],
                   ),
-                  // Single Item Row
-                  pw.TableRow(
-                    children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('1', style: pw.TextStyle(font: fontRegular, fontSize: 12), textAlign: pw.TextAlign.center),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('Dịch vụ phần mềm SmartFinance SaaS', style: pw.TextStyle(font: fontRegular, fontSize: 12)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text('1', style: pw.TextStyle(font: fontRegular, fontSize: 12), textAlign: pw.TextAlign.center),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text(currencyFormatter.format(invoice.subtotal), style: pw.TextStyle(font: fontRegular, fontSize: 12), textAlign: pw.TextAlign.right),
-                      ),
-                    ],
-                  ),
+                  // Dynamic Items Rows
+                  ...invoice.items.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    final itemName = item.itemName;
+                    return pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text('${index + 1}', style: pw.TextStyle(font: fontRegular, fontSize: 12), textAlign: pw.TextAlign.center),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text(itemName, style: pw.TextStyle(font: fontRegular, fontSize: 12)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text('${item.quantity.toInt()} ${item.unit}', style: pw.TextStyle(font: fontRegular, fontSize: 12), textAlign: pw.TextAlign.center),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Text(currencyFormatter.format(item.totalAmount), style: pw.TextStyle(font: fontRegular, fontSize: 12), textAlign: pw.TextAlign.right),
+                        ),
+                      ],
+                    );
+                  }).toList(),
                 ],
               ),
               pw.SizedBox(height: 20),

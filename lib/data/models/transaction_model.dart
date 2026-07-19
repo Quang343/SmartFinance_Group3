@@ -12,6 +12,9 @@ class TransactionModel extends TransactionEntity {
     required super.updatedAt,
     super.note,
     super.invoiceId,
+    super.createdByUid,
+    super.company,
+    super.tags = const [],
   });
 
   factory TransactionModel.fromJson(Map<String, dynamic> json) {
@@ -32,12 +35,17 @@ class TransactionModel extends TransactionEntity {
       ),
       note: json['note'] as String?,
       invoiceId: json['invoiceId'] as String?,
+      createdByUid: json['createdByUid'] as String? ?? '',
+      company: json['company'] as String? ?? '',
       createdAt: json['createdAt'] != null 
           ? DateTime.parse(json['createdAt'] as String) 
           : DateTime.now(),
       updatedAt: json['updatedAt'] != null 
           ? DateTime.parse(json['updatedAt'] as String) 
           : DateTime.now(),
+      tags: json['tags'] != null 
+          ? List<String>.from(json['tags'] as List<dynamic>) 
+          : const [],
     );
   }
 
@@ -51,8 +59,11 @@ class TransactionModel extends TransactionEntity {
       'status': status.name,
       'note': note,
       'invoiceId': invoiceId,
+      'createdByUid': createdByUid,
+      'company': company,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'tags': tags,
     };
   }
 }

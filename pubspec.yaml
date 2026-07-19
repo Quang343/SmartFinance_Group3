@@ -50,7 +50,7 @@ dependencies:
   path_provider: ^2.1.5
   path_provider_foundation: 2.3.2
   screenshot: ^3.0.0
-  share_plus: ^13.2.0
+  share_plus: 12.0.2
   firebase_core: ^4.11.0
   cloud_firestore: ^6.6.0
   firebase_auth: ^6.5.4
@@ -58,6 +58,10 @@ dependencies:
   firebase_storage: ^13.4.3
   http: ^1.6.0
   flutter_dotenv: ^6.0.1
+  gal: ^2.3.2
+  open_filex: ^4.7.0
+  equatable: ^2.1.0
+  file_picker: 11.0.2
 
 dev_dependencies:
   flutter_test:
@@ -89,6 +93,12 @@ flutter:
     - .env
     - .env.example
 
+  fonts:
+    - family: RobotoPdf
+      fonts:
+        - asset: fonts/Roboto-Regular.ttf
+        - asset: fonts/Roboto-Bold.ttf
+          weight: 700
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
