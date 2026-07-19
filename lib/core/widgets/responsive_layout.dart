@@ -32,6 +32,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/transactions', label: 'Dòng tiền', icon: Icons.compare_arrows),
           NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
           NavigationItem(path: '/invoices/outgoing', label: 'HD đầu ra', icon: Icons.receipt_long),
+          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
@@ -43,6 +44,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/categories', label: 'Danh mục chi', icon: Icons.category),
           NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
           NavigationItem(path: '/invoices/capture', label: 'Quét hóa đơn', icon: Icons.qr_code_scanner),
+          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
@@ -54,6 +56,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/categories', label: 'Danh mục thu', icon: Icons.category),
           NavigationItem(path: '/invoices/outgoing', label: 'HD đầu ra', icon: Icons.receipt_long),
           NavigationItem(path: '/invoices/outgoing/new', label: 'Tạo HD', icon: Icons.add_box),
+          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
@@ -92,6 +95,7 @@ class _MobileScaffold extends ConsumerStatefulWidget {
 class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
   DateTime? _lastPressedAt;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  double _horizontalDragDistance = 0.0;
 
   @override
   Widget build(BuildContext context) {
@@ -161,19 +165,26 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
         key: _scaffoldKey,
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) {
+            _horizontalDragDistance = 0.0;
+          },
+          onHorizontalDragUpdate: (details) {
+            _horizontalDragDistance += details.delta.dx;
+          },
           onHorizontalDragEnd: (details) {
             // Chỉ áp dụng vuốt khi đang ở 4 tab chính (0, 1, 2, 3)
             if (selectedIndex < 0 || selectedIndex >= primaryItems.length) return;
 
             final velocity = details.primaryVelocity ?? 0;
-            const threshold = 300.0;
+            const thresholdVelocity = 300.0;
+            const thresholdDistance = 40.0; // Yêu cầu vuốt ít nhất 40px ngang
 
-            if (velocity < -threshold) {
+            if (velocity < -thresholdVelocity && _horizontalDragDistance < -thresholdDistance) {
               // Vuốt sang trái -> Sang tab tiếp theo
               if (selectedIndex < primaryItems.length - 1) {
                 context.go(primaryItems[selectedIndex + 1].path);
               }
-            } else if (velocity > threshold) {
+            } else if (velocity > thresholdVelocity && _horizontalDragDistance > thresholdDistance) {
               // Vuốt sang phải -> Sang tab trước đó
               if (selectedIndex > 0) {
                 context.go(primaryItems[selectedIndex - 1].path);

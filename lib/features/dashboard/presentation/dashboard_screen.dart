@@ -13,6 +13,7 @@ import '../../../data/models/user_model.dart';
 import '../../../core/providers/transaction_providers.dart';
 import '../../../core/providers/category_providers.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/services/offline_sync_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -24,6 +25,18 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   // Filter state: 'daily' | 'weekly' | 'monthly'
   String _timeFilter = 'monthly';
+
+  @override
+  void initState() {
+    super.initState();
+    // Kích hoạt đồng bộ ngoại tuyến (Background Sync) cho ảnh hóa đơn bị kẹt
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        ref.read(offlineSyncServiceProvider).syncOfflineImages(user.company);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
