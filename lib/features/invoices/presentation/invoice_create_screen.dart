@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
+import 'package:smart_finance/domain/entities/partner_entity.dart';
 import 'package:smart_finance/domain/entities/invoice_item_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
@@ -87,6 +88,8 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   int get _totalAmount => _subtotal + _vatAmount;
 
   bool _isSaving = false;
+  bool _saveToPartner = false;
+
 
   @override
   void initState() {
@@ -160,9 +163,16 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         
         if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) {
           if (!widget.scannedImagePath!.startsWith('http')) {
-             final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
-             if (uploadedUrl != null) {
-               finalImagePath = uploadedUrl;
+             try {
+               final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
+               if (uploadedUrl != null) {
+                 finalImagePath = uploadedUrl;
+               } else {
+                 finalImagePath = widget.scannedImagePath;
+               }
+             } catch (e) {
+               debugPrint('Lỗi upload ảnh (Có thể do đang Offline): $e');
+               finalImagePath = widget.scannedImagePath; // Lưu tạm đường dẫn local
              }
           } else {
              finalImagePath = widget.scannedImagePath;
@@ -215,6 +225,33 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
 
         await repo.create(newInvoice);
 
+        if (_saveToPartner) {
+          final partnerRepo = ref.read(partnerRepositoryProvider);
+          final user = ref.read(currentUserProvider);
+          if (user != null) {
+            final isOutgoing = widget.invoiceType == InvoiceType.outgoing;
+            final partner = PartnerEntity(
+              id: const Uuid().v4(),
+              name: isOutgoing ? _partnerNameController.text : _sellerNameController.text,
+              taxCode: isOutgoing ? _partnerTaxCodeController.text : _sellerTaxCodeController.text,
+              address: isOutgoing ? _partnerAddressController.text : _sellerAddressController.text,
+              phone: isOutgoing ? '' : _sellerPhoneController.text,
+              bankName: isOutgoing ? _bankNameController.text : _sellerBankNameController.text,
+              bankAccount: isOutgoing ? _bankAccountController.text : _sellerBankAccountController.text,
+              createdByUid: user.id,
+              company: user.company,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+            try {
+               await partnerRepo.createPartner(partner);
+            } catch(e) {
+               debugPrint('Error saving partner: $e');
+            }
+          }
+        }
+
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -243,6 +280,100 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       }
     }
   }
+
+  void _showPartnerSelectionDialog(bool isBuyer) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primaryColor = const Color(0xFF00D09E);
+            final partnersAsync = ref.watch(partnerStreamProvider);
+
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF060E0A) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Chọn đối tác từ danh bạ',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                  Expanded(
+                    child: partnersAsync.when(
+                      data: (partners) {
+                        if (partners.isEmpty) {
+                          return const Center(child: Text('Danh bạ trống', style: TextStyle(color: Colors.grey)));
+                        }
+                        return ListView.builder(
+                          controller: scrollController,
+                          itemCount: partners.length,
+                          itemBuilder: (context, index) {
+                            final p = partners[index];
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: primaryColor.withOpacity(0.1),
+                                child: Icon(Icons.business, color: primaryColor),
+                              ),
+                              title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('MST: ${p.taxCode}'),
+                              onTap: () {
+                                setState(() {
+                                  if (isBuyer) {
+                                    _partnerNameController.text = p.name;
+                                    _partnerTaxCodeController.text = p.taxCode;
+                                    _partnerAddressController.text = p.address ?? '';
+                                    _bankNameController.text = p.bankName ?? '';
+                                    _bankAccountController.text = p.bankAccount ?? '';
+                                  } else {
+                                    _sellerNameController.text = p.name;
+                                    _sellerTaxCodeController.text = p.taxCode;
+                                    _sellerAddressController.text = p.address ?? '';
+                                    _sellerPhoneController.text = p.phone ?? '';
+                                    _sellerBankNameController.text = p.bankName ?? '';
+                                    _sellerBankAccountController.text = p.bankAccount ?? '';
+                                  }
+                                  _saveToPartner = false; // Đã chọn từ danh bạ thì không cần lưu mới
+                                });
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        );
+                      },
+                      loading: () => Center(child: CircularProgressIndicator(color: primaryColor)),
+                      error: (err, stack) => Center(child: Text('Lỗi: $err')),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _addSampleData(String type) {
     setState(() {
       if (widget.invoiceType == InvoiceType.outgoing) {
@@ -441,16 +572,37 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('THÔNG TIN ĐƠN VỊ BÁN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('THÔNG TIN ĐƠN VỊ BÁN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                        TextButton.icon(
+                          onPressed: () => _showPartnerSelectionDialog(false),
+                          icon: const Icon(Icons.contacts, size: 16),
+                          label: const Text('Chọn từ danh bạ', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     ..._buildSellerFields(isDark, primaryColor, inputFillColor, inputBorderColor),
                   ],
                 ),
             const SizedBox(height: 24),
 
             // Thông tin Khách hàng
-            const Text('THÔNG TIN NGƯỜI MUA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('THÔNG TIN NGƯỜI MUA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                if (widget.invoiceType == InvoiceType.outgoing)
+                  TextButton.icon(
+                    onPressed: () => _showPartnerSelectionDialog(true),
+                    icon: const Icon(Icons.contacts, size: 16),
+                    label: const Text('Chọn từ danh bạ', style: TextStyle(fontSize: 13)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
             TextFormField(
               controller: _partnerContactNameController,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
@@ -479,6 +631,18 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Địa chỉ', Icons.location_on_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
+            const SizedBox(height: 12),
+            if (widget.invoiceType == InvoiceType.outgoing)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text('Lưu đối tác này vào danh bạ', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14)),
+                value: _saveToPartner,
+                activeColor: primaryColor,
+                onChanged: (val) {
+                  if (val != null) setState(() => _saveToPartner = val);
+                },
+              ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _paymentMethod,
@@ -778,6 +942,18 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           ),
         ],
       ),
+      const SizedBox(height: 12),
+      if (widget.invoiceType == InvoiceType.incoming)
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text('Lưu nhà cung cấp này vào danh bạ', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14)),
+          value: _saveToPartner,
+          activeColor: primaryColor,
+          onChanged: (val) {
+            if (val != null) setState(() => _saveToPartner = val);
+          },
+        ),
     ];
   }
 
