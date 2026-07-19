@@ -70,6 +70,10 @@ void main() {
           role: 'admin',
           company: 'Công ty Test',
           taxCode: '123456',
+          phone: '0909123456',
+          address: 'Tầng 3, Tòa nhà FPT, Khu Công nghệ cao Hòa Lạc',
+          bankName: 'Vietcombank',
+          bankAccount: '1010101010',
         ),
       );
 

@@ -784,30 +784,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     final cat = catMap[tx.categoryId];
                     final catName = cat?.name ?? 'Khác';
 
-                    // Custom styling map for categories to make it extremely clean and professional
-                    IconData leadingIcon = Icons.category_rounded;
+                    IconData leadingIcon = cat?.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+                    if (cat?.iconCode != null && cat!.iconCode!.isNotEmpty) {
+                      final code = int.tryParse(cat.iconCode!);
+                      if (code != null) leadingIcon = IconData(code, fontFamily: 'MaterialIcons');
+                    }
                     Color iconColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isIncome ? Colors.blue : Colors.red);
                     Color iconBgColor = iconColor.withOpacity(0.15);
-                    
-                    if (catName.contains('Lương')) {
-                      leadingIcon = Icons.account_balance_wallet_rounded;
-                    } else if (catName.contains('Mặt bằng') ||
-                        catName.contains('Điện nước')) {
-                      leadingIcon = Icons.home_work_rounded;
-                    } else if (catName.contains('bán hàng') ||
-                        catName.contains('dịch vụ')) {
-                      leadingIcon = Icons.storefront_rounded;
-                    } else if (catName.contains('Mua hàng') ||
-                        catName.contains('Vận hành')) {
-                      leadingIcon = Icons.shopping_bag_rounded;
-                    } else if (catName.contains('Marketing')) {
-                      leadingIcon = Icons.campaign_rounded;
-                    }
 
                     return ScaleOnTap(
                       onTap: () {
                         if (currentRole.canEditTransactions) {
-                          context.go(
+                          context.push(
                             '/transactions/form',
                             extra: {'transactionId': tx.id},
                           );
@@ -865,12 +853,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    '${timeFormatter.format(tx.transactionDate)} - ${dateFormatter.format(tx.transactionDate)} | $catName',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                    ),
+                                  Wrap(
+                                    spacing: 8,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        '${timeFormatter.format(tx.transactionDate)} - ${dateFormatter.format(tx.transactionDate)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: iconBgColor,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          catName,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: iconColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -953,7 +962,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Quét hóa đơn OCR',
           subtitle: 'Nhập tự động',
           color: const Color(0xFF00D09E),
-          onTap: () => context.go('/invoices/capture'),
+          onTap: () => context.push('/invoices/capture'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -964,7 +973,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Ghi nhận chi phí',
           subtitle: 'Nhập thủ công',
           color: Colors.redAccent,
-          onTap: () => context.go('/transactions/form'),
+          onTap: () => context.push('/transactions/form'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -978,7 +987,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Tạo hóa đơn đầu ra',
           subtitle: 'Xuất PDF nhanh',
           color: const Color(0xFF00D09E),
-          onTap: () => context.go('/invoices/outgoing/new'),
+          onTap: () => context.push('/invoices/outgoing/new'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,
@@ -989,7 +998,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           title: 'Ghi nhận doanh thu',
           subtitle: 'Nhập thủ công',
           color: Colors.blueAccent,
-          onTap: () => context.go('/transactions/form'),
+          onTap: () => context.push('/transactions/form'),
           cardBgColor: cardBgColor,
           borderColor: borderColor,
           textColor: textColor,

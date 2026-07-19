@@ -367,7 +367,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
                 );
+              if (Navigator.canPop(context)) {
+                context.pop();
+              } else {
                 context.go('/transactions');
+              }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -438,7 +442,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     if (id.isEmpty) return Icons.category_rounded;
     try {
       final cat = _categories.firstWhere((c) => c.id == id);
-      // Since icons aren't stored natively, use a generic icon based on type
+      if (cat.iconCode != null && cat.iconCode!.isNotEmpty) {
+        final code = int.tryParse(cat.iconCode!);
+        if (code != null) return IconData(code, fontFamily: 'MaterialIcons');
+      }
       return cat.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
     } catch (_) {
       return Icons.category_rounded;
@@ -538,6 +545,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         itemBuilder: (context, index) {
                           final cat = categories[index];
                           final isSelected = _categoryId == cat.id;
+                          final catColor = cat.colorHex != null 
+                              ? Color(int.parse(cat.colorHex!.replaceFirst('#', '0xFF'))) 
+                              : const Color(0xFF00D09E);
+                              
                           return InkWell(
                             onTap: () {
                               setState(() => _categoryId = cat.id);
@@ -548,20 +559,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               decoration: BoxDecoration(
                                 color: isSelected 
-                                    ? const Color(0x1500D09E) 
+                                    ? catColor.withOpacity(0.1) 
                                     : inputFillColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF00D09E) : inputBorderColor,
+                                  color: isSelected ? catColor : inputBorderColor,
                                   width: 1.5,
                                 ),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    _getCategoryIcon(cat.id),
-                                    color: isSelected ? const Color(0xFF00D09E) : (isDark ? Colors.white60 : Colors.black54),
-                                    size: 22,
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: catColor.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _getCategoryIcon(cat.id),
+                                      color: catColor,
+                                      size: 18,
+                                    ),
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
@@ -571,13 +589,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                                         fontSize: 15,
                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                         color: isSelected 
-                                            ? const Color(0xFF00D09E) 
+                                            ? catColor 
                                             : (isDark ? Colors.white : Colors.black87),
                                       ),
                                     ),
                                   ),
                                   if (isSelected)
-                                    const Icon(Icons.check_rounded, color: Color(0xFF00D09E), size: 20),
+                                    Icon(Icons.check_rounded, color: catColor, size: 20),
                                 ],
                               ),
                             ),

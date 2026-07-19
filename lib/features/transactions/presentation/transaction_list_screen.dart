@@ -23,6 +23,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   String _selectedStatus = 'confirmed'; // 'all', 'confirmed', 'draft'
+  String _selectedCategory = 'all'; 
   DateTimeRange? _customDateRange;
   int _displayLimit = 15;
 
@@ -151,6 +152,40 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             color: isSelected
                 ? Colors.white
                 : (isDark ? const Color(0xFF00D09E) : Colors.black54),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(String id, String label, bool isDark, Color baseColor) {
+    final isSelected = _selectedCategory == id;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedCategory = id;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? baseColor
+              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? baseColor : Colors.transparent,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? baseColor : Colors.black54),
           ),
         ),
       ),
@@ -370,6 +405,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           } else if (_selectedStatus == 'draft') {
             list = list
                 .where((tx) => tx.status == TransactionStatus.draft)
+                .toList();
+          }
+
+          // Filter by category
+          if (_selectedCategory != 'all') {
+            list = list
+                .where((tx) => tx.categoryId == _selectedCategory)
                 .toList();
           }
 
@@ -945,6 +987,44 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
               const SizedBox(height: 8),
 
+              // Category Filter
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Text(
+                      'Danh mục: ',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildCategoryChip('all', 'Tất cả', isDark, primaryColor),
+                            ...allCats.map((cat) {
+                              final catColor = cat.colorHex != null 
+                                  ? Color(int.parse(cat.colorHex!.replaceFirst('#', '0xFF'))) 
+                                  : primaryColor;
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: _buildCategoryChip(cat.id, cat.name, isDark, catColor),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
               if (_selectedStatus == 'deleted')
                 Container(
                   margin: const EdgeInsets.symmetric(
@@ -1029,6 +1109,12 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               final cat = catMap[tx.categoryId];
                               final catName = cat?.name ?? 'Chưa phân loại';
                               final catColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isDark ? const Color(0xFF00D09E) : primaryColor);
+                              
+                              IconData catIcon = isIncome ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded;
+                              if (cat?.iconCode != null && cat!.iconCode!.isNotEmpty) {
+                                final code = int.tryParse(cat.iconCode!);
+                                if (code != null) catIcon = IconData(code, fontFamily: 'MaterialIcons');
+                              }
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -1058,7 +1144,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                     onTap: () {
                                       if (currentRole.canEditTransactions) {
-                                        context.go(
+                                        context.push(
                                           '/transactions/form',
                                           extra: {'transactionId': tx.id},
                                         );
@@ -1077,18 +1163,12 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                             width: 42,
                                             height: 42,
                                             decoration: BoxDecoration(
-                                              color: isIncome
-                                                  ? const Color(0x1500D09E)
-                                                  : const Color(0x15EF4444),
+                                              color: catColor.withOpacity(0.15),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Icon(
-                                              isIncome
-                                                  ? Icons.arrow_downward_rounded
-                                                  : Icons.arrow_upward_rounded,
-                                              color: isIncome
-                                                  ? const Color(0xFF00D09E)
-                                                  : const Color(0xFFEF4444),
+                                              catIcon,
+                                              color: catColor,
                                               size: 18,
                                             ),
                                           ),
@@ -1220,7 +1300,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                       const BoxConstraints(),
                                                   onSelected: (action) async {
                                                     if (action == 'edit') {
-                                                      context.go(
+                                                      context.push(
                                                         '/transactions/form',
                                                         extra: {
                                                           'transactionId':
@@ -1364,7 +1444,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       floatingActionButton: currentRole.canEditTransactions
           ? ScaleOnTap(
               onTap: () {
-                context.go('/transactions/form');
+                context.push('/transactions/form');
               },
               child: FloatingActionButton(
                 onPressed: null,

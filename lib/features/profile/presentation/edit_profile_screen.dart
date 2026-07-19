@@ -20,8 +20,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late TextEditingController _fullNameController;
   late TextEditingController _companyController;
   late TextEditingController _taxCodeController;
+  late TextEditingController _phoneController;
   late TextEditingController _emailController;
   late TextEditingController _roleController;
+  late TextEditingController _addressController;
+  late TextEditingController _bankController;
+  late TextEditingController _bankAccountController;
 
   bool _isLoading = false;
 
@@ -34,8 +38,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _fullNameController = TextEditingController(text: user?.fullName ?? '');
     _companyController = TextEditingController(text: user?.company ?? '');
     _taxCodeController = TextEditingController(text: user?.taxCode ?? '');
+    _phoneController = TextEditingController(text: user?.phone ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
     _roleController = TextEditingController(text: role.nameVi);
+    _addressController = TextEditingController(text: user?.address ?? '');
+    _bankController = TextEditingController(text: user?.bankName ?? '');
+    _bankAccountController = TextEditingController(text: user?.bankAccount ?? '');
   }
 
   @override
@@ -43,8 +51,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _fullNameController.dispose();
     _companyController.dispose();
     _taxCodeController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _roleController.dispose();
+    _addressController.dispose();
+    _bankController.dispose();
+    _bankAccountController.dispose();
     super.dispose();
   }
 
@@ -61,8 +73,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       
       final updatedUser = user.copyWith(
         fullName: _fullNameController.text.trim(),
-        company: _companyController.text.trim(),
-        taxCode: _taxCodeController.text.trim(),
+        // Các trường công ty được giữ nguyên qua copyWith
       );
 
       await authRepo.updateUserInfo(updatedUser);
@@ -125,6 +136,54 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 enabled: false,
                 isDark: isDark,
               ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _companyController,
+                label: 'Tên Doanh nghiệp',
+                icon: Icons.business_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _taxCodeController,
+                label: 'Mã số thuế',
+                icon: Icons.receipt_long_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _phoneController,
+                label: 'Số điện thoại',
+                icon: Icons.phone_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _addressController,
+                label: 'Địa chỉ',
+                icon: Icons.location_on_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _bankController,
+                label: 'Ngân hàng',
+                icon: Icons.account_balance_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                controller: _bankAccountController,
+                label: 'Số tài khoản',
+                icon: Icons.numbers_outlined,
+                enabled: false,
+                isDark: isDark,
+              ),
               
               const SizedBox(height: 32),
               _buildSectionTitle('Thông tin có thể thay đổi', Icons.edit_outlined, isDark),
@@ -136,28 +195,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 isDark: isDark,
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Vui lòng nhập họ tên';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _companyController,
-                label: 'Tên Doanh nghiệp',
-                icon: Icons.business_outlined,
-                isDark: isDark,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập tên doanh nghiệp';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _taxCodeController,
-                label: 'Mã số thuế',
-                icon: Icons.receipt_long_outlined,
-                isDark: isDark,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập mã số thuế';
                   return null;
                 },
               ),
