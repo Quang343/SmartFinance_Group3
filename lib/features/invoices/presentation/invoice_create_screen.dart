@@ -576,7 +576,13 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                               keyboardType: TextInputType.number,
                               style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
                               decoration: _buildInputDeco('Số lượng', null, isDark, primaryColor, inputFillColor, inputBorderColor),
-                              validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) return 'Bắt buộc';
+                                final numVal = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
+                                if (numVal == null || numVal <= 0) return 'Không hợp lệ';
+                                if (numVal > 99999999) return 'Quá lớn';
+                                return null;
+                              },
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
@@ -588,7 +594,13 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                         keyboardType: TextInputType.number,
                         style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
                         decoration: _buildInputDeco('Đơn giá (VND)', Icons.attach_money_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-                        validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Bắt buộc';
+                          final numVal = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
+                          if (numVal == null || numVal <= 0) return 'Không hợp lệ';
+                          if (numVal > 999999999999999) return 'Quá lớn';
+                          return null;
+                        },
                         onChanged: (_) => setState(() {}),
                       ),
                       if (item.amount > 0) ...[

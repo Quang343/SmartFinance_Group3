@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
@@ -153,6 +154,26 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _selectedImagePath = result.files.single.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chọn file: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -815,11 +836,18 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
               validator: (val) {
-                if (val == null || int.tryParse(val) == null) {
+                if (val == null || val.isEmpty) {
                   return 'Vui lòng nhập số tiền hợp lệ';
                 }
-                if (int.parse(val) <= 0) {
+                final numVal = int.tryParse(val.replaceAll(RegExp(r'[^0-9]'), ''));
+                if (numVal == null) {
+                  return 'Số tiền quá lớn hoặc không hợp lệ';
+                }
+                if (numVal <= 0) {
                   return 'Số tiền phải lớn hơn 0';
+                }
+                if (numVal > 999999999999999) {
+                  return 'Số tiền vượt quá giới hạn (tối đa 15 chữ số)';
                 }
                 return null;
               },
@@ -1265,17 +1293,36 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: _selectedImagePath!.startsWith('http')
-                          ? Image.network(
-                              _selectedImagePath!,
-                              fit: BoxFit.contain,
-                              loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                              errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                      child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
+                          ? Container(
+                              color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _selectedImagePath!.split(Platform.pathSeparator).last,
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white70 : const Color(0xFF093021),
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
                             )
-                          : Image.file(
-                              File(_selectedImagePath!),
-                              fit: BoxFit.contain,
-                            ),
+                          : _selectedImagePath!.startsWith('http')
+                              ? Image.network(
+                                  _selectedImagePath!,
+                                  fit: BoxFit.contain,
+                                  loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                  errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                                )
+                              : Image.file(
+                                  File(_selectedImagePath!),
+                                  fit: BoxFit.contain,
+                                ),
                     ),
                   ),
                   Padding(
@@ -1313,13 +1360,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           children: [
                             Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
                             SizedBox(width: 8),
-                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: InkWell(
                       onTap: () => _pickImage(ImageSource.gallery),
@@ -1336,7 +1383,30 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           children: [
                             Icon(Icons.image_rounded, color: Color(0xFF00D09E), size: 20),
                             SizedBox(width: 8),
-                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickFile,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorderColor, width: 1.5),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.attach_file_rounded, color: Color(0xFF00D09E), size: 20),
+                            SizedBox(width: 8),
+                            Text('File', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
