@@ -8,6 +8,7 @@ import 'package:smart_finance/domain/entities/invoice_item_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 import 'package:smart_finance/data/repositories/storage_repository.dart';
+import 'package:intl/intl.dart';
 import 'dart:io';
 
 class _ItemFormState {
@@ -238,6 +239,10 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         _partnerTaxCodeController.text = '0123456789';
         _partnerAddressController.text = '456 Đường Sáng Tạo, Quận 3, TP. HCM';
         _vatRateController.text = '10';
+        final oldItems = List.of(_items);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (var item in oldItems) { item.dispose(); }
+        });
         _items.clear();
         _items.add(_ItemFormState(name: 'Phát triển phần mềm', unit: 'Gói', quantity: 1, price: 15000000));
         _items.add(_ItemFormState(name: 'Bảo trì hệ thống tháng 7', unit: 'Tháng', quantity: 1, price: 5000000));
@@ -256,6 +261,10 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         _partnerTaxCodeController.text = '0987654321';
         _partnerAddressController.text = '100 Đường Tương Lai, Quận 7, TP. HCM';
         _vatRateController.text = '8';
+        final oldItems = List.of(_items);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (var item in oldItems) { item.dispose(); }
+        });
         _items.clear();
         _items.add(_ItemFormState(name: 'Bàn làm việc gỗ sồi', unit: 'Cái', quantity: 5, price: 5000000));
         _items.add(_ItemFormState(name: 'Ghế xoay văn phòng', unit: 'Cái', quantity: 5, price: 1200000));
@@ -264,6 +273,10 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         _partnerNameController.text = 'Giao Hàng Nhanh Chóng';
         _partnerTaxCodeController.text = '0369852147';
         _vatRateController.text = '10';
+        final oldItems = List.of(_items);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (var item in oldItems) { item.dispose(); }
+        });
         _items.clear();
         _items.add(_ItemFormState(name: 'Dịch vụ vận chuyển Bắc Nam', unit: 'Chuyến', quantity: 2, price: 2750000));
       }
@@ -336,9 +349,11 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          children: [
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) ...[
               const Text('ẢNH HÓA ĐƠN ĐÃ QUÉT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
               const SizedBox(height: 12),
@@ -475,15 +490,12 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             const Text('CHI TIẾT DỊCH VỤ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             
-            // Items List
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _items.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 20),
-              itemBuilder: (context, index) {
-                final item = _items[index];
-                return Container(
+            ..._items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return Padding(
+                padding: EdgeInsets.only(bottom: index == _items.length - 1 ? 0 : 20),
+                child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF0A1811) : Colors.white,
@@ -499,9 +511,12 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                           if (_items.length > 1)
                             InkWell(
                               onTap: () {
+                                final itemToRemove = item;
                                 setState(() {
-                                  item.dispose();
                                   _items.removeAt(index);
+                                });
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  itemToRemove.dispose();
                                 });
                               },
                               child: const Icon(Icons.close, color: Colors.red, size: 20),
@@ -562,9 +577,9 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       ]
                     ],
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            }),
             
             const SizedBox(height: 16),
             OutlinedButton.icon(
@@ -615,7 +630,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Cộng tiền hàng:', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54)),
-                        Text('${_subtotal.toString()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                        Text('${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(_subtotal).trim()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -623,15 +638,25 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Thuế VAT:', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54)),
-                        Text('${_vatAmount.toString()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                        Text('${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(_vatAmount).trim()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                       ],
                     ),
                     const Divider(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('Tổng tiền thanh toán:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white70 : Colors.black87)),
-                        Text('${_totalAmount.toString()} VND', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF00D09E))),
+                        Expanded(
+                          child: Text(
+                            'Tổng tiền thanh toán:', 
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white70 : Colors.black87),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(_totalAmount).trim()} VND', 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF00D09E)),
+                        ),
                       ],
                     ),
                   ],
@@ -658,6 +683,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

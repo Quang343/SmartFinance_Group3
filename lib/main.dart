@@ -12,12 +12,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   FlutterError.onError = (details) {
-    File('dart_crash.log').writeAsStringSync('FlutterError: ${details.exceptionAsString()}\n${details.stack.toString()}\n', mode: FileMode.append);
     FlutterError.presentError(details);
   };
   
   PlatformDispatcher.instance.onError = (error, stack) {
-    File('dart_crash.log').writeAsStringSync('PlatformDispatcher: $error\n$stack\n', mode: FileMode.append);
+    debugPrint('PlatformDispatcher: $error\n$stack\n');
     return true;
   };
   
