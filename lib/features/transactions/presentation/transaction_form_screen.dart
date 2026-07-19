@@ -61,6 +61,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   final _categoryKey = GlobalKey();
 
   bool _isSaving = false;
+  bool _isReadOnly = false;
 
   @override
   void initState() {
@@ -110,6 +111,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           _invoiceId = tx.invoiceId;
           _transactionDate = tx.transactionDate;
           _createdAt = tx.createdAt;
+          _isReadOnly = tx.status == TransactionStatus.confirmed;
         });
 
         // Also fetch attachment if exists
@@ -738,7 +740,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             end: Alignment.bottomRight,
           ).createShader(bounds),
           child: Text(
-            widget.transactionId == null ? 'Thêm Giao dịch' : 'Sửa Giao dịch',
+            widget.transactionId == null ? 'Thêm Giao dịch' : (_isReadOnly ? 'Chi tiết Giao dịch' : 'Sửa Giao dịch'),
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: Colors.white,
@@ -749,7 +751,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         ),
         actions: [
 
-          if (widget.transactionId != null)
+          if (widget.transactionId != null && !_isReadOnly)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
               tooltip: 'Xóa giao dịch',
@@ -767,6 +769,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             TextFormField(
               key: _amountKey,
               controller: _amountController,
+              readOnly: _isReadOnly,
               keyboardType: TextInputType.number,
               style: TextStyle(
                 fontSize: 16,
@@ -819,7 +822,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             ScaleOnTap(
-              onTap: _selectDateTime,
+              onTap: _isReadOnly ? () {} : () => _selectDateTime(),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 decoration: BoxDecoration(
@@ -864,7 +867,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   child: Opacity(
                     opacity: currentRole == UserRole.expenseAccountant ? 0.5 : 1.0,
                     child: ScaleOnTap(
-                      onTap: currentRole == UserRole.expenseAccountant
+                      onTap: (_isReadOnly || currentRole == UserRole.expenseAccountant)
                           ? () {}
                           : () => setState(() {
                               _type = TransactionType.income;
@@ -914,7 +917,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   child: Opacity(
                     opacity: currentRole == UserRole.revenueAccountant ? 0.5 : 1.0,
                     child: ScaleOnTap(
-                      onTap: currentRole == UserRole.revenueAccountant
+                      onTap: (_isReadOnly || currentRole == UserRole.revenueAccountant)
                           ? () {}
                           : () => setState(() {
                               _type = TransactionType.expense;
@@ -975,7 +978,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             const SizedBox(height: 10),
             InkWell(
               key: _categoryKey,
-              onTap: () {
+              onTap: _isReadOnly ? null : () {
                 setState(() => _showCategoryError = false);
                 showCategoryPicker();
               },
@@ -1036,6 +1039,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
              // Notes
             TextFormField(
               controller: _noteController,
+              readOnly: _isReadOnly,
               maxLines: 3,
               style: TextStyle(
                 fontSize: 15,
@@ -1070,7 +1074,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             InkWell(
-              onTap: showStatusPicker,
+              onTap: _isReadOnly ? null : showStatusPicker,
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -1260,8 +1264,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                             ),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
+                  if (!_isReadOnly)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
                     child: InkWell(
                       onTap: () => setState(() => _selectedImagePath = null),
                       child: Container(
@@ -1276,7 +1281,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ),
                 ],
               )
-            else
+            else if (!_isReadOnly)
               Row(
                 children: [
                   Expanded(
@@ -1328,40 +1333,43 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
             const SizedBox(height: 40),
 
-            ScaleOnTap(
-              onTap: _saveTransaction,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: _isSaving 
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : const Text(
-                        'Lưu Giao Dịch',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+            if (!_isReadOnly)
+              ScaleOnTap(
+                onTap: _saveTransaction,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
+                    ],
+                  ),
+                  child: Center(
+                    child: _isSaving 
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        )
+                      : const Text(
+                          'Lưu Giao Dịch',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                  ),
                 ),
               ),
-            ),
+            if (_isReadOnly)
+              const SizedBox(height: 20),
           ],
         ),
       ),

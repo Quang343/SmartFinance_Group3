@@ -10,6 +10,7 @@ import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
@@ -1023,6 +1024,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                   ),
                                 );
                               }
+                              final isMobile = MediaQuery.of(context).size.width < 600;
                               final tx = list[index];
                               final isIncome =
                                   tx.type == TransactionType.income;
@@ -1030,8 +1032,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               final catName = cat?.name ?? 'Chưa phân loại';
                               final catColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isDark ? const Color(0xFF00D09E) : primaryColor);
 
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
+                              Widget card = Container(
                                 decoration: BoxDecoration(
                                   color: isDark
                                       ? const Color(0xFF0E2219)
@@ -1204,8 +1205,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   fontSize: 14,
                                                 ),
                                               ),
-                                              if (currentRole
-                                                  .canEditTransactions) ...[
+                                              if (!isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) ...[
                                                 const SizedBox(width: 4),
                                                 PopupMenuButton<String>(
                                                   icon: Icon(
@@ -1351,6 +1351,81 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                     ),
                                   ),
                                 ),
+                              );
+
+                              if (isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) {
+                                card = Slidable(
+                                  key: ValueKey(tx.id),
+                                  endActionPane: ActionPane(
+                                    motion: const ScrollMotion(),
+                                    children: [
+                                      if (tx.status == TransactionStatus.deleted) ...[
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmRestoreFromList(tx),
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.restore_rounded,
+                                          label: 'Khôi phục',
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            bottomLeft: Radius.circular(16),
+                                          ),
+                                        ),
+                                        SlidableAction(
+                                          onPressed: (context) async {
+                                            final repo = ref.read(transactionRepositoryProvider);
+                                            await repo.hardDelete(tx.id);
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Đã xóa vĩnh viễn giao dịch'), backgroundColor: Colors.red),
+                                              );
+                                              _refreshData();
+                                            }
+                                          },
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_forever_rounded,
+                                          label: 'Xóa vĩnh viễn',
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        SlidableAction(
+                                          onPressed: (context) {
+                                            context.go('/transactions/form', extra: {'transactionId': tx.id});
+                                          },
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.edit_rounded,
+                                          label: 'Sửa',
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            bottomLeft: Radius.circular(16),
+                                          ),
+                                        ),
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmDeleteFromList(tx),
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_outline_rounded,
+                                          label: 'Xóa',
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  child: card,
+                                );
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: card,
                               );
                             },
                           ),
