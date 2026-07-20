@@ -1,4 +1,4 @@
-import 'package:uuid/uuid.dart';
+
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/features/invoices/domain/models/draft_invoice.dart';
 
@@ -24,12 +24,12 @@ class DraftInvoiceMapper {
       sellerTaxCode: draft.taxCode,
       sellerAddress: draft.sellerAddress.isNotEmpty ? draft.sellerAddress : null,
       sellerPhone: draft.sellerPhone.isNotEmpty ? draft.sellerPhone : null,
-      sellerBankName: draft.sellerBankName.isNotEmpty ? draft.sellerBankName : null,
-      sellerBankAccount: draft.sellerBankAccount.isNotEmpty ? draft.sellerBankAccount : null,
-      buyerName: currentUser?.company.isNotEmpty == true ? currentUser!.company : 'Công ty TNHH SmartFinance',
-      buyerTaxCode: currentUser?.taxCode.isNotEmpty == true ? currentUser!.taxCode : '0101243150',
-      buyerAddress: '123 Đường Sáng Tạo, Cầu Giấy, Hà Nội', // UserModel currently doesn't have address
-      buyerContactName: 'Nguyễn Văn Tiến', // Mocked, as this would ideally come from OCR
+      sellerBankName: draft.sellerBankName?.isNotEmpty == true ? draft.sellerBankName : null,
+      sellerBankAccount: draft.sellerBankAccount?.isNotEmpty == true ? draft.sellerBankAccount : null,
+      buyerName: draft.buyerName?.isNotEmpty == true ? draft.buyerName! : (currentUser?.company ?? ''),
+      buyerTaxCode: draft.buyerTaxCode?.isNotEmpty == true ? draft.buyerTaxCode! : (currentUser?.taxCode ?? ''),
+      buyerAddress: draft.buyerAddress?.isNotEmpty == true ? draft.buyerAddress : (currentUser?.address ?? ''),
+      buyerContactName: draft.buyerContactName?.isNotEmpty == true ? draft.buyerContactName : (currentUser?.fullName ?? ''),
       items: draft.items, // ID for items will be preserved from Draft
       subtotal: draft.subtotal,
       vatRate: draft.vatRate,

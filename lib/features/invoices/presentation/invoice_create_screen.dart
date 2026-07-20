@@ -4,11 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
+import 'package:smart_finance/domain/entities/partner_entity.dart';
 import 'package:smart_finance/domain/entities/invoice_item_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 import 'package:smart_finance/data/repositories/storage_repository.dart';
+import 'package:smart_finance/core/providers/auth_provider.dart';
+import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+import '../providers/invoice_provider.dart';
 
 class _ItemFormState {
   final TextEditingController nameController;
@@ -85,21 +91,34 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   int get _totalAmount => _subtotal + _vatAmount;
 
   bool _isSaving = false;
+  bool _saveToPartner = false;
+
 
   @override
   void initState() {
     super.initState();
+    final user = ref.read(currentUserProvider);
+    
+    final myCompanyName = user?.company ?? '';
+    final myTaxCode = user?.taxCode ?? '';
+    final myAddress = user?.address ?? '';
+    final myPhone = user?.phone ?? '';
+    final myBankName = user?.bankName ?? '';
+    final myBankAccount = user?.bankAccount ?? '';
+
     if (widget.invoiceType == InvoiceType.outgoing) {
-      _sellerNameController.text = 'Smart Finance Corp';
-      _sellerTaxCodeController.text = '222222';
-      _sellerAddressController.text = '123 Đường Tương Lai, Quận 1, TP. HCM';
-      _sellerPhoneController.text = '0909123456';
-      _sellerBankNameController.text = 'Ngân hàng Techcombank';
-      _sellerBankAccountController.text = '19031234567890';
+      _sellerNameController.text = myCompanyName;
+      _sellerTaxCodeController.text = myTaxCode;
+      _sellerAddressController.text = myAddress;
+      _sellerPhoneController.text = myPhone;
+      _sellerBankNameController.text = myBankName;
+      _sellerBankAccountController.text = myBankAccount;
     } else {
-      _partnerNameController.text = 'Smart Finance Corp';
-      _partnerTaxCodeController.text = '222222';
-      _partnerAddressController.text = '123 Đường Tương Lai, Quận 1, TP. HCM';
+      _partnerNameController.text = myCompanyName;
+      _partnerTaxCodeController.text = myTaxCode;
+      _partnerAddressController.text = myAddress;
+      _bankNameController.text = myBankName;
+      _bankAccountController.text = myBankAccount;
       
       _sellerNameController.text = widget.scannedSellerName ?? '';
       _sellerTaxCodeController.text = widget.scannedTaxCode ?? '';
@@ -147,9 +166,23 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         
         if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) {
           if (!widget.scannedImagePath!.startsWith('http')) {
-             final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
-             if (uploadedUrl != null) {
-               finalImagePath = uploadedUrl;
+             try {
+             if (kIsWeb) {
+              final response = await http.get(Uri.parse(widget.scannedImagePath!));
+              if (response.statusCode == 200) {
+                final uploadedUrl = await storageRepo.uploadInvoiceImage(id, webFile: response.bodyBytes, fileName: 'invoice.png');
+                if (uploadedUrl != null) {
+                  finalImagePath = uploadedUrl;
+                }
+              }
+            } else {
+              final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
+              if (uploadedUrl != null) {
+                finalImagePath = uploadedUrl;
+              }
+            } } catch (e) {
+               debugPrint('Lỗi upload ảnh (Có thể do đang Offline): $e');
+               finalImagePath = widget.scannedImagePath; // Lưu tạm đường dẫn local
              }
           } else {
              finalImagePath = widget.scannedImagePath;
@@ -202,6 +235,35 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
 
         await repo.create(newInvoice);
 
+        if (_saveToPartner) {
+          final partnerRepo = ref.read(partnerRepositoryProvider);
+          final user = ref.read(currentUserProvider);
+          if (user != null) {
+            final isOutgoing = widget.invoiceType == InvoiceType.outgoing;
+            final partner = PartnerEntity(
+              id: const Uuid().v4(),
+              name: isOutgoing ? _partnerNameController.text : _sellerNameController.text,
+              taxCode: isOutgoing ? _partnerTaxCodeController.text : _sellerTaxCodeController.text,
+              address: isOutgoing ? _partnerAddressController.text : _sellerAddressController.text,
+              phone: isOutgoing ? '' : _sellerPhoneController.text,
+              bankName: isOutgoing ? _bankNameController.text : _sellerBankNameController.text,
+              bankAccount: isOutgoing ? _bankAccountController.text : _sellerBankAccountController.text,
+              createdByUid: user.id,
+              company: user.company,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+            try {
+               await partnerRepo.createPartner(partner);
+            } catch(e) {
+               debugPrint('Error saving partner: $e');
+            }
+          }
+        }
+
+        // Refresh lists
+        ref.invalidate(allInvoicesProvider);
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -230,42 +292,195 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       }
     }
   }
+
+  void _showPartnerSelectionDialog(bool isBuyer) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primaryColor = const Color(0xFF00D09E);
+            final partnersAsync = ref.watch(partnerStreamProvider);
+
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF060E0A) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Chọn đối tác từ danh bạ',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                  Expanded(
+                    child: partnersAsync.when(
+                      data: (partners) {
+                        if (partners.isEmpty) {
+                          return const Center(child: Text('Danh bạ trống', style: TextStyle(color: Colors.grey)));
+                        }
+                        return ListView.builder(
+                          controller: scrollController,
+                          itemCount: partners.length,
+                          itemBuilder: (context, index) {
+                            final p = partners[index];
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: primaryColor.withOpacity(0.1),
+                                child: Icon(Icons.business, color: primaryColor),
+                              ),
+                              title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('MST: ${p.taxCode}'),
+                              onTap: () {
+                                setState(() {
+                                  if (isBuyer) {
+                                    _partnerNameController.text = p.name;
+                                    _partnerTaxCodeController.text = p.taxCode;
+                                    _partnerAddressController.text = p.address ?? '';
+                                    _bankNameController.text = p.bankName ?? '';
+                                    _bankAccountController.text = p.bankAccount ?? '';
+                                  } else {
+                                    _sellerNameController.text = p.name;
+                                    _sellerTaxCodeController.text = p.taxCode;
+                                    _sellerAddressController.text = p.address ?? '';
+                                    _sellerPhoneController.text = p.phone ?? '';
+                                    _sellerBankNameController.text = p.bankName ?? '';
+                                    _sellerBankAccountController.text = p.bankAccount ?? '';
+                                  }
+                                  _saveToPartner = false; // Đã chọn từ danh bạ thì không cần lưu mới
+                                });
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        );
+                      },
+                      loading: () => Center(child: CircularProgressIndicator(color: primaryColor)),
+                      error: (err, stack) => Center(child: Text('Lỗi: $err')),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _addSampleData(String type) {
     setState(() {
-      if (type == 'it') {
-        _partnerContactNameController.text = 'Trần Văn IT';
-        _partnerNameController.text = 'CTY TNHH Công Nghệ Tương Lai';
-        _partnerTaxCodeController.text = '0123456789';
-        _partnerAddressController.text = '456 Đường Sáng Tạo, Quận 3, TP. HCM';
-        _vatRateController.text = '10';
-        _items.clear();
-        _items.add(_ItemFormState(name: 'Phát triển phần mềm', unit: 'Gói', quantity: 1, price: 15000000));
-        _items.add(_ItemFormState(name: 'Bảo trì hệ thống tháng 7', unit: 'Tháng', quantity: 1, price: 5000000));
-      } else if (type == 'consulting') {
-        _partnerContactNameController.text = 'Lê Văn Tư Vấn';
-        _partnerNameController.text = 'Tập Đoàn Tư Vấn Global';
-        _partnerTaxCodeController.text = '1122334455';
-        _partnerAddressController.text = '88 Đường Hội Nhập, Quận 1, TP. HCM';
-        _vatRateController.text = '10';
-        _items.clear();
-        _items.add(_ItemFormState(name: 'Phát triển phần mềm', unit: 'Gói', quantity: 1, price: 15000000));
-        _items.add(_ItemFormState(name: 'Bảo trì hệ thống tháng 7', unit: 'Tháng', quantity: 1, price: 5000000));
-      } else if (type == 'furniture') {
-        _partnerContactNameController.text = 'Nguyễn Thị Nội Thất';
-        _partnerNameController.text = 'Nội Thất Sang Trọng';
-        _partnerTaxCodeController.text = '0987654321';
-        _partnerAddressController.text = '100 Đường Tương Lai, Quận 7, TP. HCM';
-        _vatRateController.text = '8';
-        _items.clear();
-        _items.add(_ItemFormState(name: 'Bàn làm việc gỗ sồi', unit: 'Cái', quantity: 5, price: 5000000));
-        _items.add(_ItemFormState(name: 'Ghế xoay văn phòng', unit: 'Cái', quantity: 5, price: 1200000));
-      } else if (type == 'shipping') {
-        _partnerContactNameController.text = 'Trần Văn Vận Tải';
-        _partnerNameController.text = 'Giao Hàng Nhanh Chóng';
-        _partnerTaxCodeController.text = '0369852147';
-        _vatRateController.text = '10';
-        _items.clear();
-        _items.add(_ItemFormState(name: 'Dịch vụ vận chuyển Bắc Nam', unit: 'Chuyến', quantity: 2, price: 2750000));
+      if (widget.invoiceType == InvoiceType.outgoing) {
+        if (type == 'it') {
+          _partnerContactNameController.text = 'Trần Văn IT';
+          _partnerNameController.text = 'CTY TNHH Công Nghệ Tương Lai';
+          _partnerTaxCodeController.text = '0123456789';
+          _partnerAddressController.text = '456 Đường Sáng Tạo, Quận 3, TP. HCM';
+          _vatRateController.text = '10';
+          final oldItems = List.of(_items);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (var item in oldItems) { item.dispose(); }
+          });
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Phát triển phần mềm', unit: 'Gói', quantity: 1, price: 15000000));
+          _items.add(_ItemFormState(name: 'Bảo trì hệ thống tháng 7', unit: 'Tháng', quantity: 1, price: 5000000));
+        } else if (type == 'consulting') {
+          _partnerContactNameController.text = 'Lê Văn Tư Vấn';
+          _partnerNameController.text = 'Tập Đoàn Tư Vấn Global';
+          _partnerTaxCodeController.text = '1122334455';
+          _partnerAddressController.text = '88 Đường Hội Nhập, Quận 1, TP. HCM';
+          _vatRateController.text = '10';
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Dịch vụ tư vấn chiến lược', unit: 'Gói', quantity: 1, price: 20000000));
+        } else if (type == 'furniture') {
+          _partnerContactNameController.text = 'Nguyễn Thị Nội Thất';
+          _partnerNameController.text = 'Nội Thất Sang Trọng';
+          _partnerTaxCodeController.text = '0987654321';
+          _partnerAddressController.text = '100 Đường Tương Lai, Quận 7, TP. HCM';
+          _vatRateController.text = '8';
+          final oldItems = List.of(_items);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (var item in oldItems) { item.dispose(); }
+          });
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Bàn làm việc gỗ sồi', unit: 'Cái', quantity: 5, price: 5000000));
+          _items.add(_ItemFormState(name: 'Ghế xoay văn phòng', unit: 'Cái', quantity: 5, price: 1200000));
+        } else if (type == 'shipping') {
+          _partnerContactNameController.text = 'Trần Văn Vận Tải';
+          _partnerNameController.text = 'Giao Hàng Nhanh Chóng';
+          _partnerTaxCodeController.text = '0369852147';
+          _partnerAddressController.text = '12 Đường Vận Tải, Quận 4, TP. HCM';
+          _vatRateController.text = '10';
+          final oldItems = List.of(_items);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (var item in oldItems) { item.dispose(); }
+          });
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Dịch vụ vận chuyển Bắc Nam', unit: 'Chuyến', quantity: 2, price: 2750000));
+        }
+      } else {
+        // Hóa đơn đầu vào (Incoming): MOCK DATA điền vào phần NGƯỜI BÁN
+        if (type == 'it') {
+          _sellerNameController.text = 'CTY TNHH Công Nghệ Tương Lai';
+          _sellerTaxCodeController.text = '0123456789';
+          _sellerAddressController.text = '456 Đường Sáng Tạo, Quận 3, TP. HCM';
+          _vatRateController.text = '10';
+          final oldItems = List.of(_items);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (var item in oldItems) { item.dispose(); }
+          });
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Phát triển phần mềm', unit: 'Gói', quantity: 1, price: 15000000));
+          _items.add(_ItemFormState(name: 'Bảo trì hệ thống tháng 7', unit: 'Tháng', quantity: 1, price: 5000000));
+        } else if (type == 'consulting') {
+          _sellerNameController.text = 'Tập Đoàn Tư Vấn Global';
+          _sellerTaxCodeController.text = '1122334455';
+          _sellerAddressController.text = '88 Đường Hội Nhập, Quận 1, TP. HCM';
+          _vatRateController.text = '10';
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Dịch vụ tư vấn chiến lược', unit: 'Gói', quantity: 1, price: 20000000));
+        } else if (type == 'furniture') {
+          _sellerNameController.text = 'Nội Thất Sang Trọng';
+          _sellerTaxCodeController.text = '0987654321';
+          _sellerAddressController.text = '100 Đường Tương Lai, Quận 7, TP. HCM';
+          _vatRateController.text = '8';
+          final oldItems = List.of(_items);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (var item in oldItems) { item.dispose(); }
+          });
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Bàn làm việc gỗ sồi', unit: 'Cái', quantity: 5, price: 5000000));
+          _items.add(_ItemFormState(name: 'Ghế xoay văn phòng', unit: 'Cái', quantity: 5, price: 1200000));
+        } else if (type == 'shipping') {
+          _sellerNameController.text = 'Giao Hàng Nhanh Chóng';
+          _sellerTaxCodeController.text = '0369852147';
+          _sellerAddressController.text = '12 Đường Vận Tải, Quận 4, TP. HCM';
+          _vatRateController.text = '10';
+          final oldItems = List.of(_items);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            for (var item in oldItems) { item.dispose(); }
+          });
+          _items.clear();
+          _items.add(_ItemFormState(name: 'Dịch vụ vận chuyển Bắc Nam', unit: 'Chuyến', quantity: 2, price: 2750000));
+        }
       }
     });
   }
@@ -336,82 +551,74 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          children: [
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) ...[
               const Text('ẢNH HÓA ĐƠN ĐÃ QUÉT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: widget.scannedImagePath!.startsWith('http')
-                    ? Image.network(widget.scannedImagePath!, height: 200, width: double.infinity, fit: BoxFit.cover)
-                    : Image.file(File(widget.scannedImagePath!), height: 200, width: double.infinity, fit: BoxFit.cover),
+                child: widget.scannedImagePath != null
+                    ? (widget.scannedImagePath!.startsWith('http') || kIsWeb
+                        ? Image.network(widget.scannedImagePath!, height: 200, width: double.infinity, fit: BoxFit.cover)
+                        : Image.file(File(widget.scannedImagePath!), height: 200, width: double.infinity, fit: BoxFit.cover))
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(height: 24),
             ],
 
             // Đơn vị bán
-            const Text('THÔNG TIN ĐƠN VỊ BÁN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _sellerNameController,
-              readOnly: widget.invoiceType == InvoiceType.outgoing,
-              style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-              decoration: _buildInputDeco('Tên đơn vị bán', Icons.storefront_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-              validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _sellerTaxCodeController,
-              readOnly: widget.invoiceType == InvoiceType.outgoing,
-              style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-              decoration: _buildInputDeco('Mã số thuế', Icons.credit_card_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _sellerAddressController,
-              readOnly: widget.invoiceType == InvoiceType.outgoing,
-              style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-              decoration: _buildInputDeco('Địa chỉ', Icons.location_on_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _sellerPhoneController,
-              readOnly: widget.invoiceType == InvoiceType.outgoing,
-              style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-              decoration: _buildInputDeco('Số điện thoại', Icons.phone_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _sellerBankNameController,
-                    readOnly: widget.invoiceType == InvoiceType.outgoing,
-                    style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-                    decoration: _buildInputDeco('Ngân hàng', Icons.account_balance_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+            widget.invoiceType == InvoiceType.outgoing
+              ? Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    title: Text('THÔNG TIN ĐƠN VỊ BÁN (Đã điền tự động)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: primaryColor)),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 16),
+                    iconColor: primaryColor,
+                    collapsedIconColor: Colors.grey,
+                    children: _buildSellerFields(isDark, primaryColor, inputFillColor, inputBorderColor),
                   ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('THÔNG TIN ĐƠN VỊ BÁN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                        TextButton.icon(
+                          onPressed: () => _showPartnerSelectionDialog(false),
+                          icon: const Icon(Icons.contacts, size: 16),
+                          label: const Text('Chọn từ danh bạ', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ..._buildSellerFields(isDark, primaryColor, inputFillColor, inputBorderColor),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _sellerBankAccountController,
-                    readOnly: widget.invoiceType == InvoiceType.outgoing,
-                    style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-                    decoration: _buildInputDeco('Số tài khoản', Icons.numbers_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: 24),
 
             // Thông tin Khách hàng
-            const Text('THÔNG TIN NGƯỜI MUA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('THÔNG TIN NGƯỜI MUA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                if (widget.invoiceType == InvoiceType.outgoing)
+                  TextButton.icon(
+                    onPressed: () => _showPartnerSelectionDialog(true),
+                    icon: const Icon(Icons.contacts, size: 16),
+                    label: const Text('Chọn từ danh bạ', style: TextStyle(fontSize: 13)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
             TextFormField(
               controller: _partnerContactNameController,
-              readOnly: widget.invoiceType == InvoiceType.incoming,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Họ tên người mua hàng', Icons.person_outline, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
@@ -438,6 +645,18 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
               decoration: _buildInputDeco('Địa chỉ', Icons.location_on_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
             ),
+            const SizedBox(height: 12),
+            if (widget.invoiceType == InvoiceType.outgoing)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text('Lưu đối tác này vào danh bạ', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14)),
+                value: _saveToPartner,
+                activeColor: primaryColor,
+                onChanged: (val) {
+                  if (val != null) setState(() => _saveToPartner = val);
+                },
+              ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _paymentMethod,
@@ -475,15 +694,12 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             const Text('CHI TIẾT DỊCH VỤ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             
-            // Items List
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _items.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 20),
-              itemBuilder: (context, index) {
-                final item = _items[index];
-                return Container(
+            ..._items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return Padding(
+                padding: EdgeInsets.only(bottom: index == _items.length - 1 ? 0 : 20),
+                child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF0A1811) : Colors.white,
@@ -499,9 +715,12 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                           if (_items.length > 1)
                             InkWell(
                               onTap: () {
+                                final itemToRemove = item;
                                 setState(() {
-                                  item.dispose();
                                   _items.removeAt(index);
+                                });
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  itemToRemove.dispose();
                                 });
                               },
                               child: const Icon(Icons.close, color: Colors.red, size: 20),
@@ -535,7 +754,13 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                               keyboardType: TextInputType.number,
                               style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
                               decoration: _buildInputDeco('Số lượng', null, isDark, primaryColor, inputFillColor, inputBorderColor),
-                              validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) return 'Bắt buộc';
+                                final numVal = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
+                                if (numVal == null || numVal <= 0) return 'Không hợp lệ';
+                                if (numVal > 99999999) return 'Quá lớn';
+                                return null;
+                              },
                               onChanged: (_) => setState(() {}),
                             ),
                           ),
@@ -547,7 +772,13 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                         keyboardType: TextInputType.number,
                         style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
                         decoration: _buildInputDeco('Đơn giá (VND)', Icons.attach_money_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
-                        validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Bắt buộc';
+                          final numVal = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
+                          if (numVal == null || numVal <= 0) return 'Không hợp lệ';
+                          if (numVal > 999999999999999) return 'Quá lớn';
+                          return null;
+                        },
                         onChanged: (_) => setState(() {}),
                       ),
                       if (item.amount > 0) ...[
@@ -562,9 +793,9 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       ]
                     ],
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            }),
             
             const SizedBox(height: 16),
             OutlinedButton.icon(
@@ -615,7 +846,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Cộng tiền hàng:', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54)),
-                        Text('${_subtotal.toString()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                        Text('${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(_subtotal).trim()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -623,15 +854,25 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Thuế VAT:', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54)),
-                        Text('${_vatAmount.toString()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                        Text('${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(_vatAmount).trim()} VND', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                       ],
                     ),
                     const Divider(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('Tổng tiền thanh toán:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white70 : Colors.black87)),
-                        Text('${_totalAmount.toString()} VND', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF00D09E))),
+                        Expanded(
+                          child: Text(
+                            'Tổng tiền thanh toán:', 
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white70 : Colors.black87),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(_totalAmount).trim()} VND', 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF00D09E)),
+                        ),
                       ],
                     ),
                   ],
@@ -659,7 +900,75 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           ],
         ),
       ),
+      ),
     );
+  }
+
+  List<Widget> _buildSellerFields(bool isDark, Color primaryColor, Color inputFillColor, Color inputBorderColor) {
+    return [
+      TextFormField(
+        controller: _sellerNameController,
+        readOnly: widget.invoiceType == InvoiceType.outgoing,
+        style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+        decoration: _buildInputDeco('Tên đơn vị bán', Icons.storefront_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+        validator: (value) => value == null || value.isEmpty ? 'Bắt buộc' : null,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _sellerTaxCodeController,
+        readOnly: widget.invoiceType == InvoiceType.outgoing,
+        style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+        decoration: _buildInputDeco('Mã số thuế', Icons.credit_card_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _sellerAddressController,
+        readOnly: widget.invoiceType == InvoiceType.outgoing,
+        style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+        decoration: _buildInputDeco('Địa chỉ', Icons.location_on_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _sellerPhoneController,
+        readOnly: widget.invoiceType == InvoiceType.outgoing,
+        style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+        decoration: _buildInputDeco('Số điện thoại', Icons.phone_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: _sellerBankNameController,
+              readOnly: widget.invoiceType == InvoiceType.outgoing,
+              style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+              decoration: _buildInputDeco('Ngân hàng', Icons.account_balance_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextFormField(
+              controller: _sellerBankAccountController,
+              readOnly: widget.invoiceType == InvoiceType.outgoing,
+              style: TextStyle(fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+              decoration: _buildInputDeco('Số tài khoản', Icons.numbers_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      if (widget.invoiceType == InvoiceType.incoming)
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text('Lưu nhà cung cấp này vào danh bạ', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14)),
+          value: _saveToPartner,
+          activeColor: primaryColor,
+          onChanged: (val) {
+            if (val != null) setState(() => _saveToPartner = val);
+          },
+        ),
+    ];
   }
 
   InputDecoration _buildInputDeco(String label, IconData? icon, bool isDark, Color primaryColor, Color inputFillColor, Color inputBorderColor) {

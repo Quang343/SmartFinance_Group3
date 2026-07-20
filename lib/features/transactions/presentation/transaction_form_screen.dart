@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/transaction_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
 import '../../../domain/entities/attachment_entity.dart';
@@ -17,6 +21,7 @@ import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/widgets/app_dialogs.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
@@ -111,7 +116,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           _invoiceId = tx.invoiceId;
           _transactionDate = tx.transactionDate;
           _createdAt = tx.createdAt;
-          _isReadOnly = tx.status == TransactionStatus.confirmed;
+          _isReadOnly = tx.status == TransactionStatus.confirmed || tx.status == TransactionStatus.deleted;
         });
 
         // Also fetch attachment if exists
@@ -160,6 +165,26 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _selectedImagePath = result.files.single.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi chọn file: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _amountController.dispose();
@@ -198,7 +223,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final int amount = int.parse(_amountController.text);
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
+      if (_selectedImagePath != null && !kIsWeb && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
         _selectedImagePath = null;
       }
 
@@ -206,9 +231,19 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       String? finalImagePath = _selectedImagePath;
       if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
         try {
-          final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
-          if (uploadedUrl != null) {
-            finalImagePath = uploadedUrl;
+          if (kIsWeb) {
+            final response = await http.get(Uri.parse(_selectedImagePath!));
+            if (response.statusCode == 200) {
+              final uploadedUrl = await storageRepo.uploadTransactionImage(id, webFile: response.bodyBytes, fileName: 'transaction.png');
+              if (uploadedUrl != null) {
+                finalImagePath = uploadedUrl;
+              }
+            }
+          } else {
+            final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
+            if (uploadedUrl != null) {
+              finalImagePath = uploadedUrl;
+            }
           }
         } catch (e) {
           if (mounted) {
@@ -326,6 +361,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
       }
 
+      // Refresh list
+      ref.invalidate(allTransactionsProvider);
+      ref.invalidate(incomeTransactionsProvider);
+      ref.invalidate(expenseTransactionsProvider);
+
       if (mounted) {
         if (Navigator.canPop(context)) {
           context.pop(true);
@@ -349,34 +389,58 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _confirmDelete() {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: const Text('Xác nhận xóa', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.softDelete(widget.transactionId!);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
-                );
-                context.go('/transactions');
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.',
+      icon: Icons.delete_outline_rounded,
+      color: Colors.redAccent,
+      confirmText: 'Xóa giao dịch',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.softDelete(widget.transactionId!);
+        
+        // Refresh list
+        ref.invalidate(allTransactionsProvider);
+        ref.invalidate(incomeTransactionsProvider);
+        ref.invalidate(expenseTransactionsProvider);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
+          );
+          if (Navigator.canPop(context)) {
+            context.pop();
+          } else {
+            context.go('/transactions');
+          }
+        }
+      },
+    );
+  }
+
+  void _confirmRestore() {
+    AppDialogs.showConfirmDialog(
+      context: context,
+      title: 'Khôi phục giao dịch',
+      message: 'Bạn có chắc chắn muốn khôi phục giao dịch này? Giao dịch sẽ được chuyển về trạng thái Bản nháp.',
+      icon: Icons.restore_rounded,
+      color: const Color(0xFF00D09E),
+      confirmText: 'Khôi phục',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.restore(widget.transactionId!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
+          );
+          if (Navigator.canPop(context)) {
+            context.pop();
+          } else {
+            context.go('/transactions');
+          }
+        }
+      },
     );
   }
 
@@ -440,7 +504,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     if (id.isEmpty) return Icons.category_rounded;
     try {
       final cat = _categories.firstWhere((c) => c.id == id);
-      // Since icons aren't stored natively, use a generic icon based on type
+      if (cat.iconCode != null && cat.iconCode!.isNotEmpty) {
+        final code = int.tryParse(cat.iconCode!);
+        if (code != null) return IconData(code, fontFamily: 'MaterialIcons');
+      }
       return cat.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
     } catch (_) {
       return Icons.category_rounded;
@@ -540,6 +607,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         itemBuilder: (context, index) {
                           final cat = categories[index];
                           final isSelected = _categoryId == cat.id;
+                          final catColor = cat.colorHex != null 
+                              ? Color(int.parse(cat.colorHex!.replaceFirst('#', '0xFF'))) 
+                              : const Color(0xFF00D09E);
+                              
                           return InkWell(
                             onTap: () {
                               setState(() => _categoryId = cat.id);
@@ -550,20 +621,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               decoration: BoxDecoration(
                                 color: isSelected 
-                                    ? const Color(0x1500D09E) 
+                                    ? catColor.withOpacity(0.1) 
                                     : inputFillColor,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF00D09E) : inputBorderColor,
+                                  color: isSelected ? catColor : inputBorderColor,
                                   width: 1.5,
                                 ),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    _getCategoryIcon(cat.id),
-                                    color: isSelected ? const Color(0xFF00D09E) : (isDark ? Colors.white60 : Colors.black54),
-                                    size: 22,
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: catColor.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _getCategoryIcon(cat.id),
+                                      color: catColor,
+                                      size: 18,
+                                    ),
                                   ),
                                   const SizedBox(width: 14),
                                   Expanded(
@@ -573,13 +651,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                                         fontSize: 15,
                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                         color: isSelected 
-                                            ? const Color(0xFF00D09E) 
+                                            ? catColor 
                                             : (isDark ? Colors.white : Colors.black87),
                                       ),
                                     ),
                                   ),
                                   if (isSelected)
-                                    const Icon(Icons.check_rounded, color: Color(0xFF00D09E), size: 20),
+                                    Icon(Icons.check_rounded, color: catColor, size: 20),
                                 ],
                               ),
                             ),
@@ -800,11 +878,18 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 ),
               ),
               validator: (val) {
-                if (val == null || int.tryParse(val) == null) {
+                if (val == null || val.isEmpty) {
                   return 'Vui lòng nhập số tiền hợp lệ';
                 }
-                if (int.parse(val) <= 0) {
+                final numVal = int.tryParse(val.replaceAll(RegExp(r'[^0-9]'), ''));
+                if (numVal == null) {
+                  return 'Số tiền quá lớn hoặc không hợp lệ';
+                }
+                if (numVal <= 0) {
                   return 'Số tiền phải lớn hơn 0';
+                }
+                if (numVal > 999999999999999) {
+                  return 'Số tiền vượt quá giới hạn (tối đa 15 chữ số)';
                 }
                 return null;
               },
@@ -1186,7 +1271,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         ),
                       ),
                     ),
-                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
+                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || kIsWeb || File(_invoiceImagePath!).existsSync())) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1237,7 +1322,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ],
                 ],
               )
-            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
+            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || kIsWeb || File(_selectedImagePath!).existsSync()))
               Stack(
                 alignment: Alignment.topRight,
                 children: [
@@ -1251,17 +1336,36 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: _selectedImagePath!.startsWith('http')
-                          ? Image.network(
-                              _selectedImagePath!,
-                              fit: BoxFit.contain,
-                              loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                              errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                      child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
+                          ? Container(
+                              color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _selectedImagePath!.split(Platform.pathSeparator).last,
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white70 : const Color(0xFF093021),
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
                             )
-                          : Image.file(
-                              File(_selectedImagePath!),
-                              fit: BoxFit.contain,
-                            ),
+                          : _selectedImagePath!.startsWith('http')
+                              ? Image.network(
+                                  _selectedImagePath!,
+                                  fit: BoxFit.contain,
+                                  loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                  errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                                )
+                              : Image.file(
+                                  File(_selectedImagePath!),
+                                  fit: BoxFit.contain,
+                                ),
                     ),
                   ),
                   if (!_isReadOnly)
@@ -1300,13 +1404,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           children: [
                             Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
                             SizedBox(width: 8),
-                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: InkWell(
                       onTap: () => _pickImage(ImageSource.gallery),
@@ -1323,7 +1427,30 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           children: [
                             Icon(Icons.image_rounded, color: Color(0xFF00D09E), size: 20),
                             SizedBox(width: 8),
-                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Thư viện', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickFile,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: inputFillColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorderColor, width: 1.5),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.attach_file_rounded, color: Color(0xFF00D09E), size: 20),
+                            SizedBox(width: 8),
+                            Text('File', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
@@ -1368,7 +1495,36 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ),
                 ),
               ),
-            if (_isReadOnly)
+            if (_isReadOnly && _status == TransactionStatus.deleted)
+              ScaleOnTap(
+                onTap: _confirmRestore,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Khôi phục Giao dịch',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (_isReadOnly)
               const SizedBox(height: 20),
           ],
         ),

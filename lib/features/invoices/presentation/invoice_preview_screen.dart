@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -117,300 +118,99 @@ class InvoicePreviewScreen extends ConsumerWidget {
 
           final invoice = snapshot.data!;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Simulated PDF view
-                Container(
-                  decoration: BoxDecoration(
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: PdfPreview(
+                  build: (format) async {
+                    final pdf = await _generatePdfDocument(invoice);
+                    return pdf.save();
+                  },
+                  allowPrinting: false,
+                  allowSharing: false,
+                  canChangeOrientation: false,
+                  canChangePageFormat: false,
+                  shouldRepaint: true,
+                  initialPageFormat: PdfPageFormat.a4,
+                  scrollViewDecoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+                  ),
+                  pdfPreviewPageDecoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFFE2E8F0),
-                      width: 1.5,
-                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: DefaultTextStyle(
-                      style: const TextStyle(
-                        color: Color(0xFF1E293B),
-                        fontFamily: 'Courier',
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'SMARTFINANCE JSC',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Color(0xFF00D09E),
-                                      ),
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'Tòa nhà FPT, Khu Công nghệ cao Hòa Lạc',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      'MST: 0102030405',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Icon(
-                                Icons.account_balance_wallet_rounded,
-                                size: 40,
-                                color: const Color(0xFF00D09E).withOpacity(0.8),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24, color: Colors.black12),
-                          const Center(
-                            child: Text(
-                              'HÓA ĐƠN GIÁ TRỊ GIA TĂNG',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Center(
-                            child: Text(
-                              'Số hóa đơn: ${invoice.invoiceNumber}',
-                              style: const TextStyle(
-                                fontStyle: FontStyle.italic,
-                                fontSize: 13,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Customer info
-                          Text(
-                            'Đơn vị mua hàng: ${invoice.buyerName}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Mã số thuế khách hàng: ${invoice.buyerTaxCode}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Ngày phát hành: ${dateFormatter.format(invoice.issuedDate)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const Divider(height: 24, color: Colors.black12),
-
-                          // Items table header
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Text(
-                                  'Tên sản phẩm / Dịch vụ',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  'SL',
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  'Thành tiền',
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 12, color: Colors.black12),
-
-                          // Single Item Row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Text(
-                                    'Cung cấp Sản phẩm/Dịch vụ cho ${invoice.buyerName}',
-                                    style: TextStyle(
-                                      color: const Color(0xFF00D09E),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Expanded(
-                                child: Text(
-                                  '1',
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text(
-                                  currencyFormatter.format(invoice.subtotal),
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24, color: Colors.black12),
-
-                          // Summary block with Expanded labels to prevent overlaps
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Cộng tiền hàng (Subtotal):',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              Text(
-                                currencyFormatter.format(invoice.subtotal),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Thuế suất GTGT (VAT): ${invoice.vatRate}%',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              Text(
-                                currencyFormatter.format(invoice.vatAmount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 16, color: Colors.black12),
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Tổng cộng tiền thanh toán:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                currencyFormatter.format(invoice.totalAmount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: Color(0xFF00D09E),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF06150F) : Colors.white,
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFEDF2F7),
+                      width: 1,
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-
-                // Action Buttons
-                Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _shareInvoice(context, invoice),
-                        icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
-                        label: const Text(
-                          'Chia sẻ',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                    if (!kIsWeb)
+                      Row(
+                        children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _shareInvoice(context, invoice),
+                            icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                            label: const Text(
+                              'Chia sẻ',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00D09E),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                          ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00D09E),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _saveInvoice(context, invoice),
+                            icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                            label: const Text(
+                              'Lưu PDF',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () => _saveInvoice(context, invoice),
-                        icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                        onPressed: () => _printInvoice(context, invoice),
+                        icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
                         label: const Text(
-                          'Lưu PDF',
+                          'In Hóa Đơn',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981), // slightly different green or use a secondary color
+                          backgroundColor: const Color(0xFF3B82F6),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 0,
@@ -419,26 +219,8 @@ class InvoicePreviewScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _printInvoice(context, invoice),
-                    icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
-                    label: const Text(
-                      'In Hóa Đơn',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6), // Blue to distinguish
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           );
         },
       ),

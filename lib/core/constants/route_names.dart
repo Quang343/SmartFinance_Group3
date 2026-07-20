@@ -18,4 +18,5 @@ class RouteNames {
   static const String profile = 'profile';
   static const String register = 'register';
   static const String notifications = 'notifications';
+  static const String partners = 'partners';
 }

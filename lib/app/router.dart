@@ -27,6 +27,7 @@ import '../features/profile/presentation/profile_screen.dart';
 import '../features/profile/presentation/edit_profile_screen.dart';
 import '../features/profile/presentation/change_password_screen.dart';
 import '../features/notifications/presentation/notification_screen.dart';
+import '../features/partners/presentation/partner_management_screen.dart';
 import '../core/widgets/responsive_layout.dart';
 import '../domain/entities/invoice_entity.dart';
 
@@ -107,6 +108,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/categories',
             name: RouteNames.categories,
             builder: (context, state) => const CategoryManagementScreen(),
+          ),
+          GoRoute(
+            path: '/partners',
+            name: RouteNames.partners,
+            builder: (context, state) => const PartnerManagementScreen(),
           ),
           GoRoute(
             path: '/invoices/incoming',

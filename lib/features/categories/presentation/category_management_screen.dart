@@ -19,6 +19,31 @@ const List<String> vibrantColors = [
   '#FF9800', // Orange
 ];
 
+const List<IconData> categoryIcons = [
+  Icons.category,
+  Icons.restaurant,
+  Icons.shopping_cart,
+  Icons.local_gas_station,
+  Icons.flight,
+  Icons.attach_money,
+  Icons.home,
+  Icons.electrical_services,
+  Icons.water_drop,
+  Icons.medical_services,
+  Icons.school,
+  Icons.sports_esports,
+  Icons.devices,
+  Icons.fitness_center,
+];
+
+IconData _parseIcon(String? iconCode, String type) {
+  if (iconCode != null && iconCode.isNotEmpty) {
+    final code = int.tryParse(iconCode);
+    if (code != null) return IconData(code, fontFamily: 'MaterialIcons');
+  }
+  return type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+}
+
 Color _parseColor(String? hexString) {
   if (hexString == null || hexString.isEmpty) return const Color(0xFF00D09E);
   try {
@@ -91,7 +116,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
     }
   }
 
-  void _addCategory(String type, String colorHex) async {
+  void _addCategory(String type, String colorHex, String iconCode) async {
     final name = _newCategoryController.text.trim();
     if (name.isEmpty) return;
 
@@ -100,6 +125,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
       id: 'cat_${const Uuid().v4().substring(0, 8)}',
       name: name,
       type: type,
+      iconCode: iconCode,
       colorHex: colorHex,
       isDefault: false,
       isActive: true,
@@ -116,6 +142,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
 
   void _showAddCategoryDialog(String type) {
     String selectedColor = vibrantColors.first;
+    String selectedIcon = categoryIcons.first.codePoint.toString();
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -183,6 +210,34 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                       );
                     }).toList(),
                   ),
+                  const SizedBox(height: 16),
+                  Text('Biểu tượng', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categoryIcons.map((icon) {
+                      final iconCodeStr = icon.codePoint.toString();
+                      final isSelected = selectedIcon == iconCodeStr;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedIcon = iconCodeStr),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryColor.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected ? Border.all(color: primaryColor, width: 2) : null,
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                            size: 20,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ],
               ),
               actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -199,7 +254,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                 ScaleOnTap(
                   onTap: () {
                     if (dialogContext.canPop()) dialogContext.pop();
-                    _addCategory(type, selectedColor);
+                    _addCategory(type, selectedColor, selectedIcon);
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -228,6 +283,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
     _newCategoryController.text = cat.name;
     String selectedColor = cat.colorHex ?? vibrantColors.first;
     if (!vibrantColors.contains(selectedColor)) selectedColor = vibrantColors.first;
+    String selectedIcon = cat.iconCode ?? categoryIcons.first.codePoint.toString();
 
     showDialog(
       context: context,
@@ -296,6 +352,34 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                       );
                     }).toList(),
                   ),
+                  const SizedBox(height: 16),
+                  Text('Biểu tượng', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categoryIcons.map((icon) {
+                      final iconCodeStr = icon.codePoint.toString();
+                      final isSelected = selectedIcon == iconCodeStr;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedIcon = iconCodeStr),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryColor.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected ? Border.all(color: primaryColor, width: 2) : null,
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                            size: 20,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ],
               ),
               actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -312,24 +396,25 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                 ),
                 ScaleOnTap(
                   onTap: () async {
-                    final newName = _newCategoryController.text.trim();
-                    if (newName.isNotEmpty) {
-                      final updated = CategoryEntity(
+                    if (dialogContext.canPop()) dialogContext.pop();
+                    final name = _newCategoryController.text.trim();
+                    if (name.isNotEmpty) {
+                      final repo = ref.read(categoryRepositoryProvider);
+                      final updatedCat = CategoryEntity(
                         id: cat.id,
-                        name: newName,
+                        name: name,
                         type: cat.type,
-                        iconCode: cat.iconCode,
+                        iconCode: selectedIcon,
                         colorHex: selectedColor,
                         isDefault: cat.isDefault,
                         isActive: cat.isActive,
                         createdAt: cat.createdAt,
                         updatedAt: DateTime.now(),
                       );
-                      await ref.read(categoryRepositoryProvider).update(updated);
+                      await repo.update(updatedCat);
                       _newCategoryController.clear();
                       if (mounted) _loadData(withDelay: false);
                     }
-                    if (dialogContext.canPop()) dialogContext.pop();
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -693,7 +778,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                cat.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                _parseIcon(cat.iconCode, cat.type),
                 color: _parseColor(cat.colorHex),
                 size: 20,
               ),

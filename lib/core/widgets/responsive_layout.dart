@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
@@ -31,6 +32,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/transactions', label: 'Dòng tiền', icon: Icons.compare_arrows),
           NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
           NavigationItem(path: '/invoices/outgoing', label: 'HD đầu ra', icon: Icons.receipt_long),
+          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
@@ -42,6 +44,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/categories', label: 'Danh mục chi', icon: Icons.category),
           NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
           NavigationItem(path: '/invoices/capture', label: 'Quét hóa đơn', icon: Icons.qr_code_scanner),
+          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
@@ -53,6 +56,7 @@ class ResponsiveLayout extends ConsumerWidget {
           NavigationItem(path: '/categories', label: 'Danh mục thu', icon: Icons.category),
           NavigationItem(path: '/invoices/outgoing', label: 'HD đầu ra', icon: Icons.receipt_long),
           NavigationItem(path: '/invoices/outgoing/new', label: 'Tạo HD', icon: Icons.add_box),
+          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
           NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
           NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
           NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
@@ -78,15 +82,23 @@ class ResponsiveLayout extends ConsumerWidget {
   }
 }
 
-class _MobileScaffold extends ConsumerWidget {
+class _MobileScaffold extends ConsumerStatefulWidget {
   final Widget child;
   final List<NavigationItem> items;
 
   const _MobileScaffold({required this.child, required this.items});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scaffoldKey = GlobalKey<ScaffoldState>();
+  ConsumerState<_MobileScaffold> createState() => _MobileScaffoldState();
+}
+
+class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
+  DateTime? _lastPressedAt;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  double _horizontalDragDistance = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
@@ -96,9 +108,9 @@ class _MobileScaffold extends ConsumerWidget {
     final roleName = currentRole.nameVi;
     
     // Bottom bar items: show at most 4 primary items, and 1 'More' item
-    final primaryItems = items.length > 5 ? items.sublist(0, 4) : items;
-    final hasDrawer = items.length > 5;
-    final drawerItems = hasDrawer ? items.sublist(4) : <NavigationItem>[];
+    final primaryItems = widget.items.length > 5 ? widget.items.sublist(0, 4) : widget.items;
+    final hasDrawer = widget.items.length > 5;
+    final drawerItems = hasDrawer ? widget.items.sublist(4) : <NavigationItem>[];
 
     final location = GoRouterState.of(context).uri.path;
     int selectedIndex = primaryItems.indexWhere((item) => location.startsWith(item.path));
@@ -109,9 +121,79 @@ class _MobileScaffold extends ConsumerWidget {
       selectedIndex = 0;
     }
 
-    return Scaffold(
-      body: child,
-      drawer: hasDrawer
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        
+        // If drawer is open, close it
+        if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+          _scaffoldKey.currentState?.closeDrawer();
+          return;
+        }
+
+        // If the router can pop (e.g. pushed a screen like /transactions/form), pop it
+        if (context.canPop()) {
+          context.pop();
+          return;
+        }
+
+        // If not on Dashboard, navigate to Dashboard
+        if (location != '/dashboard' && location != '/') {
+          Future.microtask(() => context.go('/dashboard'));
+          return;
+        }
+
+        // If on Dashboard, double press to exit
+        final now = DateTime.now();
+        final maxDuration = const Duration(seconds: 2);
+        final isWarning = _lastPressedAt == null || now.difference(_lastPressedAt!) > maxDuration;
+
+        if (isWarning) {
+          _lastPressedAt = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Nhấn lần nữa để thoát ứng dụng'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (details) {
+            _horizontalDragDistance = 0.0;
+          },
+          onHorizontalDragUpdate: (details) {
+            _horizontalDragDistance += details.delta.dx;
+          },
+          onHorizontalDragEnd: (details) {
+            // Chỉ áp dụng vuốt khi đang ở 4 tab chính (0, 1, 2, 3)
+            if (selectedIndex < 0 || selectedIndex >= primaryItems.length) return;
+
+            final velocity = details.primaryVelocity ?? 0;
+            const thresholdVelocity = 300.0;
+            const thresholdDistance = 40.0; // Yêu cầu vuốt ít nhất 40px ngang
+
+            if (velocity < -thresholdVelocity && _horizontalDragDistance < -thresholdDistance) {
+              // Vuốt sang trái -> Sang tab tiếp theo
+              if (selectedIndex < primaryItems.length - 1) {
+                context.go(primaryItems[selectedIndex + 1].path);
+              }
+            } else if (velocity > thresholdVelocity && _horizontalDragDistance > thresholdDistance) {
+              // Vuốt sang phải -> Sang tab trước đó
+              if (selectedIndex > 0) {
+                context.go(primaryItems[selectedIndex - 1].path);
+              }
+            }
+          },
+          child: widget.child,
+        ),
+        drawer: hasDrawer
           ? Drawer(
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.only(
@@ -359,7 +441,7 @@ class _MobileScaffold extends ConsumerWidget {
           );
         },
       ),
-    );
+    ));
   }
 }
 

@@ -11,6 +11,9 @@ import '../../domain/repositories/category_repository.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../../domain/repositories/invoice_repository.dart';
 import '../../domain/repositories/attachment_repository.dart';
+import '../../data/repositories/partner_repository_impl.dart';
+import '../../data/repositories/partner_repository.dart';
+import '../../domain/entities/partner_entity.dart';
 import 'auth_provider.dart';
 
 final categoryRepositoryProvider = Provider<CategoryRepository>((ref) {
@@ -43,6 +46,16 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
 final attachmentRepositoryProvider = Provider<AttachmentRepository>((ref) {
   final user = ref.watch(currentUserProvider);
   return AttachmentRepositoryImpl(FirebaseFirestore.instance, FirebaseAuth.instance, user);
+});
+
+final partnerRepositoryProvider = Provider<PartnerRepository>((ref) {
+  return PartnerRepositoryImpl(firestore: FirebaseFirestore.instance);
+});
+
+final partnerStreamProvider = StreamProvider<List<PartnerEntity>>((ref) {
+  final user = ref.watch(currentUserProvider);
+  final company = user?.company ?? '';
+  return ref.watch(partnerRepositoryProvider).getPartners(company);
 });
 
 final companyBudgetLimitProvider = FutureProvider.autoDispose<int>((ref) async {
