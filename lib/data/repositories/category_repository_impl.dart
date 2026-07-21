@@ -56,12 +56,28 @@ class CategoryRepositoryImpl implements CategoryRepository {
     return null;
   }
 
+  Future<void> _checkNameUniqueness(String name, String type, String excludeId) async {
+    if (_uid.isEmpty) return;
+    final trimmedName = name.trim().toLowerCase();
+    final snapshot = await _scopeQuery(_collection).where('type', isEqualTo: type).get();
+    for (final doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final existingId = data['id'] as String? ?? doc.id;
+      if (existingId == excludeId) continue;
+      final existingName = (data['name'] as String? ?? '').trim().toLowerCase();
+      if (existingName == trimmedName) {
+        throw Exception('Tên danh mục "${name.trim()}" đã tồn tại trong hệ thống!');
+      }
+    }
+  }
+
   @override
   Future<void> create(CategoryEntity category) async {
     if (_uid.isEmpty) return;
+    await _checkNameUniqueness(category.name, category.type, category.id);
     final model = CategoryModel(
       id: category.id,
-      name: category.name,
+      name: category.name.trim(),
       type: category.type,
       iconCode: category.iconCode,
       colorHex: category.colorHex,
@@ -79,9 +95,10 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Future<void> update(CategoryEntity category) async {
     if (_uid.isEmpty) return;
+    await _checkNameUniqueness(category.name, category.type, category.id);
     final model = CategoryModel(
       id: category.id,
-      name: category.name,
+      name: category.name.trim(),
       type: category.type,
       iconCode: category.iconCode,
       colorHex: category.colorHex,

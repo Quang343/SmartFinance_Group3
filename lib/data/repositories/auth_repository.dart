@@ -198,7 +198,9 @@ class AuthRepository {
   
   // Đăng xuất
   Future<void> logout() async {
-    await _googleSignIn.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
     await _firebaseAuth.signOut();
   }
 }

@@ -261,15 +261,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             }
           }
         } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Không thể tải ảnh đính kèm lên Cloud: $e'), backgroundColor: Colors.red),
-            );
-          }
-          setState(() {
-            _isSaving = false;
-          });
-          return;
+          debugPrint('Không thể tải ảnh đính kèm lên ImgBB (giữ đường dẫn local/fallback): $e');
+          // Không return; để cho phép giao dịch tiếp tục được lưu vào Firestore!
         }
       }
 
