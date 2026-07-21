@@ -58,6 +58,130 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     }
   }
 
+  void _showCashFlowDetail(
+    BuildContext context,
+    String type,
+    List<TransactionEntity> txs,
+    List<CategoryEntity> allCats,
+    bool isDark,
+    NumberFormat fmt,
+  ) {
+    final catMap = {for (var c in allCats) c.id: c};
+    final filtered = type == 'net'
+        ? List<TransactionEntity>.from(txs)
+        : txs.where((tx) => tx.type == (type == 'income' ? TransactionType.income : TransactionType.expense)).toList();
+    filtered.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
+    final total = filtered.fold<int>(0, (s, tx) => s + tx.amount);
+    final title = type == 'net' ? 'Dòng tiền thuần' : type == 'income' ? 'Tổng thu' : 'Tổng chi';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                        const SizedBox(height: 2),
+                        Text('${fmt.format(total)} • ${filtered.length} giao dịch', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  ScaleOnTap(
+                    onTap: () => Navigator.pop(ctx),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade100, shape: BoxShape.circle),
+                      child: const Icon(Icons.close_rounded, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(child: Text('Không có giao dịch nào', style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)))
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final tx = filtered[i];
+                        final isInc = tx.type == TransactionType.income;
+                        final cat = catMap[tx.categoryId];
+                        return ScaleOnTap(
+                          onTap: () => context.push('/transactions/form', extra: {'transactionId': tx.id, 'readOnly': true}),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: (isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444)).withOpacity(0.15),
+                                  child: Icon(isInc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                      color: isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444), size: 16),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        cat?.name ?? 'Chưa phân loại',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        DateFormat('dd/MM/yyyy').format(tx.transactionDate),
+                                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '${isInc ? '+' : '-'}${fmt.format(tx.amount)}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
@@ -592,21 +716,33 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Dòng tiền thuần doanh nghiệp',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: isDark ? Colors.white : const Color(0xFF093021),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              currencyFormatter.format(netBalance),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 24,
-                                color: netBalance >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                            ScaleOnTap(
+                              onTap: () => _showCashFlowDetail(context, 'net', filtered, categories, isDark, currencyFormatter),
+                              child: Container(
+                                width: double.infinity,
+                                color: Colors.transparent,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Dòng tiền thuần doanh nghiệp',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: isDark ? Colors.white : const Color(0xFF093021),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      currencyFormatter.format(netBalance),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 24,
+                                        color: netBalance >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),

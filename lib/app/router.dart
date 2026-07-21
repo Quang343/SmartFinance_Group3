@@ -102,6 +102,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 initialAmount: extra?['initialAmount'] as int?,
                 initialNote: extra?['initialNote'] as String?,
                 invoiceId: extra?['invoiceId'] as String?,
+                readOnly: extra?['readOnly'] as bool? ?? false,
               );
             },
           ),

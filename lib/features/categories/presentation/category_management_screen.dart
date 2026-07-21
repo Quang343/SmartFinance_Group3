@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/category_entity.dart';
@@ -95,7 +96,6 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
     final repo = ref.read(categoryRepositoryProvider);
     if (withDelay && mounted) {
       setState(() => _isLoading = true);
-      await Future.delayed(const Duration(seconds: 1));
     }
     try {
       final cats = await repo.getAll();
@@ -564,13 +564,11 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ClipOval(
-                child: Image.asset(
-                  'assets/images/loadingGif.gif',
-                  width: 150,
-                  height: 150,
-                  fit: BoxFit.cover,
-                ),
+              SpinKitWaveSpinner(
+                color: const Color(0xFF00D09E),
+                size: 100,
+                trackColor: const Color(0xFF00D09E).withValues(alpha: 0.2),
+                waveColor: const Color(0xFF00D09E).withValues(alpha: 0.5),
               ),
               const SizedBox(height: 16),
               Text(

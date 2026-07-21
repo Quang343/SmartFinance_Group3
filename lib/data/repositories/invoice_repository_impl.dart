@@ -14,18 +14,12 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
 
   String get _uid => _currentUser?.id ?? _auth.currentUser?.uid ?? '';
   String get _company => _currentUser?.company ?? '';
-  String get _role => _currentUser?.role ?? '';
   CollectionReference get _collection => _firestore.collection('invoices');
 
   @override
   Future<List<InvoiceEntity>> getAll() async {
     if (_uid.isEmpty) return [];
-    Query query = _collection;
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
+    Query query = _collection.where('company', isEqualTo: _company);
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
@@ -33,12 +27,9 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   @override
   Future<List<InvoiceEntity>> getByOcrStatus(OcrStatus status) async {
     if (_uid.isEmpty) return [];
-    Query query = _collection.where('ocrStatus', isEqualTo: status.name);
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
+    Query query = _collection
+        .where('company', isEqualTo: _company)
+        .where('ocrStatus', isEqualTo: status.name);
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }

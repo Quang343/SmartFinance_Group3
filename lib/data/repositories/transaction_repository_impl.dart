@@ -21,12 +21,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<List<TransactionEntity>> getAll() async {
     if (_uid.isEmpty) return [];
-    Query query = _collection;
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
+    Query query = _collection.where('company', isEqualTo: _company);
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
@@ -34,12 +29,9 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<List<TransactionEntity>> getConfirmed() async {
     if (_uid.isEmpty) return [];
-    Query query = _collection.where('status', isEqualTo: TransactionStatus.confirmed.name);
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
+    Query query = _collection
+        .where('company', isEqualTo: _company)
+        .where('status', isEqualTo: TransactionStatus.confirmed.name);
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
@@ -48,13 +40,9 @@ class TransactionRepositoryImpl implements TransactionRepository {
   Future<List<TransactionEntity>> getByDateRange(DateTime start, DateTime end) async {
     if (_uid.isEmpty) return [];
     Query query = _collection
+        .where('company', isEqualTo: _company)
         .where('transactionDate', isGreaterThanOrEqualTo: start.toIso8601String())
         .where('transactionDate', isLessThanOrEqualTo: end.toIso8601String());
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
@@ -62,12 +50,9 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<List<TransactionEntity>> getByType(TransactionType type) async {
     if (_uid.isEmpty) return [];
-    Query query = _collection.where('type', isEqualTo: type.name);
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
+    Query query = _collection
+        .where('company', isEqualTo: _company)
+        .where('type', isEqualTo: type.name);
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }

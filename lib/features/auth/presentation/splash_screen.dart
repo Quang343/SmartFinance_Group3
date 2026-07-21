@@ -21,9 +21,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _navigateToNext() async {
-    // Wait for splash timeout to show off the cool logo
-    await Future.delayed(const Duration(milliseconds: 2200));
-    
     if (mounted) {
       // Auto-login (Offline persistence support)
       final firebaseUser = ref.read(firebaseAuthProvider).currentUser;

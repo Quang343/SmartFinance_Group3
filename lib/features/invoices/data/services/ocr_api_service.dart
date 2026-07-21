@@ -8,9 +8,6 @@ final ocrApiServiceProvider = Provider<OcrApiService>((ref) {
 
 class OcrApiService {
   Future<OcrResultDto> scanInvoice(File image) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 2));
-
     // Mock response payload
     final mockJson = {
       "seller_name": { "value": "Công ty Cổ phần ABC", "confidence": 0.98 },

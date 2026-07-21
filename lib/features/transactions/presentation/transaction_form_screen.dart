@@ -29,6 +29,7 @@ class TransactionFormScreen extends ConsumerStatefulWidget {
   final int? initialAmount;
   final String? initialNote;
   final String? invoiceId;
+  final bool readOnly;
 
   const TransactionFormScreen({
     super.key, 
@@ -37,6 +38,7 @@ class TransactionFormScreen extends ConsumerStatefulWidget {
     this.initialAmount,
     this.initialNote,
     this.invoiceId,
+    this.readOnly = false,
   });
 
   @override
@@ -70,11 +72,12 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   final _categoryKey = GlobalKey();
 
   bool _isSaving = false;
-  bool _isReadOnly = false;
+  late bool _isReadOnly;
 
   @override
   void initState() {
     super.initState();
+    _isReadOnly = widget.readOnly;
     if (widget.initialTitle != null) {
       _titleController.text = widget.initialTitle!;
     }
