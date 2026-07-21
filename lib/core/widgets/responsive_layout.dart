@@ -506,11 +506,15 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
                               confirmText: 'Đăng xuất',
                               onConfirm: () async {
                                 await ref.read(authRepositoryProvider).logout();
-                                ref.read(currentUserProvider.notifier).state = null;
-                                if (context.mounted) {
-                                  Navigator.pop(context); // close drawer
-                                  context.go('/welcome');
-                                }
+                                
+                                if (!context.mounted) return;
+                                
+                                Navigator.pop(context); // close drawer
+                                context.go('/welcome');
+                                
+                                Future.delayed(const Duration(milliseconds: 100), () {
+                                  ref.read(currentUserProvider.notifier).state = null;
+                                });
                               },
                             );
                           },
@@ -685,10 +689,14 @@ class _DesktopScaffold extends ConsumerWidget {
                             confirmText: 'Đăng xuất',
                             onConfirm: () async {
                               await ref.read(authRepositoryProvider).logout();
-                              ref.read(currentUserProvider.notifier).state = null;
-                              if (context.mounted) {
-                                context.go('/welcome');
-                              }
+                              
+                              if (!context.mounted) return;
+                              
+                              context.go('/welcome');
+                              
+                              Future.delayed(const Duration(milliseconds: 100), () {
+                                ref.read(currentUserProvider.notifier).state = null;
+                              });
                             },
                           );
                         },
