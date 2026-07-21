@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/transaction_providers.dart';
@@ -338,13 +339,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ClipOval(
-                    child: Image.asset(
-                      'assets/images/loadingGif.gif',
-                      width: 150,
-                      height: 150,
-                      fit: BoxFit.cover,
-                    ),
+                  SpinKitWaveSpinner(
+                    color: const Color(0xFF00D09E),
+                    size: 100,
+                    trackColor: const Color(0xFF00D09E).withValues(alpha: 0.2),
+                    waveColor: const Color(0xFF00D09E).withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -1140,12 +1139,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(16),
                                     onTap: () {
-                                      if (currentRole.canEditTransactions) {
-                                        context.push(
-                                          '/transactions/form',
-                                          extra: {'transactionId': tx.id},
-                                        );
-                                      }
+                                      context.push(
+                                        '/transactions/form',
+                                        extra: {
+                                          'transactionId': tx.id,
+                                          'readOnly': !currentRole.canEditTransactions,
+                                        },
+                                      );
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(

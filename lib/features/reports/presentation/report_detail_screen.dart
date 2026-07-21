@@ -153,6 +153,7 @@ class ReportDetailScreen extends ConsumerWidget {
           final allCats = snapshot.data![1] as List<CategoryEntity>;
           
           final categoryMap = {for (var c in allCats) c.id: c.name};
+          final categoryNameToId = {for (var c in allCats) c.name: c.id};
           final categoryIconMap = {for (var c in allCats) c.name: c.iconCode};
 
           final list = allTxs
@@ -293,73 +294,191 @@ class ReportDetailScreen extends ConsumerWidget {
                 final percentage = totalSum > 0 ? (entry.value / totalSum * 100) : 0.0;
                 final itemColor = categoryColorMap[catName] ?? (isIncome ? const Color(0xFF00D09E) : const Color(0xFFEF4444));
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0D251C) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
+                return GestureDetector(
+                  onTap: () {
+                    final catId = categoryNameToId[catName];
+                    final catTxs = (catId != null
+                        ? list.where((tx) => tx.categoryId == catId).toList()
+                        : <TransactionEntity>[])
+                      ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+                    final catTotal = catTxs.fold<int>(0, (s, tx) => s + tx.amount);
+
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      isScrollControlled: true,
+                      builder: (ctx) => Container(
+                        height: MediaQuery.of(ctx).size.height * 0.7,
                         decoration: BoxDecoration(
-                          color: itemColor.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
+                          color: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                         ),
-                        child: Builder(
-                          builder: (context) {
-                            IconData catIcon = isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded;
-                            final iconCode = categoryIconMap[catName];
-                            if (iconCode != null && iconCode.isNotEmpty) {
-                              final code = int.tryParse(iconCode);
-                              if (code != null) catIcon = IconData(code, fontFamily: 'MaterialIcons');
-                            }
-                            return Icon(
-                              catIcon,
-                              color: itemColor,
-                              size: 18,
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              catName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : const Color(0xFF093021),
-                                fontSize: 15,
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                              decoration: BoxDecoration(
+                                border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(catName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                                        const SizedBox(height: 2),
+                                        Text('${currencyFormatter.format(catTotal)} • ${catTxs.length} giao dịch', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.grey)),
+                                      ],
+                                    ),
+                                  ),
+                                  ScaleOnTap(
+                                    onTap: () => Navigator.pop(ctx),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade100, shape: BoxShape.circle),
+                                      child: const Icon(Icons.close_rounded, size: 20),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Chiếm ${percentage.toStringAsFixed(1)}%',
-                              style: TextStyle(
-                                color: isDark ? Colors.white38 : Colors.black45,
-                                fontSize: 12,
-                              ),
+                            Expanded(
+                              child: catTxs.isEmpty
+                                  ? Center(child: Text('Không có giao dịch nào', style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)))
+                                  : ListView.separated(
+                                      padding: const EdgeInsets.all(16),
+                                      itemCount: catTxs.length,
+                                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                      itemBuilder: (_, i) {
+                                        final tx = catTxs[i];
+                                        final isInc = tx.type == TransactionType.income;
+                                        return ScaleOnTap(
+                                          onTap: () => context.push('/transactions/form', extra: {'transactionId': tx.id, 'readOnly': true}),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  radius: 18,
+                                                  backgroundColor: (isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444)).withOpacity(0.15),
+                                                  child: Icon(isInc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                                      color: isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444), size: 16),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        categoryMap[tx.categoryId] ?? 'Chưa phân loại',
+                                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        DateFormat('dd/MM/yyyy').format(tx.transactionDate),
+                                                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '${isInc ? '+' : '-'}${currencyFormatter.format(tx.amount)}',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
                             ),
                           ],
                         ),
                       ),
-                      Text(
-                        currencyFormatter.format(entry.value),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: itemColor,
-                          fontSize: 15,
+                    );
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
                         ),
                       ),
-                    ],
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: itemColor.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Builder(
+                              builder: (context) {
+                                IconData catIcon = isIncome ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+                                final iconCode = categoryIconMap[catName];
+                                if (iconCode != null && iconCode.isNotEmpty) {
+                                  final code = int.tryParse(iconCode);
+                                  if (code != null) catIcon = IconData(code, fontFamily: 'MaterialIcons');
+                                }
+                                return Icon(
+                                  catIcon,
+                                  color: itemColor,
+                                  size: 18,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  catName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white : const Color(0xFF093021),
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Chiếm ${percentage.toStringAsFixed(1)}%',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white38 : Colors.black45,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            currencyFormatter.format(entry.value),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: itemColor,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               }),

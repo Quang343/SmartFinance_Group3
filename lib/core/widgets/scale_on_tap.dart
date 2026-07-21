@@ -61,6 +61,7 @@ class _ScaleOnTapState extends State<ScaleOnTap> with SingleTickerProviderStateM
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTapDown: (_) => _controller.forward(),
         onTapUp: (_) {
           _controller.reverse();
