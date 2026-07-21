@@ -15,12 +15,13 @@ import '../../../helpers/test_utils.dart';
 void main() {
   group('DashboardScreen Widget Tests', () {
     testWidgets('Expense Accountant sees Expense logic (Ngân sách còn lại)', (WidgetTester tester) async {
+      final mockTx = [TransactionEntity(id: '2', title: 'Test', amount: 2000000, type: TransactionType.expense, categoryId: 'c2', transactionDate: DateTime.now(), status: TransactionStatus.confirmed, createdAt: DateTime.now(), updatedAt: DateTime.now())];
       await tester.pumpWidget(createTestApp(
         const DashboardScreen(),
         overrides: [
           roleProvider.overrideWithValue(UserRole.expenseAccountant),
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
-          expenseTransactionsProvider.overrideWith((ref) => Future.value(<TransactionEntity>[])),
+          expenseTransactionsProvider.overrideWith((ref) => Future.value(mockTx)),
           allCategoriesProvider.overrideWith((ref) => Future.value(<CategoryEntity>[])),
         ],
       ));
@@ -45,7 +46,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Hạn mức chi tiêu'), findsOneWidget);
+      expect(find.text('Hạn mức chi tiêu'), findsNothing);
+      expect(find.text('Ngân sách chi tiêu'), findsNothing);
       expect(find.textContaining('Doanh thu'), findsOneWidget);
       expect(find.text('Phân tích Ngân sách'), findsNothing);
     });
@@ -53,6 +55,7 @@ void main() {
     testWidgets('Shows loading indicator when async value is loading', (WidgetTester tester) async {
       final transactionsCompleter = Completer<List<TransactionEntity>>();
       final categoriesCompleter = Completer<List<CategoryEntity>>();
+      final mockTx = [TransactionEntity(id: '1', title: 'Test', amount: 5000000, type: TransactionType.income, categoryId: 'c1', transactionDate: DateTime.now(), status: TransactionStatus.confirmed, createdAt: DateTime.now(), updatedAt: DateTime.now())];
 
       await tester.pumpWidget(createTestApp(
         const DashboardScreen(),

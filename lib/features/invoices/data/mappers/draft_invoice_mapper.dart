@@ -36,7 +36,7 @@ class DraftInvoiceMapper {
       vatAmount: vatAmount,
       totalAmount: draft.totalAmount,
       ocrStatus: OcrStatus.extracted,
-      paymentStatus: PaymentStatus.unpaid,
+      transactionStatus: InvoiceTransactionStatus.notCreated,
       issuedDate: now,
       createdAt: now,
       updatedAt: now,

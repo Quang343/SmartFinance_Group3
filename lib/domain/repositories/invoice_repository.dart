@@ -7,4 +7,5 @@ abstract class InvoiceRepository {
   Future<void> create(InvoiceEntity invoice);
   Future<void> update(InvoiceEntity invoice);
   Future<void> delete(String id);
+  Future<void> updateTransactionStatus(String id, InvoiceTransactionStatus status);
 }

@@ -7,6 +7,7 @@ class TransactionEntity {
   final TransactionType type;
   final String categoryId;
   final DateTime transactionDate;
+  final String title;
   final String? note;
   final TransactionStatus status;
   final String? invoiceId;
@@ -22,6 +23,7 @@ class TransactionEntity {
     required this.type,
     required this.categoryId,
     required this.transactionDate,
+    required this.title,
     required this.status,
     required this.createdAt,
     required this.updatedAt,

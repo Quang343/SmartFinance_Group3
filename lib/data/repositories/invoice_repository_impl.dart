@@ -78,7 +78,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       vatAmount: invoice.vatAmount,
       totalAmount: invoice.totalAmount,
       ocrStatus: invoice.ocrStatus,
-      paymentStatus: invoice.paymentStatus,
+      transactionStatus: invoice.transactionStatus,
       issuedDate: invoice.issuedDate,
       createdByUid: _uid,
       company: _company,
@@ -116,7 +116,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       vatAmount: invoice.vatAmount,
       totalAmount: invoice.totalAmount,
       ocrStatus: invoice.ocrStatus,
-      paymentStatus: invoice.paymentStatus,
+      transactionStatus: invoice.transactionStatus,
       issuedDate: invoice.issuedDate,
       createdByUid: invoice.createdByUid.isNotEmpty ? invoice.createdByUid : _uid,
       company: invoice.company.isNotEmpty ? invoice.company : _company,
@@ -133,5 +133,14 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<void> delete(String id) async {
     if (_uid.isEmpty) return;
     await _collection.doc(id).delete();
+  }
+
+  @override
+  Future<void> updateTransactionStatus(String id, InvoiceTransactionStatus status) async {
+    if (_uid.isEmpty) return;
+    await _collection.doc(id).update({
+      'transactionStatus': status.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
   }
 }

@@ -20,7 +20,7 @@ InvoiceEntity _inv(String id) => InvoiceEntity(
       vatAmount: 10,
       totalAmount: 110,
       ocrStatus: OcrStatus.extracted,
-      paymentStatus: PaymentStatus.unpaid,
+      transactionStatus: InvoiceTransactionStatus.notCreated,
       issuedDate: DateTime(2026),
       createdAt: DateTime(2026),
       updatedAt: DateTime(2026),

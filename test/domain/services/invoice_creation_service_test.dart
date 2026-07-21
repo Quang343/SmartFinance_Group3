@@ -48,7 +48,7 @@ void main() {
       vatAmount: 0,
       totalAmount: totalAmount,
       ocrStatus: OcrStatus.notStarted,
-      paymentStatus: PaymentStatus.unpaid,
+      transactionStatus: InvoiceTransactionStatus.notCreated,
       issuedDate: DateTime.now(),
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),

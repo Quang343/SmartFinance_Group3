@@ -224,7 +224,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           vatAmount: _vatAmount,
           totalAmount: _totalAmount,
           ocrStatus: OcrStatus.extracted,
-          paymentStatus: PaymentStatus.unpaid,
+          transactionStatus: InvoiceTransactionStatus.notCreated,
           ocrConfidence: 1.0,
           type: widget.invoiceType,
           issuedDate: DateTime.now(),
