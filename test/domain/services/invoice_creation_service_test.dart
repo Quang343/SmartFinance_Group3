@@ -236,5 +236,364 @@ void main() {
         )),
       );
     });
+
+    // CASE 10: Kiểm tra dữ liệu biên - Tổng tiền quá lớn (trên 15 chữ số)
+    test('Nên ném lỗi InvoiceCreationException khi tổng tiền vượt quá 15 chữ số', () async {
+      // Arrange
+      final invalidInvoice = _createValidInvoice(totalAmount: 1000000000000000);
+
+      // Act & Assert
+      expect(
+        () => service.createOutgoingInvoice(
+          userRole: UserRole.revenueAccountant,
+          invoice: invalidInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('vượt quá 15 chữ số'),
+        )),
+      );
+    });
+
+    // CASE 11: Kiểm tra tính toàn vẹn (Consistency) - Thành tiền + Thuế != Tổng tiền
+    test('Nên ném lỗi InvoiceCreationException khi (Thành tiền + Thuế) không bằng Tổng tiền', () async {
+      // Arrange
+      // Giả sử Thành tiền (subtotal) = 100k, Thuế (vatAmount) = 10k, nhưng Tổng tiền lại gán sai là 200k
+      final invoice = InvoiceEntity(
+        id: 'inv_1',
+        invoiceNumber: 'INV-001',
+        sellerName: 'A',
+        sellerTaxCode: '',
+        buyerName: 'B',
+        buyerTaxCode: '',
+        subtotal: 100000,
+        vatRate: 10,
+        vatAmount: 10000,
+        totalAmount: 200000, // Sai logic tính toán
+        ocrStatus: OcrStatus.notStarted,
+        transactionStatus: InvoiceTransactionStatus.notCreated,
+        issuedDate: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        type: InvoiceType.outgoing,
+        items: [
+          const InvoiceItemEntity(
+            id: 'item_1',
+            itemCode: 'SP1',
+            itemName: 'SP1',
+            unit: 'Cái',
+            quantity: 1,
+            unitPrice: 100000,
+            totalAmount: 100000,
+          )
+        ],
+      );
+
+      // Act & Assert
+      expect(
+        () => service.createOutgoingInvoice(
+          userRole: UserRole.revenueAccountant,
+          invoice: invoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Tổng tiền không khớp với (Thành tiền + Thuế VAT)'),
+        )),
+      );
+    });
+
+    // CASE 12: Trùng lặp hóa đơn (Mô phỏng Repository ném lỗi Duplicate)
+    test('Nên ném lỗi theo Repository nếu hóa đơn bị trùng tên/mã', () async {
+      // Arrange
+      final validInvoice = _createValidInvoice();
+      when(() => mockRepo.create(any())).thenThrow(Exception('Hóa đơn đã tồn tại trong hệ thống'));
+
+      // Act & Assert
+      expect(
+        () => service.createOutgoingInvoice(
+          userRole: UserRole.revenueAccountant,
+          invoice: validInvoice,
+        ),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(), 
+          'Exception message', 
+          contains('Hóa đơn đã tồn tại trong hệ thống')
+        )),
+      );
+    });
+  });
+
+  group('InvoiceCreationService - Tạo hóa đơn mua vào (Incoming Invoice)', () {
+    // Helper function tạo hóa đơn mua vào
+    InvoiceEntity _createValidIncomingInvoice({
+      InvoiceType type = InvoiceType.incoming,
+      String invoiceNumber = 'INV-IN-2023-001',
+      String sellerName = 'Công ty TNHH Cung Cấp',
+      List<InvoiceItemEntity>? items,
+      int totalAmount = 500000,
+    }) {
+      return InvoiceEntity(
+        id: 'inv_in_test_1',
+        invoiceNumber: invoiceNumber,
+        sellerName: sellerName,
+        sellerTaxCode: '0123456789',
+        buyerName: 'SmartFinance',
+        buyerTaxCode: '987654321',
+        subtotal: totalAmount,
+        vatRate: 0,
+        vatAmount: 0,
+        totalAmount: totalAmount,
+        ocrStatus: OcrStatus.notStarted,
+        transactionStatus: InvoiceTransactionStatus.notCreated,
+        issuedDate: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        type: type,
+        items: items ?? [
+          const InvoiceItemEntity(
+            id: 'item_in_1',
+            itemCode: 'HH01',
+            itemName: 'Hàng hóa 1',
+            unit: 'Thùng',
+            quantity: 5,
+            unitPrice: 100000,
+            totalAmount: 500000,
+          )
+        ],
+      );
+    }
+
+    // CASE 1: Happy path - Tất cả dữ liệu và quyền đều đúng
+    test('Nên tạo hóa đơn thành công khi user là Kế toán chi phí và dữ liệu hợp lệ', () async {
+      // Arrange
+      final validInvoice = _createValidIncomingInvoice();
+      when(() => mockRepo.create(any())).thenAnswer((_) async {});
+
+      // Act
+      await service.createIncomingInvoice(
+        userRole: UserRole.expenseAccountant, // Kế toán chi phí có quyền tạo mua vào
+        invoice: validInvoice,
+      );
+
+      // Assert
+      verify(() => mockRepo.create(validInvoice)).called(1);
+    });
+
+    // CASE 2: Kiểm tra quyền - Kế toán doanh thu không được tạo hóa đơn mua vào
+    test('Nên ném lỗi InvoiceCreationException khi user là Kế toán doanh thu', () async {
+      final invoice = _createValidIncomingInvoice();
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.revenueAccountant, // Kế toán doanh thu
+          invoice: invoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Bạn không có quyền tạo hóa đơn mua vào'),
+        )),
+      );
+      verifyNever(() => mockRepo.create(any()));
+    });
+
+    // CASE 3: Kiểm tra quyền - Quản lý tài chính không được tạo hóa đơn
+    test('Nên ném lỗi InvoiceCreationException khi user là Quản lý tài chính', () async {
+      final invoice = _createValidIncomingInvoice();
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.financeManager, // Quản lý
+          invoice: invoice,
+        ),
+        throwsA(isA<InvoiceCreationException>()),
+      );
+      verifyNever(() => mockRepo.create(any()));
+    });
+
+    // CASE 4: Kiểm tra loại hóa đơn
+    test('Nên ném lỗi InvoiceCreationException khi cố tình đưa loại hóa đơn là Bán ra (outgoing)', () async {
+      // Arrange
+      final invalidTypeInvoice = _createValidIncomingInvoice(type: InvoiceType.outgoing);
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invalidTypeInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Loại hóa đơn không hợp lệ'),
+        )),
+      );
+    });
+
+    // CASE 5: Kiểm tra dữ liệu biên - Số hóa đơn rỗng
+    test('Nên ném lỗi InvoiceCreationException khi số hóa đơn bị bỏ trống', () async {
+      // Arrange
+      final invalidInvoice = _createValidIncomingInvoice(invoiceNumber: '');
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invalidInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Số hóa đơn không được để trống'),
+        )),
+      );
+    });
+
+    // CASE 6: Kiểm tra dữ liệu biên - Tên nhà cung cấp (người bán) rỗng
+    test('Nên ném lỗi InvoiceCreationException khi tên nhà cung cấp (sellerName) bị bỏ trống', () async {
+      // Arrange
+      final invalidInvoice = _createValidIncomingInvoice(sellerName: '');
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invalidInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Tên người bán/nhà cung cấp không được để trống'),
+        )),
+      );
+    });
+
+    // CASE 7: Kiểm tra dữ liệu biên - Không có sản phẩm
+    test('Nên ném lỗi InvoiceCreationException khi danh sách sản phẩm rỗng', () async {
+      // Arrange
+      final invalidInvoice = _createValidIncomingInvoice(items: []);
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invalidInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Hóa đơn phải có ít nhất một sản phẩm/dịch vụ'),
+        )),
+      );
+    });
+
+    // CASE 8: Kiểm tra dữ liệu biên - Tổng tiền <= 0
+    test('Nên ném lỗi InvoiceCreationException khi tổng tiền nhỏ hơn hoặc bằng 0', () async {
+      // Arrange
+      final invalidInvoice = _createValidIncomingInvoice(totalAmount: 0);
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invalidInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Tổng tiền hóa đơn phải lớn hơn 0'),
+        )),
+      );
+    });
+
+    // CASE 9: Kiểm tra dữ liệu biên - Tổng tiền quá lớn (trên 15 chữ số)
+    test('Nên ném lỗi InvoiceCreationException khi tổng tiền vượt quá 15 chữ số', () async {
+      // Arrange
+      final invalidInvoice = _createValidIncomingInvoice(totalAmount: 1000000000000000);
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invalidInvoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('vượt quá 15 chữ số'),
+        )),
+      );
+    });
+
+    // CASE 10: Kiểm tra tính toàn vẹn (Consistency) - Thành tiền + Thuế != Tổng tiền
+    test('Nên ném lỗi InvoiceCreationException khi (Thành tiền + Thuế) không bằng Tổng tiền', () async {
+      // Arrange
+      final invoice = InvoiceEntity(
+        id: 'inv_1',
+        invoiceNumber: 'INV-IN-001',
+        sellerName: 'NCC A',
+        sellerTaxCode: '',
+        buyerName: 'SmartFinance',
+        buyerTaxCode: '',
+        subtotal: 500000,
+        vatRate: 5,
+        vatAmount: 25000,
+        totalAmount: 900000, // Sai logic
+        ocrStatus: OcrStatus.notStarted,
+        transactionStatus: InvoiceTransactionStatus.notCreated,
+        issuedDate: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        type: InvoiceType.incoming,
+        items: [
+          const InvoiceItemEntity(
+            id: 'item_1',
+            itemCode: 'SP1',
+            itemName: 'SP1',
+            unit: 'Cái',
+            quantity: 1,
+            unitPrice: 500000,
+            totalAmount: 500000,
+          )
+        ],
+      );
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: invoice,
+        ),
+        throwsA(isA<InvoiceCreationException>().having(
+          (e) => e.message,
+          'message',
+          contains('Tổng tiền không khớp với (Thành tiền + Thuế VAT)'),
+        )),
+      );
+    });
+
+    // CASE 11: Trùng lặp hóa đơn (Mô phỏng Repository ném lỗi Duplicate)
+    test('Nên ném lỗi theo Repository nếu hóa đơn bị trùng tên/mã', () async {
+      // Arrange
+      final validInvoice = _createValidIncomingInvoice();
+      when(() => mockRepo.create(any())).thenThrow(Exception('Hóa đơn đã tồn tại trong hệ thống'));
+
+      // Act & Assert
+      expect(
+        () => service.createIncomingInvoice(
+          userRole: UserRole.expenseAccountant,
+          invoice: validInvoice,
+        ),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(), 
+          'Exception message', 
+          contains('Hóa đơn đã tồn tại trong hệ thống')
+        )),
+      );
+    });
   });
 }
