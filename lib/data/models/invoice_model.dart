@@ -26,7 +26,7 @@ class InvoiceModel extends InvoiceEntity {
     required super.vatAmount,
     required super.totalAmount,
     required super.ocrStatus,
-    required super.paymentStatus,
+    required super.transactionStatus,
     required super.issuedDate,
     super.createdByUid,
     super.company,
@@ -70,9 +70,9 @@ class InvoiceModel extends InvoiceEntity {
         orElse: () => OcrStatus.notStarted,
       ),
       ocrConfidence: (json['ocrConfidence'] as num?)?.toDouble(),
-      paymentStatus: PaymentStatus.values.firstWhere(
-        (e) => e.name == json['paymentStatus'],
-        orElse: () => PaymentStatus.unpaid,
+      transactionStatus: InvoiceTransactionStatus.values.firstWhere(
+        (e) => e.name == json['transactionStatus'],
+        orElse: () => InvoiceTransactionStatus.notCreated,
       ),
       issuedDate: json['issuedDate'] != null
           ? DateTime.parse(json['issuedDate'] as String)
@@ -119,7 +119,7 @@ class InvoiceModel extends InvoiceEntity {
       'imagePath': imagePath,
       'ocrStatus': ocrStatus.name,
       'ocrConfidence': ocrConfidence,
-      'paymentStatus': paymentStatus.name,
+      'transactionStatus': transactionStatus.name,
       'issuedDate': issuedDate.toIso8601String(),
       'createdByUid': createdByUid,
       'company': company,

@@ -25,6 +25,7 @@ import '../../../core/widgets/app_dialogs.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
+  final String? initialTitle;
   final int? initialAmount;
   final String? initialNote;
   final String? invoiceId;
@@ -32,6 +33,7 @@ class TransactionFormScreen extends ConsumerStatefulWidget {
   const TransactionFormScreen({
     super.key, 
     this.transactionId,
+    this.initialTitle,
     this.initialAmount,
     this.initialNote,
     this.invoiceId,
@@ -43,6 +45,7 @@ class TransactionFormScreen extends ConsumerStatefulWidget {
 
 class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   
@@ -62,6 +65,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   bool _isLoadingCategories = true;
 
   bool _showCategoryError = false;
+  final _titleKey = GlobalKey();
   final _amountKey = GlobalKey();
   final _categoryKey = GlobalKey();
 
@@ -71,6 +75,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialTitle != null) {
+      _titleController.text = widget.initialTitle!;
+    }
     if (widget.initialAmount != null) {
       _amountController.text = widget.initialAmount.toString();
     }
@@ -108,6 +115,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       if (index != -1) {
         final tx = list[index];
         setState(() {
+          _titleController.text = tx.title;
           _amountController.text = tx.amount.toString();
           _noteController.text = tx.note ?? '';
           _type = tx.type;
@@ -187,6 +195,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   @override
   void dispose() {
+    _titleController.dispose();
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
@@ -203,8 +212,14 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     });
 
     if (!isAmountValid || !isCategoryValid) {
-      if (!isAmountValid && _amountKey.currentContext != null) {
-        Scrollable.ensureVisible(_amountKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      if (!isAmountValid) {
+        // Simple check to see which one failed by checking their text. 
+        // Form validate doesn't tell us WHICH field failed, but we can guess.
+        if (_titleController.text.trim().isEmpty && _titleKey.currentContext != null) {
+          Scrollable.ensureVisible(_titleKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        } else if (_amountKey.currentContext != null) {
+          Scrollable.ensureVisible(_amountKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        }
       } else if (!isCategoryValid && _categoryKey.currentContext != null) {
         Scrollable.ensureVisible(_categoryKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
@@ -265,6 +280,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         categoryId: _categoryId,
         transactionDate: _transactionDate,
         status: _status,
+        title: _titleController.text,
         note: _noteController.text,
         invoiceId: _invoiceId,
         createdAt: _createdAt ?? DateTime.now(),
@@ -322,44 +338,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
       }
 
-      if (_invoiceId != null) {
-        final invoiceRepo = ref.read(invoiceRepositoryProvider);
-        final invoice = await invoiceRepo.getById(_invoiceId!);
-        if (invoice != null) {
-          final updatedInvoice = InvoiceEntity(
-            id: invoice.id,
-            invoiceNumber: invoice.invoiceNumber,
-            sellerName: invoice.sellerName,
-            sellerTaxCode: invoice.sellerTaxCode,
-            sellerAddress: invoice.sellerAddress,
-            sellerPhone: invoice.sellerPhone,
-            sellerBankName: invoice.sellerBankName,
-            sellerBankAccount: invoice.sellerBankAccount,
-            buyerName: invoice.buyerName,
-            buyerTaxCode: invoice.buyerTaxCode,
-            buyerAddress: invoice.buyerAddress,
-            buyerBankName: invoice.buyerBankName,
-            buyerBankAccount: invoice.buyerBankAccount,
-            paymentMethod: invoice.paymentMethod,
-            items: invoice.items,
-            subtotal: invoice.subtotal,
-            vatRate: invoice.vatRate,
-            vatAmount: invoice.vatAmount,
-            totalAmount: invoice.totalAmount,
-            ocrStatus: invoice.ocrStatus,
-            paymentStatus: PaymentStatus.paid,
-            issuedDate: invoice.issuedDate,
-            createdAt: invoice.createdAt,
-            updatedAt: invoice.updatedAt,
-            type: invoice.type,
-            imagePath: invoice.imagePath,
-            createdByUid: invoice.createdByUid,
-            company: invoice.company,
-            ocrConfidence: invoice.ocrConfidence,
-          );
-          await invoiceRepo.update(updatedInvoice);
-        }
-      }
+
 
       // Refresh list
       ref.invalidate(allTransactionsProvider);
@@ -399,6 +378,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
         await repo.softDelete(widget.transactionId!);
+
+
         
         // Refresh list
         ref.invalidate(allTransactionsProvider);
@@ -430,6 +411,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
         await repo.restore(widget.transactionId!);
+
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
@@ -840,9 +823,52 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           children: [
+            // Title
+            TextFormField(
+              key: _titleKey,
+              controller: _titleController,
+              readOnly: _isReadOnly,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Tiêu đề giao dịch (*)',
+                labelStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 14),
+                prefixIcon: const Icon(Icons.title_rounded, color: Color(0xFF00D09E)),
+                filled: true,
+                fillColor: inputFillColor,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: primaryColor, width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+                ),
+              ),
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return 'Vui lòng nhập tiêu đề giao dịch';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 24),
+
             // Amount
             TextFormField(
               key: _amountKey,

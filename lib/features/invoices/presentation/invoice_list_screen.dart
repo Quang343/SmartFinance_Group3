@@ -35,6 +35,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   DateTimeRange? _customDateRange;
+  InvoiceTransactionStatus? _filterTransactionStatus; // null = all, notCreated, created
   late Future<List<dynamic>> _dataFuture;
 
   @override
@@ -153,6 +154,11 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
             final invNum = inv.invoiceNumber.toLowerCase();
             return partner.contains(_searchQuery) || invNum.contains(_searchQuery);
           }).toList();
+        }
+
+        // Filter by transaction status
+        if (_filterTransactionStatus != null) {
+          list = list.where((inv) => inv.transactionStatus == _filterTransactionStatus).toList();
         }
 
         // Sort by date descending
@@ -436,35 +442,76 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               ),
 
-              // Search Bar
+              // Search Bar & Filter
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: TextField(
-                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                  decoration: InputDecoration(
-                    hintText: 'Tìm kiếm theo đối tác, số HĐ...',
-                    hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
-                    prefixIcon: Icon(Icons.search_rounded, color: isDark ? Colors.white38 : Colors.black38),
-                    filled: true,
-                    fillColor: isDark ? const Color(0xFF0D251C) : Colors.white,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        decoration: InputDecoration(
+                          hintText: 'Tìm kiếm theo đối tác, số HĐ...',
+                          hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
+                          prefixIcon: Icon(Icons.search_rounded, color: isDark ? Colors.white38 : Colors.black38),
+                          filled: true,
+                          fillColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: primaryColor, width: 1.5),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val.toLowerCase();
+                          });
+                        },
                       ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: primaryColor, width: 1.5),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        height: 48, // matching textfield roughly
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0D251C) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<InvoiceTransactionStatus?>(
+                            isExpanded: true,
+                            value: _filterTransactionStatus,
+                            icon: Icon(Icons.filter_list_rounded, color: isDark ? Colors.white54 : Colors.black54, size: 20),
+                            dropdownColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                            style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
+                            items: const [
+                              DropdownMenuItem(value: null, child: Text('Tất cả trạng thái')),
+                              DropdownMenuItem(value: InvoiceTransactionStatus.created, child: Text('Đã tạo GD')),
+                              DropdownMenuItem(value: InvoiceTransactionStatus.notCreated, child: Text('Chưa tạo GD')),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _filterTransactionStatus = val;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  onChanged: (val) {
-                    setState(() {
-                      _searchQuery = val.toLowerCase();
-                    });
-                  },
+                  ],
                 ),
               ),
 
@@ -553,8 +600,33 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                                   fontSize: 12,
                                                 ),
                                               ),
-
-                                            ],
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: inv.transactionStatus == InvoiceTransactionStatus.created
+                                                      ? const Color(0xFF00D09E).withOpacity(0.1)
+                                                      : const Color(0xFFF97316).withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: inv.transactionStatus == InvoiceTransactionStatus.created
+                                                        ? const Color(0xFF00D09E).withOpacity(0.3)
+                                                        : const Color(0xFFF97316).withOpacity(0.3),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  inv.transactionStatus == InvoiceTransactionStatus.created
+                                                      ? 'Đã tạo GD'
+                                                      : 'Chưa tạo GD',
+                                                  style: TextStyle(
+                                                    color: inv.transactionStatus == InvoiceTransactionStatus.created
+                                                        ? const Color(0xFF00D09E)
+                                                        : const Color(0xFFF97316),
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),                                            ],
                                           ),
                                         ),
                                         Column(

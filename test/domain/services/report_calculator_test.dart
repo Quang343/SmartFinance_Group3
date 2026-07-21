@@ -5,6 +5,7 @@ import 'package:smart_finance/domain/services/report_calculator.dart';
 TransactionEntity _tx(int amount, TransactionType type, TransactionStatus status) =>
     TransactionEntity(
       id: 'id',
+      title: 'title',
       amount: amount,
       type: type,
       categoryId: 'c',

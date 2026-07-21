@@ -414,9 +414,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           // Filter by search query
           if (_searchQuery.isNotEmpty) {
             list = list.where((tx) {
-              final note = (tx.note ?? '').toLowerCase();
+              final searchTitle = tx.title.toLowerCase();
+              final searchNote = (tx.note ?? '').toLowerCase();
               final catName = (catMap[tx.categoryId]?.name ?? '').toLowerCase();
-              return note.contains(_searchQuery) ||
+              return searchTitle.contains(_searchQuery) || searchNote.contains(_searchQuery) ||
                   catName.contains(_searchQuery);
             }).toList();
           }
@@ -1176,7 +1177,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 Text(
-                                                  tx.note ?? 'Không có ghi chú',
+                                                  tx.title,
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 15,

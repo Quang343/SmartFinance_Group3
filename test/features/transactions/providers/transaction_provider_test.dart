@@ -11,8 +11,8 @@ class FakeTransactionRepository extends Mock implements TransactionRepository {}
 void main() {
   late FakeTransactionRepository fake;
   late ProviderContainer container;
-  final income = TransactionEntity(id: '1', amount: 10, type: TransactionType.income, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026));
-  final expense = TransactionEntity(id: '2', amount: 20, type: TransactionType.expense, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026));
+  final income = TransactionEntity(id: '1', title: 'Test 1', amount: 10, type: TransactionType.income, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026));
+  final expense = TransactionEntity(id: '2', title: 'Test 2', amount: 20, type: TransactionType.expense, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026));
 
   setUp(() {
     fake = FakeTransactionRepository();
