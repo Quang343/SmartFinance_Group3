@@ -17,7 +17,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToNext();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigateToNext();
+    });
   }
 
   Future<void> _navigateToNext() async {
