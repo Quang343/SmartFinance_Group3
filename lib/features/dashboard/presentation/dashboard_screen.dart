@@ -1571,9 +1571,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: Text(
                             '$percent%',
                             style: TextStyle(
-                              color: displayPct > 20 ? Colors.white : (isDark ? Colors.white54 : const Color(0xFF64748B)),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
+                              color: displayPct >= 12 ? Colors.white : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
                         ),

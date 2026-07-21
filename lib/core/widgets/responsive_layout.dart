@@ -356,10 +356,13 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
                     Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: InkWell(
-                        onTap: () {
+                        onTap: () async {
+                          await ref.read(authRepositoryProvider).logout();
                           ref.read(currentUserProvider.notifier).state = null;
-                          Navigator.pop(context); // close drawer
-                          context.go('/welcome');
+                          if (context.mounted) {
+                            Navigator.pop(context); // close drawer
+                            context.go('/welcome');
+                          }
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
