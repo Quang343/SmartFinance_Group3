@@ -1,0 +1,40 @@
+name: Flutter CI/CD (Auto Test)
+
+# Sự kiện kích hoạt CI/CD
+on:
+  push:
+    branches:
+      - '**' # Kích hoạt trên TẤT CẢ các nhánh (bao gồm cả nhánh unittest hiện tại của bạn)
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    name: Run Flutter Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Bước 1: Kéo code từ GitHub về máy chủ ảo
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v3
+
+      # Bước 2: Cài đặt môi trường Flutter
+      - name: ⚙️ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # Bước 3: Tải các thư viện (dependencies)
+      - name: 📦 Install Dependencies
+        run: flutter pub get
+
+      # Bước 3.5: Tạo file .env giả để flutter build không bị lỗi thiếu asset
+      - name: 📝 Create dummy .env file
+        run: touch .env
+
+      # Bước 4: Chạy toàn bộ Unit Test (Phần này sẽ báo Pass/Fail trên GitHub)
+      - name: 🧪 Run Unit Tests
+        run: flutter test
