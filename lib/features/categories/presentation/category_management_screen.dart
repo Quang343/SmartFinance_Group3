@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -133,16 +134,31 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
       updatedAt: DateTime.now(),
     );
 
-    await repo.create(newCat);
-    _newCategoryController.clear();
-    if (mounted) {
-      _loadData(withDelay: false);
+    try {
+      await repo.create(newCat);
+      _newCategoryController.clear();
+      if (mounted) {
+        _loadData(withDelay: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   void _showAddCategoryDialog(String type) {
+    _newCategoryController.clear();
     String selectedColor = vibrantColors.first;
     String selectedIcon = categoryIcons.first.codePoint.toString();
+    String? errorMessage;
+    bool isDuplicate = false;
+
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -152,6 +168,28 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
             final primaryColor = const Color(0xFF00D09E);
             final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
             final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
+            final isFormValid = _newCategoryController.text.trim().isNotEmpty && !isDuplicate;
+
+            void validateName(String val) {
+              final trimmed = val.trim().toLowerCase();
+              if (trimmed.isEmpty) {
+                setState(() {
+                  errorMessage = null;
+                  isDuplicate = false;
+                });
+                return;
+              }
+              final exists = _allCats.any((c) => c.type == type && c.name.trim().toLowerCase() == trimmed);
+              setState(() {
+                if (exists) {
+                  errorMessage = 'Tên danh mục đã tồn tại trong hệ thống!';
+                  isDuplicate = true;
+                } else {
+                  errorMessage = null;
+                  isDuplicate = false;
+                }
+              });
+            }
 
             return AlertDialog(
               backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
@@ -170,6 +208,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                 children: [
                   TextField(
                     controller: _newCategoryController,
+                    onChanged: validateName,
                     style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                     decoration: InputDecoration(
                       hintText: 'Nhập tên danh mục...',
@@ -177,6 +216,8 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                       filled: true,
                       fillColor: inputFillColor,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      errorText: errorMessage,
+                      errorStyle: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.normal, fontSize: 12),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: inputBorderColor, width: 1.5),
@@ -185,147 +226,13 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: primaryColor, width: 2),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Màu thẻ danh mục', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: vibrantColors.map((color) {
-                      final isSelected = selectedColor == color;
-                      return GestureDetector(
-                        onTap: () => setState(() => selectedColor = color),
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: _parseColor(color),
-                            shape: BoxShape.circle,
-                            border: isSelected ? Border.all(color: isDark ? Colors.white : Colors.black, width: 2) : null,
-                          ),
-                          child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Biểu tượng', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: categoryIcons.map((icon) {
-                      final iconCodeStr = icon.codePoint.toString();
-                      final isSelected = selectedIcon == iconCodeStr;
-                      return GestureDetector(
-                        onTap: () => setState(() => selectedIcon = iconCodeStr),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: isSelected ? primaryColor.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.grey.shade100),
-                            borderRadius: BorderRadius.circular(12),
-                            border: isSelected ? Border.all(color: primaryColor, width: 2) : null,
-                          ),
-                          child: Icon(
-                            icon,
-                            color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
-                            size: 20,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    if (dialogContext.canPop()) dialogContext.pop();
-                  },
-                  child: Text(
-                    'Hủy',
-                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
-                  ),
-                ),
-                ScaleOnTap(
-                  onTap: () {
-                    if (dialogContext.canPop()) dialogContext.pop();
-                    _addCategory(type, selectedColor, selectedIcon);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: primaryColor,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'Thêm',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF060E0A),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-        );
-      },
-    );
-  }
-
-  void _showEditCategoryDialog(CategoryEntity cat) {
-    _newCategoryController.text = cat.name;
-    String selectedColor = cat.colorHex ?? vibrantColors.first;
-    if (!vibrantColors.contains(selectedColor)) selectedColor = vibrantColors.first;
-    String selectedIcon = cat.iconCode ?? categoryIcons.first.codePoint.toString();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
-            final primaryColor = const Color(0xFF00D09E);
-            final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
-            final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
-
-            return AlertDialog(
-              backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Text(
-                'Sửa danh mục',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: _newCategoryController,
-                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                    decoration: InputDecoration(
-                      hintText: 'Nhập tên danh mục...',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      filled: true,
-                      fillColor: inputFillColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      enabledBorder: OutlineInputBorder(
+                      errorBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+                        borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
                       ),
-                      focusedBorder: OutlineInputBorder(
+                      focusedErrorBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: primaryColor, width: 2),
+                        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
                       ),
                     ),
                   ),
@@ -394,39 +301,27 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                     style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
                   ),
                 ),
-                ScaleOnTap(
-                  onTap: () async {
-                    if (dialogContext.canPop()) dialogContext.pop();
-                    final name = _newCategoryController.text.trim();
-                    if (name.isNotEmpty) {
-                      final repo = ref.read(categoryRepositoryProvider);
-                      final updatedCat = CategoryEntity(
-                        id: cat.id,
-                        name: name,
-                        type: cat.type,
-                        iconCode: selectedIcon,
-                        colorHex: selectedColor,
-                        isDefault: cat.isDefault,
-                        isActive: cat.isActive,
-                        createdAt: cat.createdAt,
-                        updatedAt: DateTime.now(),
-                      );
-                      await repo.update(updatedCat);
-                      _newCategoryController.clear();
-                      if (mounted) _loadData(withDelay: false);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: primaryColor,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'Lưu',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF060E0A),
+                Opacity(
+                  opacity: isFormValid ? 1.0 : 0.4,
+                  child: ScaleOnTap(
+                    onTap: isFormValid
+                        ? () {
+                            if (dialogContext.canPop()) dialogContext.pop();
+                            _addCategory(type, selectedColor, selectedIcon);
+                          }
+                        : () {},
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Thêm',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF060E0A),
+                        ),
                       ),
                     ),
                   ),
@@ -439,6 +334,217 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
     );
   }
 
+  void _showEditCategoryDialog(CategoryEntity cat) {
+    _newCategoryController.text = cat.name;
+    String selectedColor = cat.colorHex ?? vibrantColors.first;
+    if (!vibrantColors.contains(selectedColor)) selectedColor = vibrantColors.first;
+    String selectedIcon = cat.iconCode ?? categoryIcons.first.codePoint.toString();
+    String? errorMessage;
+    bool isDuplicate = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final primaryColor = const Color(0xFF00D09E);
+            final inputFillColor = isDark ? const Color(0xFF060E0A) : Colors.grey.shade50;
+            final inputBorderColor = isDark ? const Color(0xFF1E382B) : Colors.grey.shade300;
+            final isFormValid = _newCategoryController.text.trim().isNotEmpty && !isDuplicate;
+
+            void validateName(String val) {
+              final trimmed = val.trim().toLowerCase();
+              if (trimmed.isEmpty) {
+                setState(() {
+                  errorMessage = null;
+                  isDuplicate = false;
+                });
+                return;
+              }
+              final exists = _allCats.any((c) => c.type == cat.type && c.id != cat.id && c.name.trim().toLowerCase() == trimmed);
+              setState(() {
+                if (exists) {
+                  errorMessage = 'Tên danh mục đã tồn tại trong hệ thống!';
+                  isDuplicate = true;
+                } else {
+                  errorMessage = null;
+                  isDuplicate = false;
+                }
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF0F1E15) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                'Sửa danh mục',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _newCategoryController,
+                    onChanged: validateName,
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    decoration: InputDecoration(
+                      hintText: 'Nhập tên danh mục...',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: inputFillColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      errorText: errorMessage,
+                      errorStyle: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Màu thẻ danh mục', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: vibrantColors.map((color) {
+                      final isSelected = selectedColor == color;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedColor = color),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _parseColor(color),
+                            shape: BoxShape.circle,
+                            border: isSelected ? Border.all(color: isDark ? Colors.white : Colors.black, width: 2) : null,
+                          ),
+                          child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Biểu tượng', style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categoryIcons.map((icon) {
+                      final iconCodeStr = icon.codePoint.toString();
+                      final isSelected = selectedIcon == iconCodeStr;
+                      return GestureDetector(
+                        onTap: () => setState(() => selectedIcon = iconCodeStr),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected ? primaryColor.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.grey.shade100),
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected ? Border.all(color: primaryColor, width: 2) : null,
+                          ),
+                          child: Icon(
+                            icon,
+                            color: isSelected ? primaryColor : (isDark ? Colors.white70 : Colors.black54),
+                            size: 20,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _newCategoryController.clear();
+                    if (dialogContext.canPop()) dialogContext.pop();
+                  },
+                  child: Text(
+                    'Hủy',
+                    style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                  ),
+                ),
+                Opacity(
+                  opacity: isFormValid ? 1.0 : 0.4,
+                  child: ScaleOnTap(
+                    onTap: isFormValid
+                        ? () async {
+                            if (dialogContext.canPop()) dialogContext.pop();
+                            final name = _newCategoryController.text.trim();
+                            if (name.isNotEmpty) {
+                              final repo = ref.read(categoryRepositoryProvider);
+                              final updatedCat = CategoryEntity(
+                                id: cat.id,
+                                name: name,
+                                type: cat.type,
+                                iconCode: selectedIcon,
+                                colorHex: selectedColor,
+                                isDefault: cat.isDefault,
+                                isActive: cat.isActive,
+                                createdAt: cat.createdAt,
+                                updatedAt: DateTime.now(),
+                              );
+                              try {
+                                await repo.update(updatedCat);
+                                _newCategoryController.clear();
+                                if (mounted) _loadData(withDelay: false);
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(e.toString().replaceAll('Exception: ', '')),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+                          }
+                        : () {},
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Lưu',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF060E0A),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
+  }
+  
   void _handleDeleteAction(CategoryEntity cat) async {
     final allTxs = await ref.read(transactionRepositoryProvider).getAll();
     final hasTransactions = allTxs.any((tx) => tx.categoryId == cat.id);
@@ -739,16 +845,14 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
 
   Widget _buildCategoryTile(CategoryEntity cat, UserRole role, int index) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isMobile = MediaQuery.of(context).size.width < 768;
     final canManage = role == UserRole.financeManager;
     final canEdit = canManage || 
                     (cat.type == 'income' && role == UserRole.revenueAccountant) ||
                     (cat.type == 'expense' && role == UserRole.expenseAccountant);
 
-    return Padding(
-      key: ValueKey(cat.id),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Container(
-        decoration: BoxDecoration(
+    Widget tileContent = Container(
+      decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0F1E15) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
@@ -797,9 +901,9 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
               Switch(
                 value: cat.isActive,
                 activeColor: const Color(0xFF00D09E),
-                activeTrackColor: const Color(0xFF00D09E).withOpacity(0.3),
+                activeTrackColor: const Color(0xFF00D09E).withValues(alpha: 0.3),
                 inactiveThumbColor: Colors.grey,
-                inactiveTrackColor: Colors.grey.withOpacity(0.3),
+                inactiveTrackColor: Colors.grey.withValues(alpha: 0.3),
                 onChanged: (val) async {
                   final updated = CategoryEntity(
                     id: cat.id,
@@ -816,26 +920,27 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                   if (mounted) _loadData(withDelay: false);
                 },
               ),
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert, color: isDark ? Colors.white70 : Colors.black54),
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    _showEditCategoryDialog(cat);
-                  } else if (value == 'delete') {
-                    _handleDeleteAction(cat);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(children: [Icon(Icons.edit, size: 20), SizedBox(width: 8), Text('Sửa')]),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(children: [Icon(Icons.delete, size: 20, color: Colors.red), SizedBox(width: 8), Text('Xóa', style: TextStyle(color: Colors.red))]),
-                  ),
-                ],
-              ),
+              if (!isMobile)
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: isDark ? Colors.white70 : Colors.black54),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _showEditCategoryDialog(cat);
+                    } else if (value == 'delete') {
+                      _handleDeleteAction(cat);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [Icon(Icons.edit, size: 20), SizedBox(width: 8), Text('Sửa')]),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [Icon(Icons.delete, size: 20, color: Colors.red), SizedBox(width: 8), Text('Xóa', style: TextStyle(color: Colors.red))]),
+                    ),
+                  ],
+                ),
             ] else ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -858,7 +963,46 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
           ],
         ),
       ),
-    ),
+    );
+
+    if (isMobile && canEdit) {
+      tileContent = Slidable(
+        key: ValueKey(cat.id),
+        endActionPane: ActionPane(
+          motion: const ScrollMotion(),
+          children: [
+            SlidableAction(
+              onPressed: (context) => _showEditCategoryDialog(cat),
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              icon: Icons.edit_rounded,
+              label: 'Sửa',
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+              ),
+            ),
+            SlidableAction(
+              onPressed: (context) => _handleDeleteAction(cat),
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              icon: Icons.delete_outline_rounded,
+              label: 'Xóa',
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+            ),
+          ],
+        ),
+        child: tileContent,
+      );
+    }
+
+    return Padding(
+      key: ValueKey(cat.id),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: tileContent,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
 import '../../domain/entities/partner_entity.dart';
 import '../models/partner_model.dart';
 import 'partner_repository.dart';
@@ -26,9 +27,26 @@ class PartnerRepositoryImpl implements PartnerRepository {
   }
 
   @override
+  Future<PartnerEntity?> getByTaxCode(String taxCode, String company) async {
+    final cleanTax = taxCode.trim();
+    if (cleanTax.isEmpty) return null;
+    Query query = _firestore.collection(_collection).where('taxCode', isEqualTo: cleanTax);
+    if (company.isNotEmpty) {
+      query = query.where('company', isEqualTo: company);
+    }
+    final snapshot = await query.limit(1).get();
+    if (snapshot.docs.isNotEmpty) {
+      final doc = snapshot.docs.first;
+      return PartnerModel.fromJson(doc.data() as Map<String, dynamic>, doc.id);
+    }
+    return null;
+  }
+
+  @override
   Future<PartnerEntity> createPartner(PartnerEntity partner) async {
+    final docId = partner.id.isNotEmpty ? partner.id : const Uuid().v4();
     final model = PartnerModel(
-      id: partner.id,
+      id: docId,
       name: partner.name,
       taxCode: partner.taxCode,
       address: partner.address,
@@ -40,8 +58,8 @@ class PartnerRepositoryImpl implements PartnerRepository {
       createdAt: partner.createdAt,
       updatedAt: partner.updatedAt,
     );
-    final docRef = await _firestore.collection(_collection).add(model.toJson());
-    return PartnerModel.fromJson(model.toJson(), docRef.id);
+    await _firestore.collection(_collection).doc(docId).set(model.toJson());
+    return PartnerModel.fromJson(model.toJson(), docId);
   }
 
   @override

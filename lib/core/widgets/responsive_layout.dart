@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
 import '../providers/auth_provider.dart';
+import 'app_dialogs.dart';
 import 'scale_on_tap.dart';
 import '../../data/repositories/auth_repository.dart';
 
@@ -673,17 +674,27 @@ class _DesktopScaffold extends ConsumerWidget {
                           color: Colors.red,
                         ),
                         tooltip: 'Đăng xuất',
-                        onPressed: () async {
-                          await ref.read(authRepositoryProvider).logout();
+                        onPressed: () {
+                          AppDialogs.showConfirmDialog(
+                            context: context,
+                            title: 'Đăng xuất',
+                            message: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?',
+                            icon: Icons.logout_rounded,
+                            color: Colors.red,
+                            confirmText: 'Đăng xuất',
+                            onConfirm: () async {
+                              await ref.read(authRepositoryProvider).logout();
 
-                          if (!context.mounted) return;
+                              if (!context.mounted) return;
 
-                          context.go('/welcome'); // Chuyển trang
+                              context.go('/welcome'); // Chuyển trang
 
-                          // Đợi route chuyển xong mới xoá state để tránh unmounted context
-                          Future.delayed(const Duration(milliseconds: 100), () {
-                            ref.read(currentUserProvider.notifier).state = null;
-                          });
+                              // Đợi route chuyển xong mới xoá state để tránh unmounted context
+                              Future.delayed(const Duration(milliseconds: 100), () {
+                                ref.read(currentUserProvider.notifier).state = null;
+                              });
+                            },
+                          );
                         },
                       ),
                     ),

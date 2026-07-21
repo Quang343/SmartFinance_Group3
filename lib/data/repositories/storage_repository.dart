@@ -50,7 +50,12 @@ class StorageRepository {
           filename: fileName ?? 'upload.jpg',
         ));
       } else if (file != null) {
-        request.files.add(await http.MultipartFile.fromPath('image', file.path));
+        final safeFileName = fileName ?? (name != null ? '$name.jpg' : 'upload.jpg');
+        request.files.add(await http.MultipartFile.fromPath(
+          'image',
+          file.path,
+          filename: safeFileName,
+        ));
       } else {
         return null;
       }
@@ -62,12 +67,12 @@ class StorageRepository {
         final jsonResult = json.decode(responseData);
         return jsonResult['data']['url'];
       } else {
-        final jsonResult = json.decode(responseData);
-        throw Exception(jsonResult['error']['message'] ?? 'Lỗi không xác định từ ImgBB');
+        debugPrint('Upload error (ImgBB HTTP ${response.statusCode}): $responseData');
+        return null;
       }
     } catch (e) {
-      print('Upload error (ImgBB): $e');
-      throw Exception('Lỗi khi tải ảnh lên ImgBB: $e');
+      debugPrint('Upload error (ImgBB Exception): $e');
+      return null;
     }
   }
 }

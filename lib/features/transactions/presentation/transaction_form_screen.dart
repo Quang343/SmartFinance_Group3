@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
@@ -10,6 +11,8 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import '../../../core/utils/number_to_text.dart';
+import '../../../core/utils/money_formatter.dart';
 
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
@@ -73,16 +76,18 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   bool _isSaving = false;
   late bool _isReadOnly;
+  String _amountText = '';
 
   @override
   void initState() {
     super.initState();
     _isReadOnly = widget.readOnly;
+    _amountController.addListener(_updateAmountText);
     if (widget.initialTitle != null) {
       _titleController.text = widget.initialTitle!;
     }
     if (widget.initialAmount != null) {
-      _amountController.text = widget.initialAmount.toString();
+      _amountController.text = NumberFormat.decimalPattern('vi_VN').format(widget.initialAmount);
     }
     if (widget.initialNote != null) {
       _noteController.text = widget.initialNote!;
@@ -91,6 +96,34 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  void _updateAmountText() {
+    final text = _amountController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.isEmpty) {
+      if (_amountText.isNotEmpty) {
+        setState(() {
+          _amountText = '';
+        });
+      }
+      return;
+    }
+    
+    final number = int.tryParse(text);
+    if (number != null && number > 0) {
+      final newText = NumberToText.convert(number);
+      if (_amountText != newText) {
+        setState(() {
+          _amountText = newText;
+        });
+      }
+    } else {
+      if (_amountText.isNotEmpty) {
+        setState(() {
+          _amountText = '';
+        });
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -119,7 +152,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         final tx = list[index];
         setState(() {
           _titleController.text = tx.title;
-          _amountController.text = tx.amount.toString();
+          _amountController.text = NumberFormat.decimalPattern('vi_VN').format(tx.amount);
           _noteController.text = tx.note ?? '';
           _type = tx.type;
           _categoryId = tx.categoryId;
@@ -198,6 +231,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   @override
   void dispose() {
+    _amountController.removeListener(_updateAmountText);
     _titleController.dispose();
     _amountController.dispose();
     _noteController.dispose();
@@ -238,7 +272,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final storageRepo = ref.read(storageRepositoryProvider);
       
       final String id = widget.transactionId ?? const Uuid().v4();
-      final int amount = int.parse(_amountController.text);
+      final int amount = int.parse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), ''));
 
       // Verify file existence right before saving to prevent ghost paths
       if (_selectedImagePath != null && !kIsWeb && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
@@ -264,15 +298,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             }
           }
         } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Không thể tải ảnh đính kèm lên Cloud: $e'), backgroundColor: Colors.red),
-            );
-          }
-          setState(() {
-            _isSaving = false;
-          });
-          return;
+          debugPrint('Không thể tải ảnh đính kèm lên ImgBB (giữ đường dẫn local/fallback): $e');
+          // Không return; để cho phép giao dịch tiếp tục được lưu vào Firestore!
         }
       }
 
@@ -814,7 +841,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           ),
         ),
         actions: [
-
           if (widget.transactionId != null && !_isReadOnly)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
@@ -878,6 +904,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               controller: _amountController,
               readOnly: _isReadOnly,
               keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]')),
+                CurrencyInputFormatter(),
+                LengthLimitingTextInputFormatter(19),
+              ],
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -923,6 +954,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 return null;
               },
             ),
+            if (_amountText.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Text(
+                  _amountText,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    color: Color(0xFF00D09E),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
 
             // Transaction Date Picker

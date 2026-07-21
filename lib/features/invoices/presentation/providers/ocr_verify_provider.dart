@@ -135,18 +135,26 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
       
       String? imageUrl;
       // Upload image to ImgBB
-      if (kIsWeb) {
-        // On web, the path is a blob URL, we can get bytes using http.get
-        try {
-          final response = await http.get(Uri.parse(draft.imageFile.path));
-          if (response.statusCode == 200) {
-            imageUrl = await _storageRepository.uploadInvoiceImage(invoiceId, webFile: response.bodyBytes, fileName: 'invoice.png');
+      try {
+        if (kIsWeb) {
+          // On web, the path is a blob URL, we can get bytes using http.get
+          try {
+            final response = await http.get(Uri.parse(draft.imageFile.path));
+            if (response.statusCode == 200) {
+              imageUrl = await _storageRepository.uploadInvoiceImage(invoiceId, webFile: response.bodyBytes, fileName: 'invoice.png');
+            }
+          } catch (e) {
+            debugPrint('Error getting web image bytes: $e');
           }
-        } catch (e) {
-          debugPrint('Error getting web image bytes: $e');
+        } else if (draft.imageFile.existsSync()) {
+          imageUrl = await _storageRepository.uploadInvoiceImage(invoiceId, file: draft.imageFile);
         }
-      } else if (draft.imageFile.existsSync()) {
-        imageUrl = await _storageRepository.uploadInvoiceImage(invoiceId, file: draft.imageFile);
+      } catch (uploadError) {
+        debugPrint('Error uploading invoice image: $uploadError');
+        // Fallback to local path or null if upload fails
+        if (!kIsWeb && draft.imageFile.existsSync()) {
+          imageUrl = draft.imageFile.path;
+        }
       }
       
       // Convert Draft to Entity

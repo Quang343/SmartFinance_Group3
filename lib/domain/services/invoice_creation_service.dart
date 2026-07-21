@@ -51,6 +51,59 @@ class InvoiceCreationService {
     if (invoice.totalAmount <= 0) {
       throw InvoiceCreationException('Tổng tiền hóa đơn phải lớn hơn 0.');
     }
+    if (invoice.totalAmount > 999999999999999) {
+      throw InvoiceCreationException('Tổng tiền hóa đơn quá lớn (vượt quá 15 chữ số).');
+    }
+    if (invoice.subtotal + invoice.vatAmount != invoice.totalAmount) {
+      throw InvoiceCreationException('Tổng tiền không khớp với (Thành tiền + Thuế VAT).');
+    }
+
+    // 4. Thực hiện lưu hóa đơn thông qua repository
+    await _invoiceRepository.create(invoice);
+  }
+
+  /// Tạo hóa đơn mua vào (Incoming Invoice)
+  /// Yêu cầu:
+  /// - Người dùng phải có quyền quản lý hóa đơn mua vào (expenseAccountant)
+  /// - Hóa đơn phải là loại mua vào (incoming)
+  /// - Dữ liệu hóa đơn phải đầy đủ và hợp lệ
+  Future<void> createIncomingInvoice({
+    required UserRole userRole,
+    required InvoiceEntity invoice,
+  }) async {
+    // 1. Kiểm tra quyền của người dùng
+    if (!userRole.canManageIncomingInvoices) {
+      throw InvoiceCreationException(
+        'Bạn không có quyền tạo hóa đơn mua vào. Chỉ kế toán chi phí mới được phép thực hiện.',
+      );
+    }
+
+    // 2. Kiểm tra loại hóa đơn
+    if (invoice.type != InvoiceType.incoming) {
+      throw InvoiceCreationException(
+        'Loại hóa đơn không hợp lệ. Phải là hóa đơn mua vào (incoming).',
+      );
+    }
+
+    // 3. Kiểm tra tính hợp lệ của dữ liệu hóa đơn
+    if (invoice.invoiceNumber.isEmpty) {
+      throw InvoiceCreationException('Số hóa đơn không được để trống.');
+    }
+    if (invoice.sellerName.isEmpty) {
+      throw InvoiceCreationException('Tên người bán/nhà cung cấp không được để trống.');
+    }
+    if (invoice.items.isEmpty) {
+      throw InvoiceCreationException('Hóa đơn phải có ít nhất một sản phẩm/dịch vụ.');
+    }
+    if (invoice.totalAmount <= 0) {
+      throw InvoiceCreationException('Tổng tiền hóa đơn phải lớn hơn 0.');
+    }
+    if (invoice.totalAmount > 999999999999999) {
+      throw InvoiceCreationException('Tổng tiền hóa đơn quá lớn (vượt quá 15 chữ số).');
+    }
+    if (invoice.subtotal + invoice.vatAmount != invoice.totalAmount) {
+      throw InvoiceCreationException('Tổng tiền không khớp với (Thành tiền + Thuế VAT).');
+    }
 
     // 4. Thực hiện lưu hóa đơn thông qua repository
     await _invoiceRepository.create(invoice);
