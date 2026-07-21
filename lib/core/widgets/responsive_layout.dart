@@ -496,20 +496,21 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
                       Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: InkWell(
-                          onTap: () async {
-                            await ref.read(authRepositoryProvider).logout();
-
-                            if (!context.mounted) return;
-
-                            Navigator.pop(context); // Đóng drawer
-                            context.go('/welcome'); // Chuyển trang
-
-                            // Đợi route chuyển xong mới xoá state để tránh unmounted context
-                            Future.delayed(
-                              const Duration(milliseconds: 100),
-                              () {
-                                ref.read(currentUserProvider.notifier).state =
-                                    null;
+                          onTap: () {
+                            AppDialogs.showConfirmDialog(
+                              context: context,
+                              title: 'Đăng xuất',
+                              message: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?',
+                              icon: Icons.logout_rounded,
+                              color: Colors.red,
+                              confirmText: 'Đăng xuất',
+                              onConfirm: () async {
+                                await ref.read(authRepositoryProvider).logout();
+                                ref.read(currentUserProvider.notifier).state = null;
+                                if (context.mounted) {
+                                  Navigator.pop(context); // close drawer
+                                  context.go('/welcome');
+                                }
                               },
                             );
                           },
@@ -684,15 +685,10 @@ class _DesktopScaffold extends ConsumerWidget {
                             confirmText: 'Đăng xuất',
                             onConfirm: () async {
                               await ref.read(authRepositoryProvider).logout();
-
-                              if (!context.mounted) return;
-
-                              context.go('/welcome'); // Chuyển trang
-
-                              // Đợi route chuyển xong mới xoá state để tránh unmounted context
-                              Future.delayed(const Duration(milliseconds: 100), () {
-                                ref.read(currentUserProvider.notifier).state = null;
-                              });
+                              ref.read(currentUserProvider.notifier).state = null;
+                              if (context.mounted) {
+                                context.go('/welcome');
+                              }
                             },
                           );
                         },
