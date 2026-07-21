@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 enum DocumentPayloadType { file, network, memory, pdf }
@@ -67,7 +68,10 @@ class _DocumentSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (payload.type) {
       case DocumentPayloadType.file:
-        return Image.file(payload.data as File, fit: BoxFit.contain);
+        final file = payload.data as File;
+        return kIsWeb 
+            ? Image.network(file.path, fit: BoxFit.contain)
+            : Image.file(file, fit: BoxFit.contain);
       case DocumentPayloadType.network:
         return Image.network(payload.data as String, fit: BoxFit.contain);
       case DocumentPayloadType.memory:

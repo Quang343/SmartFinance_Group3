@@ -12,6 +12,9 @@ import 'package:smart_finance/data/repositories/storage_repository.dart';
 import 'package:smart_finance/core/providers/auth_provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
+import '../providers/invoice_provider.dart';
 
 class _ItemFormState {
   final TextEditingController nameController;
@@ -164,13 +167,20 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         if (widget.invoiceType == InvoiceType.incoming && widget.scannedImagePath != null) {
           if (!widget.scannedImagePath!.startsWith('http')) {
              try {
-               final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
-               if (uploadedUrl != null) {
-                 finalImagePath = uploadedUrl;
-               } else {
-                 finalImagePath = widget.scannedImagePath;
-               }
-             } catch (e) {
+             if (kIsWeb) {
+              final response = await http.get(Uri.parse(widget.scannedImagePath!));
+              if (response.statusCode == 200) {
+                final uploadedUrl = await storageRepo.uploadInvoiceImage(id, webFile: response.bodyBytes, fileName: 'invoice.png');
+                if (uploadedUrl != null) {
+                  finalImagePath = uploadedUrl;
+                }
+              }
+            } else {
+              final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
+              if (uploadedUrl != null) {
+                finalImagePath = uploadedUrl;
+              }
+            } } catch (e) {
                debugPrint('Lỗi upload ảnh (Có thể do đang Offline): $e');
                finalImagePath = widget.scannedImagePath; // Lưu tạm đường dẫn local
              }
@@ -251,7 +261,9 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           }
         }
 
-
+        // Refresh lists
+        ref.invalidate(allInvoicesProvider);
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -549,9 +561,11 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: widget.scannedImagePath!.startsWith('http')
-                    ? Image.network(widget.scannedImagePath!, height: 200, width: double.infinity, fit: BoxFit.cover)
-                    : Image.file(File(widget.scannedImagePath!), height: 200, width: double.infinity, fit: BoxFit.cover),
+                child: widget.scannedImagePath != null
+                    ? (widget.scannedImagePath!.startsWith('http') || kIsWeb
+                        ? Image.network(widget.scannedImagePath!, height: 200, width: double.infinity, fit: BoxFit.cover)
+                        : Image.file(File(widget.scannedImagePath!), height: 200, width: double.infinity, fit: BoxFit.cover))
+                    : const SizedBox.shrink(),
               ),
               const SizedBox(height: 24),
             ],

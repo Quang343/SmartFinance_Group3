@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -160,8 +161,9 @@ class InvoicePreviewScreen extends ConsumerWidget {
                 ),
                 child: Column(
                   children: [
-                    Row(
-                      children: [
+                    if (!kIsWeb)
+                      Row(
+                        children: [
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () => _shareInvoice(context, invoice),

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
@@ -11,6 +13,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/transaction_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
 import '../../../domain/entities/attachment_entity.dart';
@@ -18,6 +21,7 @@ import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/widgets/app_dialogs.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
@@ -62,6 +66,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   final _categoryKey = GlobalKey();
 
   bool _isSaving = false;
+  bool _isReadOnly = false;
 
   @override
   void initState() {
@@ -111,6 +116,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           _invoiceId = tx.invoiceId;
           _transactionDate = tx.transactionDate;
           _createdAt = tx.createdAt;
+          _isReadOnly = tx.status == TransactionStatus.confirmed || tx.status == TransactionStatus.deleted;
         });
 
         // Also fetch attachment if exists
@@ -217,7 +223,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final int amount = int.parse(_amountController.text);
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
+      if (_selectedImagePath != null && !kIsWeb && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
         _selectedImagePath = null;
       }
 
@@ -225,9 +231,19 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       String? finalImagePath = _selectedImagePath;
       if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
         try {
-          final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
-          if (uploadedUrl != null) {
-            finalImagePath = uploadedUrl;
+          if (kIsWeb) {
+            final response = await http.get(Uri.parse(_selectedImagePath!));
+            if (response.statusCode == 200) {
+              final uploadedUrl = await storageRepo.uploadTransactionImage(id, webFile: response.bodyBytes, fileName: 'transaction.png');
+              if (uploadedUrl != null) {
+                finalImagePath = uploadedUrl;
+              }
+            }
+          } else {
+            final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
+            if (uploadedUrl != null) {
+              finalImagePath = uploadedUrl;
+            }
           }
         } catch (e) {
           if (mounted) {
@@ -345,6 +361,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         }
       }
 
+      // Refresh list
+      ref.invalidate(allTransactionsProvider);
+      ref.invalidate(incomeTransactionsProvider);
+      ref.invalidate(expenseTransactionsProvider);
+
       if (mounted) {
         if (Navigator.canPop(context)) {
           context.pop(true);
@@ -368,38 +389,58 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _confirmDelete() {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: const Text('Xác nhận xóa', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.softDelete(widget.transactionId!);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
-                );
-              if (Navigator.canPop(context)) {
-                context.pop();
-              } else {
-                context.go('/transactions');
-              }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.',
+      icon: Icons.delete_outline_rounded,
+      color: Colors.redAccent,
+      confirmText: 'Xóa giao dịch',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.softDelete(widget.transactionId!);
+        
+        // Refresh list
+        ref.invalidate(allTransactionsProvider);
+        ref.invalidate(incomeTransactionsProvider);
+        ref.invalidate(expenseTransactionsProvider);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
+          );
+          if (Navigator.canPop(context)) {
+            context.pop();
+          } else {
+            context.go('/transactions');
+          }
+        }
+      },
+    );
+  }
+
+  void _confirmRestore() {
+    AppDialogs.showConfirmDialog(
+      context: context,
+      title: 'Khôi phục giao dịch',
+      message: 'Bạn có chắc chắn muốn khôi phục giao dịch này? Giao dịch sẽ được chuyển về trạng thái Bản nháp.',
+      icon: Icons.restore_rounded,
+      color: const Color(0xFF00D09E),
+      confirmText: 'Khôi phục',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.restore(widget.transactionId!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
+          );
+          if (Navigator.canPop(context)) {
+            context.pop();
+          } else {
+            context.go('/transactions');
+          }
+        }
+      },
     );
   }
 
@@ -777,7 +818,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             end: Alignment.bottomRight,
           ).createShader(bounds),
           child: Text(
-            widget.transactionId == null ? 'Thêm Giao dịch' : 'Sửa Giao dịch',
+            widget.transactionId == null ? 'Thêm Giao dịch' : (_isReadOnly ? 'Chi tiết Giao dịch' : 'Sửa Giao dịch'),
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: Colors.white,
@@ -788,7 +829,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         ),
         actions: [
 
-          if (widget.transactionId != null)
+          if (widget.transactionId != null && !_isReadOnly)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
               tooltip: 'Xóa giao dịch',
@@ -806,6 +847,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             TextFormField(
               key: _amountKey,
               controller: _amountController,
+              readOnly: _isReadOnly,
               keyboardType: TextInputType.number,
               style: TextStyle(
                 fontSize: 16,
@@ -865,7 +907,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             ScaleOnTap(
-              onTap: _selectDateTime,
+              onTap: _isReadOnly ? () {} : () => _selectDateTime(),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 decoration: BoxDecoration(
@@ -910,7 +952,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   child: Opacity(
                     opacity: currentRole == UserRole.expenseAccountant ? 0.5 : 1.0,
                     child: ScaleOnTap(
-                      onTap: currentRole == UserRole.expenseAccountant
+                      onTap: (_isReadOnly || currentRole == UserRole.expenseAccountant)
                           ? () {}
                           : () => setState(() {
                               _type = TransactionType.income;
@@ -960,7 +1002,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   child: Opacity(
                     opacity: currentRole == UserRole.revenueAccountant ? 0.5 : 1.0,
                     child: ScaleOnTap(
-                      onTap: currentRole == UserRole.revenueAccountant
+                      onTap: (_isReadOnly || currentRole == UserRole.revenueAccountant)
                           ? () {}
                           : () => setState(() {
                               _type = TransactionType.expense;
@@ -1021,7 +1063,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             const SizedBox(height: 10),
             InkWell(
               key: _categoryKey,
-              onTap: () {
+              onTap: _isReadOnly ? null : () {
                 setState(() => _showCategoryError = false);
                 showCategoryPicker();
               },
@@ -1082,6 +1124,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
              // Notes
             TextFormField(
               controller: _noteController,
+              readOnly: _isReadOnly,
               maxLines: 3,
               style: TextStyle(
                 fontSize: 15,
@@ -1116,7 +1159,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             InkWell(
-              onTap: showStatusPicker,
+              onTap: _isReadOnly ? null : showStatusPicker,
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -1228,7 +1271,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         ),
                       ),
                     ),
-                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
+                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || kIsWeb || File(_invoiceImagePath!).existsSync())) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1279,7 +1322,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ],
                 ],
               )
-            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
+            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || kIsWeb || File(_selectedImagePath!).existsSync()))
               Stack(
                 alignment: Alignment.topRight,
                 children: [
@@ -1325,8 +1368,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                                 ),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
+                  if (!_isReadOnly)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
                     child: InkWell(
                       onTap: () => setState(() => _selectedImagePath = null),
                       child: Container(
@@ -1341,7 +1385,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ),
                 ],
               )
-            else
+            else if (!_isReadOnly)
               Row(
                 children: [
                   Expanded(
@@ -1416,40 +1460,72 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
             const SizedBox(height: 40),
 
-            ScaleOnTap(
-              onTap: _saveTransaction,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: _isSaving 
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : const Text(
-                        'Lưu Giao Dịch',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+            if (!_isReadOnly)
+              ScaleOnTap(
+                onTap: _saveTransaction,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
+                    ],
+                  ),
+                  child: Center(
+                    child: _isSaving 
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        )
+                      : const Text(
+                          'Lưu Giao Dịch',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                  ),
                 ),
               ),
-            ),
+            if (_isReadOnly && _status == TransactionStatus.deleted)
+              ScaleOnTap(
+                onTap: _confirmRestore,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Khôi phục Giao dịch',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (_isReadOnly)
+              const SizedBox(height: 20),
           ],
         ),
       ),

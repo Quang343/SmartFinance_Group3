@@ -9,6 +9,8 @@ enum PaymentStatus { unpaid, partiallyPaid, paid }
 class InvoiceEntity {
   final String id;
   final String invoiceNumber;
+  final String? serialNumber;
+  final String? formNumber;
   
   // Seller (Đơn vị bán hàng)
   final String sellerName;
@@ -48,6 +50,8 @@ class InvoiceEntity {
   const InvoiceEntity({
     required this.id,
     required this.invoiceNumber,
+    this.serialNumber,
+    this.formNumber,
     required this.sellerName,
     required this.sellerTaxCode,
     this.sellerAddress,

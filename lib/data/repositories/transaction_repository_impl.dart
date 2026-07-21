@@ -81,9 +81,37 @@ class TransactionRepositoryImpl implements TransactionRepository {
     return null;
   }
 
+  void _validateTransactionPayload(TransactionEntity tx) {
+    if (tx.amount <= 0) {
+      throw Exception("Số tiền giao dịch phải lớn hơn 0.");
+    }
+    if (_role == 'expenseAccountant' && tx.type == TransactionType.income) {
+      throw Exception("Kế toán chi phí không được tạo giao dịch Doanh thu.");
+    }
+    if (_role == 'revenueAccountant' && tx.type == TransactionType.expense) {
+      throw Exception("Kế toán doanh thu không được tạo giao dịch Chi phí.");
+    }
+  }
+
+  Future<void> _checkImmutableStatus(String id) async {
+    final oldDoc = await _collection.doc(id).get();
+    if (oldDoc.exists) {
+      final oldStatus = (oldDoc.data() as Map<String, dynamic>)['status'] as String?;
+      if (oldStatus == TransactionStatus.deleted.name) {
+        throw Exception("Giao dịch đã bị xóa. Vui lòng khôi phục trước khi thao tác!");
+      }
+      if (oldStatus == TransactionStatus.confirmed.name && _role != 'financeManager') {
+        throw Exception("Giao dịch đã xác nhận. Chỉ Quản lý mới có quyền thao tác!");
+      }
+    } else {
+      throw Exception("Không tìm thấy giao dịch.");
+    }
+  }
+
   @override
   Future<void> create(TransactionEntity transaction) async {
     if (_uid.isEmpty) return;
+    _validateTransactionPayload(transaction);
     final model = TransactionModel(
       id: transaction.id,
       amount: transaction.amount,
@@ -104,6 +132,8 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<void> update(TransactionEntity transaction) async {
     if (_uid.isEmpty) return;
+    _validateTransactionPayload(transaction);
+    await _checkImmutableStatus(transaction.id);
     final model = TransactionModel(
       id: transaction.id,
       amount: transaction.amount,
@@ -124,6 +154,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<void> softDelete(String id) async {
     if (_uid.isEmpty) return;
+    await _checkImmutableStatus(id);
     await _collection.doc(id).update({
       'status': TransactionStatus.deleted.name,
       'updatedAt': DateTime.now().toIso8601String(),
@@ -139,6 +170,16 @@ class TransactionRepositoryImpl implements TransactionRepository {
   @override
   Future<void> restore(String id) async {
     if (_uid.isEmpty) return;
+    // For restore, we allow restoring a deleted transaction, but we should not allow a confirmed one to be restored to draft unless it's a manager doing unconfirm.
+    // _checkImmutableStatus will block 'deleted' items, so we need a specific check here.
+    final oldDoc = await _collection.doc(id).get();
+    if (oldDoc.exists) {
+      final oldStatus = (oldDoc.data() as Map<String, dynamic>)['status'] as String?;
+      if (oldStatus == TransactionStatus.confirmed.name && _role != 'financeManager') {
+        throw Exception("Giao dịch đã xác nhận. Chỉ Quản lý mới có quyền thao tác!");
+      }
+    }
+    
     await _collection.doc(id).update({
       'status': TransactionStatus.draft.name,
       'updatedAt': DateTime.now().toIso8601String(),

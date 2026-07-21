@@ -55,6 +55,7 @@
 - [ ] Undo snackbar
 - [ ] Transaction filters
 - [ ] Empty/loading/error states
+- [ ] Manager "Unconfirm" feature for confirmed transactions (Note: Future enhancement)
 
 ## 5. Category Feature
 

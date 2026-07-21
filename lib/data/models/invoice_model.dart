@@ -5,6 +5,8 @@ class InvoiceModel extends InvoiceEntity {
   const InvoiceModel({
     required super.id,
     required super.invoiceNumber,
+    super.serialNumber,
+    super.formNumber,
     required super.sellerName,
     required super.sellerTaxCode,
     super.sellerAddress,
@@ -39,6 +41,8 @@ class InvoiceModel extends InvoiceEntity {
     return InvoiceModel(
       id: json['id'] as String? ?? '',
       invoiceNumber: json['invoiceNumber'] as String? ?? '',
+      serialNumber: json['serialNumber'] as String?,
+      formNumber: json['formNumber'] as String?,
       sellerName: json['sellerName'] as String? ?? '',
       sellerTaxCode: json['sellerTaxCode'] as String? ?? '',
       sellerAddress: json['sellerAddress'] as String?,
@@ -92,6 +96,8 @@ class InvoiceModel extends InvoiceEntity {
     return {
       'id': id,
       'invoiceNumber': invoiceNumber,
+      'serialNumber': serialNumber,
+      'formNumber': formNumber,
       'sellerName': sellerName,
       'sellerTaxCode': sellerTaxCode,
       'sellerAddress': sellerAddress,

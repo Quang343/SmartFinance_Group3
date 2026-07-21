@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -508,7 +509,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                             const SizedBox(height: 20),
                           ],
 
-                          if (hasTransaction) ...[
+                          if (hasTransaction && !kIsWeb) ...[
                             Row(
                               children: [
                                 Expanded(
@@ -612,7 +613,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                           ),
                                         ),
                                       )
-                                    : invoice.imagePath!.startsWith('http')
+                                    : (invoice.imagePath!.startsWith('http') || kIsWeb)
                                         ? Image.network(
                                             invoice.imagePath!,
                                             fit: BoxFit.contain,
@@ -624,7 +625,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                                               child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey),
                                             ),
                                           )
-                                        : (File(invoice.imagePath!).existsSync()
+                                        : ((kIsWeb || File(invoice.imagePath!).existsSync())
                                             ? Image.file(
                                                 File(invoice.imagePath!),
                                                 fit: BoxFit.contain,

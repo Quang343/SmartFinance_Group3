@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../providers/ocr_verify_provider.dart';
-import 'ocr_verify_constants.dart';
 
 class SummarySection extends ConsumerStatefulWidget {
   const SummarySection({super.key});
@@ -12,31 +12,14 @@ class SummarySection extends ConsumerStatefulWidget {
 }
 
 class _SummarySectionState extends ConsumerState<SummarySection> {
-  late final TextEditingController _subtotalController;
   late final TextEditingController _vatController;
-  late final TextEditingController _totalController;
-
-  late final FocusNode _subtotalFocus;
-  late final FocusNode _vatFocus;
-  late final FocusNode _totalFocus;
 
   @override
   void initState() {
     super.initState();
     final draft = ref.read(ocrVerifyProvider).draft;
-    _subtotalController = TextEditingController(text: draft?.subtotal.toString() ?? '0');
     _vatController = TextEditingController(text: draft?.vatRate.toString() ?? '0');
-    _totalController = TextEditingController(text: draft?.totalAmount.toString() ?? '0');
-
-    _subtotalFocus = FocusNode()..addListener(_onFocusChange);
-    _vatFocus = FocusNode()..addListener(_onFocusChange);
-    _totalFocus = FocusNode()..addListener(_onFocusChange);
-  }
-
-  void _onFocusChange() {
-    if (!_subtotalFocus.hasFocus && !_vatFocus.hasFocus && !_totalFocus.hasFocus) {
-      _dispatchChange();
-    }
+    _vatController.addListener(_dispatchChange);
   }
 
   void _dispatchChange() {
@@ -44,123 +27,140 @@ class _SummarySectionState extends ConsumerState<SummarySection> {
     if (currentDraft == null) return;
     
     final updated = currentDraft.copyWith(
-      subtotal: int.tryParse(_subtotalController.text) ?? 0,
       vatRate: int.tryParse(_vatController.text) ?? 0,
-      totalAmount: int.tryParse(_totalController.text) ?? 0,
     );
     
-    if (updated != currentDraft) {
-      ref.read(ocrVerifyProvider.notifier).updateDraft(updated);
+    if (updated.vatRate != currentDraft.vatRate) {
+      Future.microtask(() {
+         ref.read(ocrVerifyProvider.notifier).updateDraft(updated);
+      });
     }
   }
 
   @override
   void dispose() {
-    _subtotalFocus.removeListener(_onFocusChange);
-    _vatFocus.removeListener(_onFocusChange);
-    _totalFocus.removeListener(_onFocusChange);
-
-    _subtotalFocus.dispose();
-    _vatFocus.dispose();
-    _totalFocus.dispose();
-
-    _subtotalController.dispose();
     _vatController.dispose();
-    _totalController.dispose();
     super.dispose();
+  }
+
+  InputDecoration _buildInputDeco(String label, IconData? icon, bool isDark, Color primaryColor, Color inputFillColor, Color inputBorderColor) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 13),
+      prefixIcon: icon != null ? Icon(icon, color: primaryColor, size: 18) : null,
+      filled: true,
+      fillColor: inputFillColor,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: primaryColor, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(ocrVerifyProvider.select((s) => s.draft?.subtotal), (_, next) {
-      if (!_subtotalFocus.hasFocus && _subtotalController.text != next?.toString()) {
-        _subtotalController.text = next?.toString() ?? '0';
-      }
-    });
-    ref.listen(ocrVerifyProvider.select((s) => s.draft?.vatRate), (_, next) {
-      if (!_vatFocus.hasFocus && _vatController.text != next?.toString()) {
-        _vatController.text = next?.toString() ?? '0';
-      }
-    });
-    ref.listen(ocrVerifyProvider.select((s) => s.draft?.totalAmount), (_, next) {
-      if (!_totalFocus.hasFocus && _totalController.text != next?.toString()) {
-        _totalController.text = next?.toString() ?? '0';
+    final state = ref.watch(ocrVerifyProvider);
+    final draft = state.draft;
+    if (draft == null) return const SizedBox.shrink();
+
+    // Listen to changes from other parts (e.g. OCR process)
+    ref.listen(ocrVerifyProvider.select((s) => s.draft?.vatRate), (_, nextVat) {
+      if (nextVat != null && _vatController.text != nextVat.toString()) {
+        _vatController.text = nextVat.toString();
       }
     });
 
-    final subtotalError = null;
-    final vatError = null;
-    final totalError = null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = const Color(0xFF00D09E);
+    final inputFillColor = isDark ? const Color(0xFF13231A) : Colors.grey[50]!;
+    final inputBorderColor = isDark ? const Color(0xFF1F3327) : Colors.grey[300]!;
+    final textStyle = TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.w500);
 
-    return Semantics(
-      container: true,
-      label: 'Tổng kết',
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(OcrVerifyDimens.cardRadius),
+    final formatter = NumberFormat.currency(locale: 'vi_VN', symbol: 'VND');
+
+    final subtotal = draft.subtotal;
+    final vatRate = draft.vatRate;
+    final vatAmount = (subtotal * vatRate / 100).round();
+    final totalAmount = draft.totalAmount; // Automatically calculated by provider
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('TỔNG KẾT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+        const SizedBox(height: 12),
+        
+        TextFormField(
+          controller: _vatController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: textStyle,
+          decoration: _buildInputDeco('Thuế suất VAT (%)', Icons.percent, isDark, primaryColor, inputFillColor, inputBorderColor),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(OcrVerifyDimens.spacingMedium),
+        
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1A2621) : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: inputBorderColor, width: 1.5),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Tổng kết',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: OcrVerifyDimens.spacingMedium),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _subtotalController,
-                      focusNode: _subtotalFocus,
-                      textInputAction: TextInputAction.next,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        labelText: 'Tiền hàng',
-                        errorText: subtotalError,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: OcrVerifyDimens.spacingMedium),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _vatController,
-                      focusNode: _vatFocus,
-                      textInputAction: TextInputAction.next,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        labelText: 'Thuế suất (%)',
-                        errorText: vatError,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
+                  Text('Cộng tiền hàng:', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14)),
+                  Text(
+                    formatter.format(subtotal), 
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 15, fontWeight: FontWeight.w600)
                   ),
                 ],
               ),
-              const SizedBox(height: OcrVerifyDimens.spacingMedium),
-              TextFormField(
-                controller: _totalController,
-                focusNode: _totalFocus,
-                textInputAction: TextInputAction.done,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Tổng cộng',
-                  errorText: totalError,
-                  border: const OutlineInputBorder(),
-                ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Thuế VAT:', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 14)),
+                  Text(
+                    formatter.format(vatAmount), 
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 15, fontWeight: FontWeight.w600)
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Divider(height: 1, color: Colors.grey),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Tổng tiền thanh toán:', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(
+                    formatter.format(totalAmount), 
+                    style: TextStyle(color: primaryColor, fontSize: 18, fontWeight: FontWeight.w800)
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }

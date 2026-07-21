@@ -10,6 +10,8 @@ import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/widgets/app_dialogs.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
@@ -50,80 +52,74 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   }
 
   void _confirmDeleteFromList(TransactionEntity tx) {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Xóa giao dịch?'),
-        content: const Text(
-          'Bạn có chắc chắn muốn xóa giao dịch này không? Dữ liệu thống kê sẽ được cập nhật lại.',
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.softDelete(tx.id);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Đã xóa giao dịch thành công!'),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
-                _refreshData();
-              }
-            },
-            child: const Text(
-              'Xóa',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa giao dịch này không? Dữ liệu thống kê sẽ được cập nhật lại.',
+      icon: Icons.delete_outline_rounded,
+      color: Colors.redAccent,
+      confirmText: 'Xóa giao dịch',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.softDelete(tx.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã xóa giao dịch thành công!'),
+              backgroundColor: Colors.redAccent,
             ),
-          ),
-        ],
-      ),
+          );
+          _refreshData();
+        }
+      },
     );
   }
 
   void _confirmRestoreFromList(TransactionEntity tx) {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Khôi phục giao dịch?'),
-        content: const Text(
-          'Giao dịch này sẽ được khôi phục về trạng thái Bản nháp để bạn kiểm tra lại trước khi xác nhận.',
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.restore(tx.id);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                _refreshData();
-              }
-            },
-            child: const Text(
-              'Khôi phục',
-              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+      title: 'Khôi phục giao dịch',
+      message: 'Bạn có chắc chắn muốn khôi phục giao dịch này? Giao dịch sẽ được chuyển về trạng thái Bản nháp.',
+      icon: Icons.restore_rounded,
+      color: const Color(0xFF00D09E),
+      confirmText: 'Khôi phục',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.restore(tx.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
+              backgroundColor: Colors.green,
             ),
-          ),
-        ],
-      ),
+          );
+          _refreshData();
+        }
+      },
+    );
+  }
+
+  void _confirmHardDeleteFromList(TransactionEntity tx) {
+    AppDialogs.showConfirmDialog(
+      context: context,
+      title: 'Xóa vĩnh viễn',
+      message: 'Hành động này không thể hoàn tác! Bạn có chắc chắn muốn xóa vĩnh viễn giao dịch này khỏi cơ sở dữ liệu?',
+      icon: Icons.delete_forever_rounded,
+      color: Colors.red,
+      confirmText: 'Xóa vĩnh viễn',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        await repo.hardDelete(tx.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã xóa vĩnh viễn giao dịch'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          _refreshData();
+        }
+      },
     );
   }
 
@@ -1103,6 +1099,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                   ),
                                 );
                               }
+                              final isMobile = MediaQuery.of(context).size.width < 600;
                               final tx = list[index];
                               final isIncome =
                                   tx.type == TransactionType.income;
@@ -1116,8 +1113,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 if (code != null) catIcon = IconData(code, fontFamily: 'MaterialIcons');
                               }
 
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
+                              Widget card = Container(
                                 decoration: BoxDecoration(
                                   color: isDark
                                       ? const Color(0xFF0E2219)
@@ -1284,8 +1280,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   fontSize: 14,
                                                 ),
                                               ),
-                                              if (currentRole
-                                                  .canEditTransactions) ...[
+                                              if (!isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) ...[
                                                 const SizedBox(width: 4),
                                                 PopupMenuButton<String>(
                                                   icon: Icon(
@@ -1319,26 +1314,9 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                       );
                                                     } else if (action ==
                                                         'hard_delete') {
-                                                      final repo = ref.read(
-                                                        transactionRepositoryProvider,
+                                                      _confirmHardDeleteFromList(
+                                                        tx,
                                                       );
-                                                      await repo.hardDelete(
-                                                        tx.id,
-                                                      );
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Đã xóa vĩnh viễn giao dịch',
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                          ),
-                                                        );
-                                                        _refreshData();
-                                                      }
                                                     }
                                                   },
                                                   itemBuilder: (context) {
@@ -1431,6 +1409,72 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                     ),
                                   ),
                                 ),
+                              );
+
+                              if (isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) {
+                                card = Slidable(
+                                  key: ValueKey(tx.id),
+                                  endActionPane: ActionPane(
+                                    motion: const ScrollMotion(),
+                                    children: [
+                                      if (tx.status == TransactionStatus.deleted) ...[
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmRestoreFromList(tx),
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.restore_rounded,
+                                          label: 'Khôi phục',
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            bottomLeft: Radius.circular(16),
+                                          ),
+                                        ),
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmHardDeleteFromList(tx),
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_forever_rounded,
+                                          label: 'Xóa vĩnh viễn',
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        SlidableAction(
+                                          onPressed: (context) {
+                                            context.go('/transactions/form', extra: {'transactionId': tx.id});
+                                          },
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.edit_rounded,
+                                          label: 'Sửa',
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            bottomLeft: Radius.circular(16),
+                                          ),
+                                        ),
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmDeleteFromList(tx),
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_outline_rounded,
+                                          label: 'Xóa',
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  child: card,
+                                );
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: card,
                               );
                             },
                           ),
