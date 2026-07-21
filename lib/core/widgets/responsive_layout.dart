@@ -505,15 +505,12 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
                               color: Colors.red,
                               confirmText: 'Đăng xuất',
                               onConfirm: () async {
-                                await ref.read(authRepositoryProvider).logout();
-                                
-                                if (!context.mounted) return;
-                                
                                 Navigator.pop(context); // close drawer
                                 context.go('/welcome');
                                 
-                                Future.delayed(const Duration(milliseconds: 100), () {
+                                Future.delayed(const Duration(milliseconds: 150), () {
                                   ref.read(currentUserProvider.notifier).state = null;
+                                  ref.read(authRepositoryProvider).logout();
                                 });
                               },
                             );
@@ -688,14 +685,11 @@ class _DesktopScaffold extends ConsumerWidget {
                             color: Colors.red,
                             confirmText: 'Đăng xuất',
                             onConfirm: () async {
-                              await ref.read(authRepositoryProvider).logout();
-                              
-                              if (!context.mounted) return;
-                              
                               context.go('/welcome');
                               
-                              Future.delayed(const Duration(milliseconds: 100), () {
+                              Future.delayed(const Duration(milliseconds: 150), () {
                                 ref.read(currentUserProvider.notifier).state = null;
+                                ref.read(authRepositoryProvider).logout();
                               });
                             },
                           );
