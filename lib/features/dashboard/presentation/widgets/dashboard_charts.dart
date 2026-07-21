@@ -81,13 +81,19 @@ class DashboardCharts extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildExpenseByCategory(catMap)),
-            const SizedBox(width: 12),
-            Expanded(child: _buildIncomeByCategory(catMap)),
-          ],
-        ),
+        if (MediaQuery.of(context).size.width < 600) ...[
+          _buildExpenseByCategory(catMap),
+          const SizedBox(height: 12),
+          _buildIncomeByCategory(catMap),
+        ] else ...[
+          Row(
+            children: [
+              Expanded(child: _buildExpenseByCategory(catMap)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildIncomeByCategory(catMap)),
+            ],
+          ),
+        ],
         const SizedBox(height: 12),
         _buildComparisonChart(),
         const SizedBox(height: 12),

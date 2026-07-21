@@ -579,7 +579,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             currentRole == UserRole.expenseAccountant) ...[
                           const SizedBox(height: 12),
                           _buildCompactBar(
-                            label: 'Ngân sách chi tiêu hàng tháng',
+                            label: 'Ngân sách hàng tháng',
                             percent: expensePercentInt,
                             used: monthlyExpenseSum,
                             target: budgetLimit,
@@ -589,7 +589,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             fillColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF3B82F6),
                             accentColor: isDark ? const Color(0xFF3B82F6) : const Color(0xFF2563EB),
                             showEdit: currentRole == UserRole.financeManager,
-                            onEdit: () => _showEditValueDialog(context, isDark, 'Ngân sách chi tiêu hàng tháng', budgetLimitAsync.valueOrNull ?? 20000000, (_) {}),
+                            onEdit: () => _showEditValueDialog(context, isDark, 'Ngân sách hàng tháng', budgetLimitAsync.valueOrNull ?? 20000000, (_) {}),
                           ),
                         ],
                         if (currentRole == UserRole.financeManager) ...[
@@ -1490,15 +1490,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '$usedFmt / $targetFmt',
