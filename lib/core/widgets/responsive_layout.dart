@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
 import '../providers/auth_provider.dart';
+import 'app_dialogs.dart';
 import 'scale_on_tap.dart';
 import '../../data/repositories/auth_repository.dart';
 
@@ -470,60 +471,57 @@ class _DesktopScaffold extends ConsumerWidget {
     return Scaffold(
       body: Row(
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return SizedBox(
-                height: constraints.maxHeight,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: IntrinsicHeight(
-                          child: NavigationRail(
-                            selectedIndex: _calculateSelectedIndex(context),
-                            onDestinationSelected: (index) =>
-                                _onItemTapped(index, context),
-                            labelType: useCompactNavigation
-                                ? NavigationRailLabelType.selected
-                                : NavigationRailLabelType.all,
-                            selectedIconTheme:
-                                IconThemeData(color: primaryColor),
-                            selectedLabelTextStyle: TextStyle(
-                              color: primaryColor,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            destinations: items
-                                .map((item) => NavigationRailDestination(
-                                      icon: Icon(item.icon),
-                                      label: Text(item.label),
-                                    ))
-                                .toList(),
-                          ),
-                        ),
-                      ),
+          NavigationRail(
+            selectedIndex: _calculateSelectedIndex(context),
+            onDestinationSelected: (index) =>
+                _onItemTapped(index, context),
+            labelType: useCompactNavigation
+                ? NavigationRailLabelType.selected
+                : NavigationRailLabelType.all,
+            selectedIconTheme:
+                IconThemeData(color: primaryColor),
+            selectedLabelTextStyle: TextStyle(
+              color: primaryColor,
+              fontWeight: FontWeight.bold,
+            ),
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.logout_rounded,
+                      color: Colors.red,
                     ),
-                    const Divider(height: 1),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12.0),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.logout_rounded,
-                          color: Colors.red,
-                        ),
-                        tooltip: 'Đăng xuất',
-                        onPressed: () async {
+                    tooltip: 'Đăng xuất',
+                    onPressed: () {
+                      AppDialogs.showConfirmDialog(
+                        context: context,
+                        title: 'Đăng xuất',
+                        message: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?',
+                        icon: Icons.logout_rounded,
+                        color: Colors.red,
+                        confirmText: 'Đăng xuất',
+                        onConfirm: () async {
                           await ref.read(authRepositoryProvider).logout();
                           ref.read(currentUserProvider.notifier).state = null;
                           if (context.mounted) {
                             context.go('/welcome');
                           }
                         },
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
-              );
-            },
+              ),
+            ),
+            destinations: items
+                .map((item) => NavigationRailDestination(
+                      icon: Icon(item.icon),
+                      label: Text(item.label),
+                    ))
+                .toList(),
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(child: child),

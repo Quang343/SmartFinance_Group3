@@ -240,23 +240,54 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           final user = ref.read(currentUserProvider);
           if (user != null) {
             final isOutgoing = widget.invoiceType == InvoiceType.outgoing;
-            final partner = PartnerEntity(
-              id: const Uuid().v4(),
-              name: isOutgoing ? _partnerNameController.text : _sellerNameController.text,
-              taxCode: isOutgoing ? _partnerTaxCodeController.text : _sellerTaxCodeController.text,
-              address: isOutgoing ? _partnerAddressController.text : _sellerAddressController.text,
-              phone: isOutgoing ? '' : _sellerPhoneController.text,
-              bankName: isOutgoing ? _bankNameController.text : _sellerBankNameController.text,
-              bankAccount: isOutgoing ? _bankAccountController.text : _sellerBankAccountController.text,
-              createdByUid: user.id,
-              company: user.company,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            );
-            try {
-               await partnerRepo.createPartner(partner);
-            } catch(e) {
-               debugPrint('Error saving partner: $e');
+            final name = (isOutgoing ? _partnerNameController.text : _sellerNameController.text).trim();
+            final taxCode = (isOutgoing ? _partnerTaxCodeController.text : _sellerTaxCodeController.text).trim();
+            final address = (isOutgoing ? _partnerAddressController.text : _sellerAddressController.text).trim();
+            final phone = isOutgoing ? '' : _sellerPhoneController.text.trim();
+            final bankName = (isOutgoing ? _bankNameController.text : _sellerBankNameController.text).trim();
+            final bankAccount = (isOutgoing ? _bankAccountController.text : _sellerBankAccountController.text).trim();
+
+            if (name.isNotEmpty || taxCode.isNotEmpty) {
+              try {
+                PartnerEntity? existingPartner;
+                if (taxCode.isNotEmpty) {
+                  existingPartner = await partnerRepo.getByTaxCode(taxCode, user.company);
+                }
+
+                if (existingPartner != null) {
+                  final updatedPartner = PartnerEntity(
+                    id: existingPartner.id,
+                    name: name.isNotEmpty ? name : existingPartner.name,
+                    taxCode: taxCode.isNotEmpty ? taxCode : existingPartner.taxCode,
+                    address: address.isNotEmpty ? address : existingPartner.address,
+                    phone: phone.isNotEmpty ? phone : existingPartner.phone,
+                    bankName: bankName.isNotEmpty ? bankName : existingPartner.bankName,
+                    bankAccount: bankAccount.isNotEmpty ? bankAccount : existingPartner.bankAccount,
+                    createdByUid: existingPartner.createdByUid,
+                    company: existingPartner.company,
+                    createdAt: existingPartner.createdAt,
+                    updatedAt: DateTime.now(),
+                  );
+                  await partnerRepo.updatePartner(updatedPartner);
+                } else {
+                  final newPartner = PartnerEntity(
+                    id: const Uuid().v4(),
+                    name: name,
+                    taxCode: taxCode,
+                    address: address,
+                    phone: phone,
+                    bankName: bankName,
+                    bankAccount: bankAccount,
+                    createdByUid: user.id,
+                    company: user.company,
+                    createdAt: DateTime.now(),
+                    updatedAt: DateTime.now(),
+                  );
+                  await partnerRepo.createPartner(newPartner);
+                }
+              } catch (e) {
+                debugPrint('Error saving/updating partner: $e');
+              }
             }
           }
         }
