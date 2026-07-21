@@ -28,40 +28,143 @@ class ResponsiveLayout extends ConsumerWidget {
     switch (role) {
       case UserRole.financeManager:
         return const [
-          NavigationItem(path: '/dashboard', label: 'Tổng quan', icon: Icons.dashboard),
-          NavigationItem(path: '/transactions', label: 'Dòng tiền', icon: Icons.compare_arrows),
-          NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
-          NavigationItem(path: '/invoices/outgoing', label: 'HD đầu ra', icon: Icons.receipt_long),
-          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
-          NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
-          NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
-          NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
+          NavigationItem(
+            path: '/dashboard',
+            label: 'Tổng quan',
+            icon: Icons.dashboard,
+          ),
+          NavigationItem(
+            path: '/transactions',
+            label: 'Dòng tiền',
+            icon: Icons.compare_arrows,
+          ),
+          NavigationItem(
+            path: '/invoices/incoming',
+            label: 'HD đầu vào',
+            icon: Icons.receipt,
+          ),
+          NavigationItem(
+            path: '/invoices/outgoing',
+            label: 'HD đầu ra',
+            icon: Icons.receipt_long,
+          ),
+          NavigationItem(
+            path: '/partners',
+            label: 'Đối tác',
+            icon: Icons.contacts,
+          ),
+          NavigationItem(
+            path: '/reports',
+            label: 'Báo cáo',
+            icon: Icons.bar_chart,
+          ),
+          NavigationItem(
+            path: '/settings',
+            label: 'Cài đặt',
+            icon: Icons.settings,
+          ),
+          NavigationItem(
+            path: '/profile',
+            label: 'Cá nhân',
+            icon: Icons.person,
+          ),
         ];
       case UserRole.expenseAccountant:
         return const [
-          NavigationItem(path: '/dashboard', label: 'Tổng quan', icon: Icons.dashboard),
-          NavigationItem(path: '/transactions', label: 'Chi phí', icon: Icons.trending_down),
-          NavigationItem(path: '/categories', label: 'Danh mục chi', icon: Icons.category),
-          NavigationItem(path: '/invoices/incoming', label: 'HD đầu vào', icon: Icons.receipt),
-          NavigationItem(path: '/invoices/capture', label: 'Quét hóa đơn', icon: Icons.qr_code_scanner),
-          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
-          NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
-          NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
-          NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
+          NavigationItem(
+            path: '/dashboard',
+            label: 'Tổng quan',
+            icon: Icons.dashboard,
+          ),
+          NavigationItem(
+            path: '/transactions',
+            label: 'Chi phí',
+            icon: Icons.trending_down,
+          ),
+          NavigationItem(
+            path: '/categories',
+            label: 'Danh mục chi',
+            icon: Icons.category,
+          ),
+          NavigationItem(
+            path: '/invoices/incoming',
+            label: 'HD đầu vào',
+            icon: Icons.receipt,
+          ),
+          NavigationItem(
+            path: '/invoices/capture',
+            label: 'Quét hóa đơn',
+            icon: Icons.qr_code_scanner,
+          ),
+          NavigationItem(
+            path: '/partners',
+            label: 'Đối tác',
+            icon: Icons.contacts,
+          ),
+          NavigationItem(
+            path: '/reports',
+            label: 'Báo cáo',
+            icon: Icons.bar_chart,
+          ),
+          NavigationItem(
+            path: '/settings',
+            label: 'Cài đặt',
+            icon: Icons.settings,
+          ),
+          NavigationItem(
+            path: '/profile',
+            label: 'Cá nhân',
+            icon: Icons.person,
+          ),
         ];
       case UserRole.revenueAccountant:
         return const [
-          NavigationItem(path: '/dashboard', label: 'Tổng quan', icon: Icons.dashboard),
-          NavigationItem(path: '/transactions', label: 'Doanh thu', icon: Icons.trending_up),
-          NavigationItem(path: '/categories', label: 'Danh mục thu', icon: Icons.category),
-          NavigationItem(path: '/invoices/outgoing', label: 'HD đầu ra', icon: Icons.receipt_long),
-          NavigationItem(path: '/invoices/outgoing/new', label: 'Tạo HD', icon: Icons.add_box),
-          NavigationItem(path: '/partners', label: 'Đối tác', icon: Icons.contacts),
-          NavigationItem(path: '/reports', label: 'Báo cáo', icon: Icons.bar_chart),
-          NavigationItem(path: '/settings', label: 'Cài đặt', icon: Icons.settings),
-          NavigationItem(path: '/profile', label: 'Cá nhân', icon: Icons.person),
+          NavigationItem(
+            path: '/dashboard',
+            label: 'Tổng quan',
+            icon: Icons.dashboard,
+          ),
+          NavigationItem(
+            path: '/transactions',
+            label: 'Doanh thu',
+            icon: Icons.trending_up,
+          ),
+          NavigationItem(
+            path: '/categories',
+            label: 'Danh mục thu',
+            icon: Icons.category,
+          ),
+          NavigationItem(
+            path: '/invoices/outgoing',
+            label: 'HD đầu ra',
+            icon: Icons.receipt_long,
+          ),
+          NavigationItem(
+            path: '/invoices/outgoing/new',
+            label: 'Tạo HD',
+            icon: Icons.add_box,
+          ),
+          NavigationItem(
+            path: '/partners',
+            label: 'Đối tác',
+            icon: Icons.contacts,
+          ),
+          NavigationItem(
+            path: '/reports',
+            label: 'Báo cáo',
+            icon: Icons.bar_chart,
+          ),
+          NavigationItem(
+            path: '/settings',
+            label: 'Cài đặt',
+            icon: Icons.settings,
+          ),
+          NavigationItem(
+            path: '/profile',
+            label: 'Cá nhân',
+            icon: Icons.person,
+          ),
         ];
-
     }
   }
 
@@ -101,19 +204,25 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     final user = ref.watch(currentUserProvider);
     final currentRole = ref.watch(roleProvider);
     final userName = user?.fullName ?? 'Người dùng';
     final roleName = currentRole.nameVi;
-    
+
     // Bottom bar items: show at most 4 primary items, and 1 'More' item
-    final primaryItems = widget.items.length > 5 ? widget.items.sublist(0, 4) : widget.items;
+    final primaryItems = widget.items.length > 5
+        ? widget.items.sublist(0, 4)
+        : widget.items;
     final hasDrawer = widget.items.length > 5;
-    final drawerItems = hasDrawer ? widget.items.sublist(4) : <NavigationItem>[];
+    final drawerItems = hasDrawer
+        ? widget.items.sublist(4)
+        : <NavigationItem>[];
 
     final location = GoRouterState.of(context).uri.path;
-    int selectedIndex = primaryItems.indexWhere((item) => location.startsWith(item.path));
+    int selectedIndex = primaryItems.indexWhere(
+      (item) => location.startsWith(item.path),
+    );
     if (selectedIndex == -1 && hasDrawer) {
       // If active route is in drawer, set index to 'More' tab (index 4)
       selectedIndex = 4;
@@ -125,7 +234,7 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
       canPop: false,
       onPopInvoked: (didPop) {
         if (didPop) return;
-        
+
         // If drawer is open, close it
         if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
           _scaffoldKey.currentState?.closeDrawer();
@@ -147,7 +256,9 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
         // If on Dashboard, double press to exit
         final now = DateTime.now();
         final maxDuration = const Duration(seconds: 2);
-        final isWarning = _lastPressedAt == null || now.difference(_lastPressedAt!) > maxDuration;
+        final isWarning =
+            _lastPressedAt == null ||
+            now.difference(_lastPressedAt!) > maxDuration;
 
         if (isWarning) {
           _lastPressedAt = now;
@@ -173,18 +284,21 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
           },
           onHorizontalDragEnd: (details) {
             // Chỉ áp dụng vuốt khi đang ở 4 tab chính (0, 1, 2, 3)
-            if (selectedIndex < 0 || selectedIndex >= primaryItems.length) return;
+            if (selectedIndex < 0 || selectedIndex >= primaryItems.length)
+              return;
 
             final velocity = details.primaryVelocity ?? 0;
             const thresholdVelocity = 300.0;
             const thresholdDistance = 40.0; // Yêu cầu vuốt ít nhất 40px ngang
 
-            if (velocity < -thresholdVelocity && _horizontalDragDistance < -thresholdDistance) {
+            if (velocity < -thresholdVelocity &&
+                _horizontalDragDistance < -thresholdDistance) {
               // Vuốt sang trái -> Sang tab tiếp theo
               if (selectedIndex < primaryItems.length - 1) {
                 context.go(primaryItems[selectedIndex + 1].path);
               }
-            } else if (velocity > thresholdVelocity && _horizontalDragDistance > thresholdDistance) {
+            } else if (velocity > thresholdVelocity &&
+                _horizontalDragDistance > thresholdDistance) {
               // Vuốt sang phải -> Sang tab trước đó
               if (selectedIndex > 0) {
                 context.go(primaryItems[selectedIndex - 1].path);
@@ -194,257 +308,299 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
           child: widget.child,
         ),
         drawer: hasDrawer
-          ? Drawer(
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(24),
-                  bottomRight: Radius.circular(24),
+            ? Drawer(
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
                 ),
-              ),
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    // Custom Gradient Header with User Info
-                    InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        context.go('/profile');
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                        margin: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isDark
-                                ? [const Color(0xFF0C2C1F), const Color(0xFF06150F)]
-                                : [const Color(0xFF00D09E), const Color(0xFF008B6B)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      // Custom Gradient Header with User Info
+                      InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.go('/profile');
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 24,
                           ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryColor.withOpacity(0.25),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                          margin: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: isDark
+                                  ? [
+                                      const Color(0xFF0C2C1F),
+                                      const Color(0xFF06150F),
+                                    ]
+                                  : [
+                                      const Color(0xFF00D09E),
+                                      const Color(0xFF008B6B),
+                                    ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 26,
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              backgroundImage: NetworkImage(
-                                user?.avatarUrl ?? 'https://api.dicebear.com/8.x/adventurer-neutral/png?seed=${user?.id ?? 'SmartFinance'}&backgroundColor=e2e8f0',
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: primaryColor.withOpacity(0.25),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
                               ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    userName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    roleName,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              color: Colors.white70,
-                              size: 20,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'TIỆN ÍCH & CÀI ĐẶT',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey,
-                            letterSpacing: 1.2,
+                            ],
                           ),
-                        ),
-                      ),
-                    ),
-                    // Navigation list items with modern rounded container
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        children: drawerItems.map((item) {
-                          final isSelected = location.startsWith(item.path);
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3),
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.pop(context); // close drawer
-                                context.go(item.path);
-                              },
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? primaryColor.withOpacity(0.12)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: isSelected
-                                      ? Border.all(color: primaryColor.withOpacity(0.2), width: 1)
-                                      : null,
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 26,
+                                backgroundColor: Colors.white.withOpacity(0.2),
+                                backgroundImage: NetworkImage(
+                                  user?.avatarUrl ??
+                                      'https://api.dicebear.com/8.x/adventurer-neutral/png?seed=${user?.id ?? 'SmartFinance'}&backgroundColor=e2e8f0',
                                 ),
-                                child: Row(
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(
-                                      item.icon,
-                                      color: isSelected ? primaryColor : Colors.grey.shade600,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Text(
-                                        item.label,
-                                        style: TextStyle(
-                                          color: isSelected
-                                              ? primaryColor
-                                              : null,
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                          fontSize: 14,
-                                        ),
+                                    Text(
+                                      userName,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    if (isSelected)
-                                      Icon(
-                                        Icons.chevron_right,
-                                        color: primaryColor,
-                                        size: 16,
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      roleName,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const Divider(height: 1, color: Colors.black12),
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: InkWell(
-                        onTap: () async {
-                          await ref.read(authRepositoryProvider).logout();
-                          ref.read(currentUserProvider.notifier).state = null;
-                          if (context.mounted) {
-                            Navigator.pop(context); // close drawer
-                            context.go('/welcome');
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.logout_rounded, color: Colors.red, size: 20),
-                              SizedBox(width: 14),
-                              Expanded(
-                                child: Text(
-                                  'Đăng xuất',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: Colors.white70,
+                                size: 20,
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                    // Drawer Footer
-                    Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Text(
-                        'SmartFinance v1.1.0',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 11,
-                          letterSpacing: 0.5,
+                      const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'TIỆN ÍCH & CÀI ĐẶT',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      // Navigation list items with modern rounded container
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          children: drawerItems.map((item) {
+                            final isSelected = location.startsWith(item.path);
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.pop(context); // close drawer
+                                  context.go(item.path);
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? primaryColor.withOpacity(0.12)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: primaryColor.withOpacity(
+                                              0.2,
+                                            ),
+                                            width: 1,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        item.icon,
+                                        color: isSelected
+                                            ? primaryColor
+                                            : Colors.grey.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Text(
+                                          item.label,
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? primaryColor
+                                                : null,
+                                            fontWeight: isSelected
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        Icon(
+                                          Icons.chevron_right,
+                                          color: primaryColor,
+                                          size: 16,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const Divider(height: 1, color: Colors.black12),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: InkWell(
+                          onTap: () async {
+                            await ref.read(authRepositoryProvider).logout();
+
+                            if (!context.mounted) return;
+
+                            Navigator.pop(context); // Đóng drawer
+                            context.go('/welcome'); // Chuyển trang
+
+                            // Đợi route chuyển xong mới xoá state để tránh unmounted context
+                            Future.delayed(
+                              const Duration(milliseconds: 100),
+                              () {
+                                ref.read(currentUserProvider.notifier).state =
+                                    null;
+                              },
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  Icons.logout_rounded,
+                                  color: Colors.red,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(
+                                    'Đăng xuất',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Drawer Footer
+                      Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Text(
+                          'SmartFinance v1.1.0',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              )
+            : null,
+        bottomNavigationBar: Builder(
+          builder: (context) {
+            return BottomNavigationBar(
+              currentIndex: selectedIndex,
+              onTap: (index) {
+                if (hasDrawer && index == 4) {
+                  Scaffold.of(context).openDrawer();
+                } else {
+                  context.go(primaryItems[index].path);
+                }
+              },
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: primaryColor,
+              unselectedItemColor: Colors.grey,
+              showUnselectedLabels: false,
+              selectedLabelStyle: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.2,
               ),
-            )
-          : null,
-      bottomNavigationBar: Builder(
-        builder: (context) {
-          return BottomNavigationBar(
-            currentIndex: selectedIndex,
-            onTap: (index) {
-              if (hasDrawer && index == 4) {
-                Scaffold.of(context).openDrawer();
-              } else {
-                context.go(primaryItems[index].path);
-              }
-            },
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: primaryColor,
-            unselectedItemColor: Colors.grey,
-            showUnselectedLabels: false,
-            selectedLabelStyle: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.2,
-            ),
-            unselectedLabelStyle: const TextStyle(
-              fontSize: 10,
-            ),
-            items: [
-              ...primaryItems.map((item) => BottomNavigationBarItem(
+              unselectedLabelStyle: const TextStyle(fontSize: 10),
+              items: [
+                ...primaryItems.map(
+                  (item) => BottomNavigationBarItem(
                     icon: Icon(item.icon),
                     label: item.label,
-                  )),
-              if (hasDrawer)
-                const BottomNavigationBarItem(
-                  icon: Icon(Icons.more_horiz),
-                  label: 'Thêm',
+                  ),
                 ),
-            ],
-          );
-        },
+                if (hasDrawer)
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.more_horiz),
+                    label: 'Thêm',
+                  ),
+              ],
+            );
+          },
+        ),
       ),
-    ));
+    );
   }
 }
 
@@ -489,17 +645,20 @@ class _DesktopScaffold extends ConsumerWidget {
                             labelType: useCompactNavigation
                                 ? NavigationRailLabelType.selected
                                 : NavigationRailLabelType.all,
-                            selectedIconTheme:
-                                IconThemeData(color: primaryColor),
+                            selectedIconTheme: IconThemeData(
+                              color: primaryColor,
+                            ),
                             selectedLabelTextStyle: TextStyle(
                               color: primaryColor,
                               fontWeight: FontWeight.bold,
                             ),
                             destinations: items
-                                .map((item) => NavigationRailDestination(
-                                      icon: Icon(item.icon),
-                                      label: Text(item.label),
-                                    ))
+                                .map(
+                                  (item) => NavigationRailDestination(
+                                    icon: Icon(item.icon),
+                                    label: Text(item.label),
+                                  ),
+                                )
                                 .toList(),
                           ),
                         ),
@@ -516,10 +675,15 @@ class _DesktopScaffold extends ConsumerWidget {
                         tooltip: 'Đăng xuất',
                         onPressed: () async {
                           await ref.read(authRepositoryProvider).logout();
-                          ref.read(currentUserProvider.notifier).state = null;
-                          if (context.mounted) {
-                            context.go('/welcome');
-                          }
+
+                          if (!context.mounted) return;
+
+                          context.go('/welcome'); // Chuyển trang
+
+                          // Đợi route chuyển xong mới xoá state để tránh unmounted context
+                          Future.delayed(const Duration(milliseconds: 100), () {
+                            ref.read(currentUserProvider.notifier).state = null;
+                          });
                         },
                       ),
                     ),
