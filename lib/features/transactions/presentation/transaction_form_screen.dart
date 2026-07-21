@@ -838,7 +838,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           ),
         ),
         actions: [
-
           if (widget.transactionId != null && !_isReadOnly)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
