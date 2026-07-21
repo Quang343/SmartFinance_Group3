@@ -69,7 +69,7 @@ void main() {
 
       await tester.pump();
       
-      expect(find.byType(ClipOval), findsWidgets);
+      expect(find.text('Đang tải dữ liệu...'), findsOneWidget);
 
       transactionsCompleter.complete(<TransactionEntity>[]);
       categoriesCompleter.complete(<CategoryEntity>[]);
