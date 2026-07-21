@@ -31,6 +31,10 @@ jobs:
       - name: 📦 Install Dependencies
         run: flutter pub get
 
+      # Bước 3.5: Tạo file .env giả để flutter build không bị lỗi thiếu asset
+      - name: 📝 Create dummy .env file
+        run: touch .env
+
       # Bước 4: Chạy toàn bộ Unit Test (Phần này sẽ báo Pass/Fail trên GitHub)
       - name: 🧪 Run Unit Tests
         run: flutter test
