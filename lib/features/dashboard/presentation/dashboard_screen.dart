@@ -1763,6 +1763,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         const SizedBox(height: 10),
         Container(
+          width: double.infinity,
           height: 24,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
@@ -1775,46 +1776,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               duration: const Duration(milliseconds: 1000),
               curve: Curves.easeOutCubic,
               builder: (context, value, _) => Stack(
+                fit: StackFit.expand,
                 children: [
-                  FractionallySizedBox(
-                    widthFactor: value,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isOver && overIsBad
-                              ? [
-                                  const Color(0xFFE11D48),
-                                  const Color(0xFFFB7185),
-                                ]
-                              : isOver && !overIsBad
-                              ? [
-                                  const Color(0xFF059669),
-                                  const Color(0xFF34D399),
-                                ]
-                              : [fillColor, accentColor],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: value,
+                      heightFactor: 1.0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isOver && overIsBad
+                                ? [
+                                    const Color(0xFFE11D48),
+                                    const Color(0xFFFB7185),
+                                  ]
+                                : isOver && !overIsBad
+                                ? [
+                                    const Color(0xFF059669),
+                                    const Color(0xFF34D399),
+                                  ]
+                                : [fillColor, accentColor],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   if (percent > 0)
-                    Positioned.fill(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 12),
-                          child: Text(
-                            '$percent%',
-                            style: TextStyle(
-                              color: displayPct >= 12
-                                  ? Colors.white
-                                  : (isDark
-                                        ? Colors.white
-                                        : const Color(0xFF1E293B)),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                            ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Text(
+                          '$percent%',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                          style: TextStyle(
+                            color: displayPct >= 12
+                                ? Colors.white
+                                : (isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B)),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
@@ -1967,7 +1974,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           .collection('companySettings')
           .doc(company)
           .set({
-            'budgetLimit': label == 'Ngân sách tháng' ? result : currentBudget,
+            'budgetLimit': label == 'Ngân sách hàng tháng' ? result : currentBudget,
             'revenueKpi': label == 'KPI hàng tháng' ? result : currentKpi,
           });
       ref.invalidate(companyBudgetLimitProvider);
