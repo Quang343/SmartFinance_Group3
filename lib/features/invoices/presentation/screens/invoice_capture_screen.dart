@@ -2,11 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
 import 'package:smart_finance/core/services/image_acquisition_service.dart';
 import 'package:smart_finance/core/widgets/capture_option_card.dart';
+import 'package:smart_finance/features/invoices/presentation/providers/ocr_verify_provider.dart';
 
-class InvoiceCaptureScreen extends StatefulWidget {
+class InvoiceCaptureScreen extends ConsumerStatefulWidget {
   final ImageAcquisitionService? imageAcquisitionService;
 
   const InvoiceCaptureScreen({
@@ -15,10 +17,10 @@ class InvoiceCaptureScreen extends StatefulWidget {
   });
 
   @override
-  State<InvoiceCaptureScreen> createState() => _InvoiceCaptureScreenState();
+  ConsumerState<InvoiceCaptureScreen> createState() => _InvoiceCaptureScreenState();
 }
 
-class _InvoiceCaptureScreenState extends State<InvoiceCaptureScreen> {
+class _InvoiceCaptureScreenState extends ConsumerState<InvoiceCaptureScreen> {
   late final ImageAcquisitionService _imageAcquisitionService;
   bool _isLoading = false;
 
@@ -73,6 +75,27 @@ class _InvoiceCaptureScreenState extends State<InvoiceCaptureScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const _HeaderInstruction(),
+                  const SizedBox(height: 16),
+                  
+                  // OCR Mode Toggle
+                  Card(
+                    elevation: 0,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: SwitchListTile(
+                      title: const Text('Sử dụng OCR API Thật'),
+                      subtitle: const Text('Bật để kết nối AI thật qua ngrok, Tắt để xài OCR Mock'),
+                      value: ref.watch(isRealApiProvider),
+                      onChanged: (value) {
+                        ref.read(isRealApiProvider.notifier).state = value;
+                      },
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   
                   // Responsive Layout for Cards

@@ -79,7 +79,10 @@ class _OcrVerifyScreenState extends ConsumerState<OcrVerifyScreen> {
                     Expanded(
                       flex: 1,
                       child: documentPayload != null 
-                          ? DocumentViewer(payload: documentPayload)
+                          ? _ScannerOverlay(
+                              isScanning: status == OcrStatus.scanning,
+                              child: DocumentViewer(payload: documentPayload),
+                            )
                           : const Center(child: Text('Không có ảnh')),
                     ),
                     const VerticalDivider(width: 1),
@@ -96,7 +99,10 @@ class _OcrVerifyScreenState extends ConsumerState<OcrVerifyScreen> {
                     SizedBox(
                       height: 250, // Fixed height for document viewer on mobile
                       child: documentPayload != null 
-                          ? DocumentViewer(payload: documentPayload)
+                          ? _ScannerOverlay(
+                              isScanning: status == OcrStatus.scanning,
+                              child: DocumentViewer(payload: documentPayload),
+                            )
                           : const Center(child: Text('Không có ảnh')),
                     ),
                     Expanded(
@@ -119,16 +125,23 @@ class _OcrVerifyScreenState extends ConsumerState<OcrVerifyScreen> {
           if (isLoading)
             Positioned.fill(
               child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.7),
+                color: status == OcrStatus.scanning 
+                  ? Colors.black.withOpacity(0.4) 
+                  : Theme.of(context).scaffoldBackgroundColor.withOpacity(0.7),
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const CircularProgressIndicator(),
+                      if (status == OcrStatus.saving)
+                        const CircularProgressIndicator(),
+                      if (status == OcrStatus.scanning)
+                        Icon(Icons.document_scanner, size: 48, color: Theme.of(context).colorScheme.primary),
                       const SizedBox(height: 16),
                       Text(
                         status == OcrStatus.scanning ? 'Đang phân tích OCR...' : 'Đang lưu...',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: status == OcrStatus.scanning ? Colors.white : null,
+                        ),
                       )
                     ],
                   ),
@@ -231,3 +244,91 @@ class _FormPane extends ConsumerWidget {
     );
   }
 }
+
+class _ScannerOverlay extends StatefulWidget {
+  final Widget child;
+  final bool isScanning;
+
+  const _ScannerOverlay({required this.child, required this.isScanning});
+
+  @override
+  State<_ScannerOverlay> createState() => _ScannerOverlayState();
+}
+
+class _ScannerOverlayState extends State<_ScannerOverlay> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    if (widget.isScanning) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ScannerOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isScanning && !oldWidget.isScanning) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.isScanning && oldWidget.isScanning) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        widget.child,
+        if (widget.isScanning)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      return Stack(
+                        children: [
+                          Positioned(
+                            top: _controller.value * (constraints.maxHeight - 4),
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+

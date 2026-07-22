@@ -16,6 +16,8 @@ import 'package:smart_finance/features/invoices/data/mappers/draft_invoice_mappe
 import 'package:smart_finance/core/providers/auth_provider.dart';
 import 'package:smart_finance/data/models/user_model.dart';
 
+final isRealApiProvider = StateProvider<bool>((ref) => false);
+
 final ocrVerifyProvider = StateNotifierProvider<OcrVerifyNotifier, OcrVerifyState>((ref) {
   final apiService = ref.read(ocrApiServiceProvider);
   final invoiceRepository = ref.read(invoiceRepositoryProvider);
@@ -55,31 +57,19 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
       clearErrorMessage: true,
     );
     try {
-      final dto = await _apiService.scanInvoice(image);
-      DraftInvoice draft = OcrMapper.toDraft(dto, image);
-      
-      // Auto-fill and mock missing data to prevent initial validation errors
-      draft = draft.copyWith(
-        formNumber: (draft.formNumber == null || draft.formNumber!.trim().isEmpty) ? '01GTKT0/001' : draft.formNumber,
-        serialNumber: (draft.serialNumber == null || draft.serialNumber!.trim().isEmpty) ? 'HM/17E' : draft.serialNumber,
-        invoiceNumber: draft.invoiceNumber.trim().isEmpty ? '0000003' : draft.invoiceNumber,
-        invoiceDate: draft.invoiceDate ?? DateTime(2017, 10, 16),
-        sellerName: draft.sellerName.trim().isEmpty ? 'Công ty Cổ phần ABC' : draft.sellerName,
-        taxCode: draft.taxCode.trim().isEmpty ? '0101243150' : draft.taxCode,
-        sellerAddress: draft.sellerAddress.trim().isEmpty ? 'Tầng 9 Technosoft, Duy Tân, Cầu Giấy, Hà Nội' : draft.sellerAddress,
-        sellerPhone: draft.sellerPhone.trim().isEmpty ? '04 3795 9595' : draft.sellerPhone,
-        sellerBankName: (draft.sellerBankName == null || draft.sellerBankName!.trim().isEmpty) ? 'Ngân hàng Vietcombank' : draft.sellerBankName,
-        sellerBankAccount: (draft.sellerBankAccount == null || draft.sellerBankAccount!.trim().isEmpty) ? '010236542365' : draft.sellerBankAccount,
-      );
-
-      if (_currentUser != null) {
-        draft = draft.copyWith(
-          buyerContactName: (draft.buyerContactName == null || draft.buyerContactName!.trim().isEmpty) ? (_currentUser.fullName) : draft.buyerContactName,
-          buyerName: (draft.buyerName == null || draft.buyerName!.trim().isEmpty) ? (_currentUser.company) : draft.buyerName,
-          buyerTaxCode: (draft.buyerTaxCode == null || draft.buyerTaxCode!.trim().isEmpty) ? (_currentUser.taxCode) : draft.buyerTaxCode,
-          buyerAddress: (draft.buyerAddress == null || draft.buyerAddress!.trim().isEmpty) ? (_currentUser.address) : draft.buyerAddress,
-        );
+      final isRealApi = _ref.read(isRealApiProvider);
+      DraftInvoice draft;
+      if (isRealApi) {
+        // Gọi API thật sử dụng schema V2
+        final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: false);
+        draft = OcrMapper.toDraftV2(dtoV2, image);
+      } else {
+        // Dùng OCR Mock gốc
+        final dto = await _apiService.scanInvoice(image);
+        draft = OcrMapper.toDraft(dto, image);
       }
+      
+      // No auto-fill fallback, use strict AI result
 
       _applyDraftState(draft, OcrStatus.editing);
     } catch (e) {

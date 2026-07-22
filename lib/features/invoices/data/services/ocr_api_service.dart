@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_finance/features/invoices/data/models/ocr_result_dto.dart';
-
+import 'package:smart_finance/features/invoices/data/models/ocr_v2_result_dto.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 final ocrApiServiceProvider = Provider<OcrApiService>((ref) {
   return OcrApiService();
 });
@@ -30,5 +33,82 @@ class OcrApiService {
     };
 
     return OcrResultDto.fromJson(mockJson);
+  }
+
+  Future<OcrV2ResultDto> scanInvoiceV2(File image, {bool isMock = true}) async {
+    if (isMock) {
+      // Return mock JSON based on invoice_labels_schema.md
+      await Future.delayed(const Duration(seconds: 1)); // simulate network delay
+      final mockJsonV2 = {
+        "DOC_TITLE": "HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
+        "INVOICE_NO": "40378170",
+        "INVOICE_DATE": "16/10/2017",
+        "FORM_NO": "01GTKT0/001",
+        "SYMBOL": "HM/17E",
+        "SELLER_NAME": "Công ty cổ phần ABC",
+        "SELLER_TAX_ID": "0101243150",
+        "SELLER_ADDRESS": "Tầng 9 Technosoft, Duy Tân",
+        "SELLER_PHONE": "04 3795 9595",
+        "SELLER_BANK_ACCOUNT": "010236542365",
+        "SELLER_BANK_NAME": "Vietcombank - CN Hoàn Kiếm",
+        "BUYER_PERSON": "Nguyễn Văn Tiến",
+        "CLIENT_NAME": "Công ty TNHH Bảo Ngọc",
+        "CLIENT_TAX_ID": "0101243150",
+        "CLIENT_ADDRESS": "123 Trần Bình, Cầu Giấy",
+        "PAYMENT_METHOD": "TM/CK",
+        "LINE_ITEMS": [
+          {
+            "ITEM_CODE": "TL_HITACHI_110",
+            "ITEM_DESC": "Tủ lạnh Hitachi 110 lít",
+            "ITEM_UNIT": "Chiếc",
+            "ITEM_QTY": "1",
+            "ITEM_UNIT_PRICE": "8000000",
+            "ITEM_NET_AMOUNT": "8000000"
+          },
+          {
+            "ITEM_CODE": "TV_SAMSUNG_55",
+            "ITEM_DESC": "Tivi Samsung 55 inch",
+            "ITEM_UNIT": "Chiếc",
+            "ITEM_QTY": "2",
+            "ITEM_UNIT_PRICE": "15000000",
+            "ITEM_NET_AMOUNT": "30000000"
+          }
+        ],
+        "TOTAL_NET_AMOUNT": "38000000",
+        "VAT_RATE": "10",
+        "VAT_AMOUNT": "3800000",
+        "TOTAL_AMOUNT": "41800000",
+        "SIGNATURE_NAME": "Lê Thanh Nam",
+        "CONVERSION_DATE": "17/10/2017"
+      };
+      return OcrV2ResultDto.fromJson(mockJsonV2);
+    } else {
+      // Call actual API
+      final uri = Uri.parse('https://escapable-latitude-augmented.ngrok-free.dev/extract_invoice');
+      final request = http.MultipartRequest('POST', uri);
+      
+      if (kIsWeb) {
+        // Handle web by fetching bytes from the blob URL
+        final fileResponse = await http.get(Uri.parse(image.path));
+        request.files.add(http.MultipartFile.fromBytes(
+          'file', 
+          fileResponse.bodyBytes, 
+          filename: 'invoice.png',
+        ));
+      } else {
+        // Handle mobile/desktop with standard path
+        request.files.add(await http.MultipartFile.fromPath('file', image.path));
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        return OcrV2ResultDto.fromJson(jsonResponse);
+      } else {
+        throw Exception('Lỗi khi gọi OCR API: ${response.statusCode}');
+      }
+    }
   }
 }

@@ -37,29 +37,22 @@ class _HeaderSectionState extends ConsumerState<HeaderSection> {
     super.initState();
     final draft = ref.read(ocrVerifyProvider).draft;
     
-    String textOrDefault(String? val, String defaultVal) {
-      if (val == null || val.trim().isEmpty) return defaultVal;
-      return val;
-    }
+    _formNumberController = TextEditingController(text: draft?.formNumber ?? '');
+    _serialNumberController = TextEditingController(text: draft?.serialNumber ?? '');
+    _invoiceNumberController = TextEditingController(text: draft?.invoiceNumber ?? '');
+    _invoiceDate = draft?.invoiceDate;
 
-    _formNumberController = TextEditingController(text: textOrDefault(draft?.formNumber, '01GTKT0/001'));
-    _serialNumberController = TextEditingController(text: textOrDefault(draft?.serialNumber, 'HM/17E'));
-    _invoiceNumberController = TextEditingController(text: textOrDefault(draft?.invoiceNumber, '0000003'));
-    _invoiceDate = draft?.invoiceDate ?? DateTime(2017, 10, 16);
+    _sellerController = TextEditingController(text: draft?.sellerName ?? '');
+    _taxCodeController = TextEditingController(text: draft?.taxCode ?? '');
+    _sellerAddressController = TextEditingController(text: draft?.sellerAddress ?? '');
+    _sellerPhoneController = TextEditingController(text: draft?.sellerPhone ?? '');
+    _sellerBankNameController = TextEditingController(text: draft?.sellerBankName ?? '');
+    _sellerBankAccountController = TextEditingController(text: draft?.sellerBankAccount ?? '');
 
-    _sellerController = TextEditingController(text: textOrDefault(draft?.sellerName, 'Công ty Cổ phần ABC'));
-    _taxCodeController = TextEditingController(text: textOrDefault(draft?.taxCode, '0101243150'));
-    _sellerAddressController = TextEditingController(text: textOrDefault(draft?.sellerAddress, 'Tầng 9 Technosoft, Duy Tân, Cầu Giấy, Hà Nội'));
-    _sellerPhoneController = TextEditingController(text: textOrDefault(draft?.sellerPhone, '04 3795 9595'));
-    _sellerBankNameController = TextEditingController(text: textOrDefault(draft?.sellerBankName, 'Ngân hàng Vietcombank'));
-    _sellerBankAccountController = TextEditingController(text: textOrDefault(draft?.sellerBankAccount, '010236542365'));
-
-    final user = ref.read(currentUserProvider);
-
-    _buyerContactNameController = TextEditingController(text: textOrDefault(draft?.buyerContactName, user?.fullName ?? 'Nguyễn Văn A'));
-    _buyerNameController = TextEditingController(text: textOrDefault(draft?.buyerName, user?.company ?? 'Công ty Mock ABC'));
-    _buyerTaxCodeController = TextEditingController(text: textOrDefault(draft?.buyerTaxCode, user?.taxCode ?? ''));
-    _buyerAddressController = TextEditingController(text: textOrDefault(draft?.buyerAddress, user?.address ?? ''));
+    _buyerContactNameController = TextEditingController(text: draft?.buyerContactName ?? '');
+    _buyerNameController = TextEditingController(text: draft?.buyerName ?? '');
+    _buyerTaxCodeController = TextEditingController(text: draft?.buyerTaxCode ?? '');
+    _buyerAddressController = TextEditingController(text: draft?.buyerAddress ?? '');
 
     final controllers = [
       _formNumberController, _serialNumberController, _invoiceNumberController,
