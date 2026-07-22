@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -549,6 +550,17 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       case TransactionStatus.confirmed: return const Color(0xFF00D09E);
       case TransactionStatus.deleted: return const Color(0xFFEF4444);
     }
+  }
+
+  void _showFullScreenImage(String path, {bool isNetwork = false}) {
+    showDialog(
+      context: context,
+      useSafeArea: false,
+      builder: (context) => _FullScreenImageViewer(
+        path: path,
+        isNetwork: isNetwork,
+      ),
+    );
   }
 
   @override
@@ -1371,27 +1383,70 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: inputFillColor,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: inputBorderColor, width: 1.5),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _invoiceImagePath!.startsWith('http')
-                            ? Image.network(
-                                _invoiceImagePath!,
-                                fit: BoxFit.contain,
-                                loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                              )
-                            : Image.file(
-                                File(_invoiceImagePath!),
-                                fit: BoxFit.contain,
+                    GestureDetector(
+                      onTap: () {
+                        final isNet = _invoiceImagePath!.startsWith('http');
+                        _showFullScreenImage(_invoiceImagePath!, isNetwork: isNet);
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        constraints: const BoxConstraints(maxHeight: 250),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F1E15) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorderColor, width: 1.5),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              _invoiceImagePath!.startsWith('http')
+                                  ? Image.network(
+                                      _invoiceImagePath!,
+                                      fit: BoxFit.contain,
+                                      loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                      errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                                    )
+                                  : Image.file(
+                                      File(_invoiceImagePath!),
+                                      fit: BoxFit.contain,
+                                    ),
+                              Positioned(
+                                bottom: 12,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.zoom_in_rounded, color: Colors.white, size: 18),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Xem chi tiết',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -1401,46 +1456,91 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               Stack(
                 alignment: Alignment.topRight,
                 children: [
-                  Container(
-                    width: double.infinity,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: inputFillColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: inputBorderColor, width: 1.5),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
-                          ? Container(
-                              color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _selectedImagePath!.split(Platform.pathSeparator).last,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white70 : const Color(0xFF093021),
-                                      fontSize: 14,
+                  GestureDetector(
+                    onTap: () {
+                      if (!_selectedImagePath!.toLowerCase().endsWith('.pdf')) {
+                        final isNet = _selectedImagePath!.startsWith('http');
+                        _showFullScreenImage(_selectedImagePath!, isNetwork: isNet);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(maxHeight: 250),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0F1E15) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: inputBorderColor, width: 1.5),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
+                            ? Container(
+                                color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _selectedImagePath!.split(Platform.pathSeparator).last,
+                                      style: TextStyle(
+                                        color: isDark ? Colors.white70 : const Color(0xFF093021),
+                                        fontSize: 14,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                    textAlign: TextAlign.center,
+                                  ],
+                                ),
+                              )
+                            : Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  _selectedImagePath!.startsWith('http')
+                                      ? Image.network(
+                                          _selectedImagePath!,
+                                          fit: BoxFit.contain,
+                                          loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
+                                          errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                                        )
+                                      : Image.file(
+                                          File(_selectedImagePath!),
+                                          fit: BoxFit.contain,
+                                        ),
+                                  Positioned(
+                                    bottom: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.7),
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.2),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.zoom_in_rounded, color: Colors.white, size: 18),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Xem chi tiết',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                            )
-                          : _selectedImagePath!.startsWith('http')
-                              ? Image.network(
-                                  _selectedImagePath!,
-                                  fit: BoxFit.contain,
-                                  loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                  errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                                )
-                              : Image.file(
-                                  File(_selectedImagePath!),
-                                  fit: BoxFit.contain,
-                                ),
+                      ),
                     ),
                   ),
                   if (!_isReadOnly)
@@ -1602,6 +1702,159 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             else if (_isReadOnly)
               const SizedBox(height: 20),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FullScreenImageViewer extends StatefulWidget {
+  final String path;
+  final bool isNetwork;
+
+  const _FullScreenImageViewer({super.key, required this.path, required this.isNetwork});
+
+  @override
+  State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
+  final TransformationController _controller = TransformationController();
+
+  void _zoomBy(double factor) {
+    final Matrix4 matrix = _controller.value.clone();
+    final double currentScale = matrix.getMaxScaleOnAxis();
+    final double targetScale = (currentScale * factor).clamp(1.0, 4.0);
+    final double actualFactor = targetScale / currentScale;
+
+    if (actualFactor == 1.0) return;
+
+    final Size screenSize = MediaQuery.of(context).size;
+    final Offset screenCenter = Offset(screenSize.width / 2, screenSize.height / 2);
+
+    final double currentDx = matrix.getTranslation().x;
+    final double currentDy = matrix.getTranslation().y;
+
+    final double newDx = screenCenter.dx - (screenCenter.dx - currentDx) * actualFactor;
+    final double newDy = screenCenter.dy - (screenCenter.dy - currentDy) * actualFactor;
+
+    matrix.scale(actualFactor);
+    matrix.setTranslationRaw(newDx, newDy, 0.0);
+
+    _controller.value = matrix;
+  }
+
+  void _zoomIn() => _zoomBy(1.5);
+  void _zoomOut() => _zoomBy(1 / 1.5);
+
+  void _resetZoom() {
+    _controller.value = Matrix4.identity();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _isMobile {
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: Colors.black.withOpacity(0.95),
+            ),
+          ),
+          InteractiveViewer(
+            transformationController: _controller,
+            panEnabled: true,
+            boundaryMargin: EdgeInsets.zero,
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Center(
+              child: widget.isNetwork
+                  ? Image.network(widget.path, fit: BoxFit.contain)
+                  : Image.file(File(widget.path), fit: BoxFit.contain),
+            ),
+          ),
+          if (!_isMobile)
+            Positioned(
+              bottom: 40,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildToolbarBtn(Icons.remove_rounded, _zoomOut, 'Thu nhỏ'),
+                      const SizedBox(width: 24),
+                      _buildToolbarBtn(Icons.fit_screen_rounded, _resetZoom, 'Khôi phục', isPrimary: true),
+                      const SizedBox(width: 24),
+                      _buildToolbarBtn(Icons.add_rounded, _zoomIn, 'Phóng to'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 40,
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbarBtn(IconData icon, VoidCallback onTap, String tooltip, {bool isPrimary = false}) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isPrimary ? const Color(0xFF00D09E).withOpacity(0.8) : Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: Colors.white,
+            size: isPrimary ? 28 : 24,
+          ),
         ),
       ),
     );
