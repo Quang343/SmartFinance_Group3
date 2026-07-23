@@ -161,6 +161,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     }).toList();
 
+    filteredTxs.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
     // Calculations for balance and stats
     final incomeSum = filteredTxs
         .where((tx) => tx.type == TransactionType.income)
