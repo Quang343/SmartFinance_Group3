@@ -15,6 +15,10 @@ import '../../../helpers/test_utils.dart';
 void main() {
   group('TransactionListScreen Widget Tests', () {
     testWidgets('Expense Accountant sees Giao dịch Chi phí title', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       await tester.pumpWidget(createTestApp(
         const TransactionListScreen(),
         overrides: [
@@ -33,6 +37,10 @@ void main() {
     });
 
     testWidgets('Revenue Accountant sees Giao dịch Doanh thu title', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       await tester.pumpWidget(createTestApp(
         const TransactionListScreen(),
         overrides: [

@@ -10,6 +10,7 @@ import '../../../domain/entities/invoice_entity.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/responsive/app_breakpoints.dart';
 import '../providers/invoice_provider.dart';
 
 Color _parseColor(String? hexString) {
@@ -642,7 +643,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               ),
             ),
-          floatingActionButton: canManage
+          floatingActionButton: (canManage && AppBreakpoints.isPhone(context))
               ? ScaleOnTap(
                   onTap: () {
                     if (isIncoming) {

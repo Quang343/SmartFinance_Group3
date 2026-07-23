@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 class ScaleOnTap extends StatefulWidget {
   final Widget child;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final double scaleFactor;
 
   const ScaleOnTap({
     super.key,
     required this.child,
-    required this.onTap,
+    this.onTap,
     this.scaleFactor = 0.96,
   });
 
@@ -65,7 +65,7 @@ class _ScaleOnTapState extends State<ScaleOnTap> with SingleTickerProviderStateM
         onTapDown: (_) => _controller.forward(),
         onTapUp: (_) {
           _controller.reverse();
-          widget.onTap();
+          widget.onTap?.call();
         },
         onTapCancel: () => _controller.reverse(),
         child: AnimatedScale(

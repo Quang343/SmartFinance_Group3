@@ -12,6 +12,11 @@ import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../../../core/widgets/app_dialogs.dart';
+import '../../../core/responsive/app_breakpoints.dart';
+import '../../../core/responsive/responsive_spacing.dart';
+import '../../../core/responsive/responsive_typography.dart';
+import '../../../core/responsive/responsive_header.dart';
+import '../../../core/responsive/adaptive_filter_bar.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
 class TransactionListScreen extends ConsumerStatefulWidget {
@@ -124,110 +129,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     );
   }
 
-  Widget _buildStatusChip(String value, String label, bool isDark) {
-    final isSelected = _selectedStatus == value;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedStatus = value;
-        });
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF00D09E)
-              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected
-                ? Colors.white
-                : (isDark ? const Color(0xFF00D09E) : Colors.black54),
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildCategoryChip(String id, String label, bool isDark, Color baseColor) {
-    final isSelected = _selectedCategory == id;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedCategory = id;
-        });
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? baseColor
-              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? baseColor : Colors.transparent,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected
-                ? Colors.white
-                : (isDark ? baseColor : Colors.black54),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTrashChip(bool isDark) {
-    final isSelected = _selectedStatus == 'deleted';
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedStatus = 'deleted';
-        });
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.red
-              : (isDark ? const Color(0xFF3B1515) : const Color(0xFFFDE8E8)),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.delete_outline_rounded,
-              size: 14,
-              color: isSelected ? Colors.white : Colors.red,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Thùng rác',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.red,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -944,79 +846,34 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
 
               const SizedBox(height: 8),
-              // Status Filter
+              // Adaptive Filter Bar System
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Text(
-                      'Trạng thái: ',
-                      style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildStatusChip('all', 'Tất cả', isDark),
-                            const SizedBox(width: 8),
-                            _buildStatusChip(
-                              'confirmed',
-                              'Đã xác nhận',
-                              isDark,
-                            ),
-                            const SizedBox(width: 8),
-                            _buildStatusChip('draft', 'Bản nháp', isDark),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildTrashChip(isDark),
+                child: AdaptiveFilterBar<String, String>(
+                  selectedStatus: _selectedStatus,
+                  onStatusChanged: (status) {
+                    setState(() {
+                      _selectedStatus = status;
+                    });
+                  },
+                  statusOptions: const [
+                    AdaptiveFilterOption(value: 'all', label: 'Tất cả'),
+                    AdaptiveFilterOption(value: 'confirmed', label: 'Đã xác nhận'),
+                    AdaptiveFilterOption(value: 'draft', label: 'Bản nháp'),
+                    AdaptiveFilterOption(value: 'deleted', label: 'Thùng rác'),
                   ],
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Category Filter
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Text(
-                      'Danh mục: ',
-                      style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.black54,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildCategoryChip('all', 'Tất cả', isDark, primaryColor),
-                            ...allCats.map((cat) {
-                              final catColor = cat.colorHex != null 
-                                  ? Color(int.parse(cat.colorHex!.replaceFirst('#', '0xFF'))) 
-                                  : primaryColor;
-                              return Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: _buildCategoryChip(cat.id, cat.name, isDark, catColor),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
+                  selectedCategory: _selectedCategory,
+                  onCategoryChanged: (catId) {
+                    setState(() {
+                      _selectedCategory = catId;
+                    });
+                  },
+                  categoryOptions: [
+                    const AdaptiveFilterOption(value: 'all', label: 'Tất cả'),
+                    ...allCats.map((c) => AdaptiveFilterOption(value: c.id, label: c.name)),
                   ],
+                  activeFilterCount: (_selectedStatus != 'all' ? 1 : 0) + (_selectedCategory != 'all' ? 1 : 0) + (_selectedPeriod != 'all' ? 1 : 0),
+                  onOpenFilterSheet: () => _openFilterModalSheet(allCats),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1486,7 +1343,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           );
         },
       ),
-      floatingActionButton: currentRole.canEditTransactions
+      floatingActionButton: (currentRole.canEditTransactions && AppBreakpoints.isPhone(context))
           ? ScaleOnTap(
               onTap: () {
                 context.push('/transactions/form');
@@ -1498,6 +1355,180 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
             )
           : null,
+    );
+  }
+
+  void _openFilterModalSheet(List<CategoryEntity> categories) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Bộ lọc giao dịch',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _selectedStatus = 'all';
+                            _selectedCategory = 'all';
+                            _selectedPeriod = 'all';
+                          });
+                          setModalState(() {});
+                        },
+                        child: const Text('Đặt lại'),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  Text(
+                    'Trạng thái',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildModalChip('all', 'Tất cả', _selectedStatus == 'all', () {
+                        setState(() => _selectedStatus = 'all');
+                        setModalState(() {});
+                      }, isDark),
+                      _buildModalChip('confirmed', 'Đã xác nhận', _selectedStatus == 'confirmed', () {
+                        setState(() => _selectedStatus = 'confirmed');
+                        setModalState(() {});
+                      }, isDark),
+                      _buildModalChip('draft', 'Bản nháp', _selectedStatus == 'draft', () {
+                        setState(() => _selectedStatus = 'draft');
+                        setModalState(() {});
+                      }, isDark),
+                      _buildModalChip('deleted', 'Thùng rác', _selectedStatus == 'deleted', () {
+                        setState(() => _selectedStatus = 'deleted');
+                        setModalState(() {});
+                      }, isDark),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Danh mục',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildModalChip('all', 'Tất cả', _selectedCategory == 'all', () {
+                        setState(() => _selectedCategory = 'all');
+                        setModalState(() {});
+                      }, isDark),
+                      ...categories.map((cat) {
+                        final isSel = _selectedCategory == cat.id;
+                        return _buildModalChip(cat.id, cat.name, isSel, () {
+                          setState(() => _selectedCategory = cat.id);
+                          setModalState(() {});
+                        }, isDark);
+                      }),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Áp dụng bộ lọc',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildModalChip(String id, String label, bool isSelected, VoidCallback onTap, bool isDark) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF00D09E) : (isDark ? const Color(0xFF13362A) : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF00D09E) : (isDark ? Colors.white12 : Colors.grey.shade300),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+          ),
+        ),
+      ),
     );
   }
 

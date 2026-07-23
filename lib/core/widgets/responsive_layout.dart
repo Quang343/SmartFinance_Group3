@@ -642,12 +642,15 @@ class _DesktopScaffold extends ConsumerWidget {
                       child: SingleChildScrollView(
                         child: IntrinsicHeight(
                           child: NavigationRail(
+                            extended: size.width >= 1200,
                             selectedIndex: _calculateSelectedIndex(context),
                             onDestinationSelected: (index) =>
                                 _onItemTapped(index, context),
-                            labelType: useCompactNavigation
-                                ? NavigationRailLabelType.selected
-                                : NavigationRailLabelType.all,
+                            labelType: size.width >= 1200
+                                ? NavigationRailLabelType.none
+                                : (useCompactNavigation
+                                    ? NavigationRailLabelType.selected
+                                    : NavigationRailLabelType.all),
                             selectedIconTheme: IconThemeData(
                               color: primaryColor,
                             ),
