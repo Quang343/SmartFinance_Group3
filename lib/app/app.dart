@@ -6,7 +6,6 @@ import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import '../core/sync/sync_worker.dart';
 
-import '../core/widgets/offline_banner.dart';
 
 class SmartFinanceApp extends ConsumerWidget {
   const SmartFinanceApp({super.key});
@@ -22,9 +21,7 @@ class SmartFinanceApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'SmartFinance',
       builder: (context, child) {
-        return OfflineBanner(
-          child: child ?? const SizedBox.shrink(),
-        );
+        return child ?? const SizedBox.shrink();
       },
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
