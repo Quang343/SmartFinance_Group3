@@ -558,13 +558,24 @@ class InvoicePreviewScreen extends ConsumerWidget {
     return pdf;
   }
 
+  String _getSafeFileName(InvoiceEntity invoice) {
+    final rawNumber = invoice.invoiceNumber.replaceAll(RegExp(r'[/\\]'), '_');
+    return 'HoaDon_$rawNumber.pdf';
+  }
+
   Future<void> _shareInvoice(BuildContext context, InvoiceEntity invoice) async {
     try {
       final pdf = await _generatePdfDocument(invoice);
       final bytes = await pdf.save();
+      final safeFileName = _getSafeFileName(invoice);
+
+      if (kIsWeb) {
+        await Printing.sharePdf(bytes: bytes, filename: safeFileName);
+        return;
+      }
       
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/HoaDon_${invoice.invoiceNumber}.pdf');
+      final file = File('${directory.path}/$safeFileName');
       await file.writeAsBytes(bytes);
       
       await Share.shareXFiles(
@@ -584,9 +595,10 @@ class InvoicePreviewScreen extends ConsumerWidget {
     try {
       final pdf = await _generatePdfDocument(invoice);
       final bytes = await pdf.save();
+      final safeFileName = _getSafeFileName(invoice);
       
       if (kIsWeb) {
-        await Printing.sharePdf(bytes: bytes, filename: 'HoaDon_${invoice.invoiceNumber}.pdf');
+        await Printing.sharePdf(bytes: bytes, filename: safeFileName);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -607,13 +619,13 @@ class InvoicePreviewScreen extends ConsumerWidget {
       }
       
       if (directory != null) {
-        final file = File('${directory.path}/HoaDon_${invoice.invoiceNumber}.pdf');
+        final file = File('${directory.path}/$safeFileName');
         await file.writeAsBytes(bytes);
         
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Đã lưu PDF tại:\n${file.path}'),
+              content: const Text('Đã lưu file PDF hóa đơn thành công!'),
               backgroundColor: const Color(0xFF10B981),
               duration: const Duration(seconds: 5),
               action: SnackBarAction(
@@ -639,9 +651,10 @@ class InvoicePreviewScreen extends ConsumerWidget {
   Future<void> _printInvoice(BuildContext context, InvoiceEntity invoice) async {
     try {
       final pdf = await _generatePdfDocument(invoice);
+      final safeFileName = _getSafeFileName(invoice);
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'HoaDon_${invoice.invoiceNumber}.pdf',
+        name: safeFileName,
       );
     } catch (e) {
       if (context.mounted) {
