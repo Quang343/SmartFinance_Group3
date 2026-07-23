@@ -29,7 +29,13 @@ void main() {
 
       expect(find.text('Giao dịch Chi phí'), findsOneWidget);
       expect(find.text('Giao dịch Doanh thu'), findsNothing);
-      expect(find.byType(FloatingActionButton), findsOneWidget); // Can add transactions
+      // Can add transactions (either FAB on mobile or AppBar button on desktop)
+      expect(
+        find.byWidgetPredicate((widget) =>
+            widget is FloatingActionButton ||
+            (widget is Text && widget.data == 'Tạo Giao dịch')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Revenue Accountant sees Giao dịch Doanh thu title', (WidgetTester tester) async {
@@ -47,7 +53,13 @@ void main() {
 
       expect(find.text('Giao dịch Doanh thu'), findsOneWidget);
       expect(find.text('Giao dịch Chi phí'), findsNothing);
-      expect(find.byType(FloatingActionButton), findsOneWidget); // Can add transactions
+      // Can add transactions (either FAB on mobile or AppBar button on desktop)
+      expect(
+        find.byWidgetPredicate((widget) =>
+            widget is FloatingActionButton ||
+            (widget is Text && widget.data == 'Tạo Giao dịch')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Shows loading indicator when async value is loading', (WidgetTester tester) async {
