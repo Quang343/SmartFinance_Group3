@@ -159,66 +159,103 @@ class InvoicePreviewScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                child: Column(
-                  children: [
-                    if (!kIsWeb)
-                      Row(
+                child: kIsWeb
+                    ? Row(
                         children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _shareInvoice(context, invoice),
-                            icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
-                            label: const Text(
-                              'Chia sẻ',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00D09E),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _saveInvoice(context, invoice),
-                            icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
-                            label: const Text(
-                              'Lưu PDF',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF10B981),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _saveInvoice(context, invoice),
+                              icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                              label: const Text(
+                                'Lưu PDF',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _printInvoice(context, invoice),
-                        icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
-                        label: const Text(
-                          'In Hóa Đơn',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
-                        ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _printInvoice(context, invoice),
+                              icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
+                              label: const Text(
+                                'In Hóa Đơn',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _shareInvoice(context, invoice),
+                                  icon: const Icon(Icons.share_rounded, color: Colors.white, size: 20),
+                                  label: const Text(
+                                    'Chia sẻ',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00D09E),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _saveInvoice(context, invoice),
+                                  icon: const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                                  label: const Text(
+                                    'Lưu PDF',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF10B981),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _printInvoice(context, invoice),
+                              icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
+                              label: const Text(
+                                'In Hóa Đơn',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           );
@@ -521,13 +558,24 @@ class InvoicePreviewScreen extends ConsumerWidget {
     return pdf;
   }
 
+  String _getSafeFileName(InvoiceEntity invoice) {
+    final rawNumber = invoice.invoiceNumber.replaceAll(RegExp(r'[/\\]'), '_');
+    return 'HoaDon_$rawNumber.pdf';
+  }
+
   Future<void> _shareInvoice(BuildContext context, InvoiceEntity invoice) async {
     try {
       final pdf = await _generatePdfDocument(invoice);
       final bytes = await pdf.save();
+      final safeFileName = _getSafeFileName(invoice);
+
+      if (kIsWeb) {
+        await Printing.sharePdf(bytes: bytes, filename: safeFileName);
+        return;
+      }
       
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/HoaDon_${invoice.invoiceNumber}.pdf');
+      final file = File('${directory.path}/$safeFileName');
       await file.writeAsBytes(bytes);
       
       await Share.shareXFiles(
@@ -547,6 +595,21 @@ class InvoicePreviewScreen extends ConsumerWidget {
     try {
       final pdf = await _generatePdfDocument(invoice);
       final bytes = await pdf.save();
+      final safeFileName = _getSafeFileName(invoice);
+      
+      if (kIsWeb) {
+        await Printing.sharePdf(bytes: bytes, filename: safeFileName);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã tải xuống file PDF hóa đơn thành công!'),
+              backgroundColor: Color(0xFF10B981),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
       
       Directory? directory;
       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
@@ -556,13 +619,13 @@ class InvoicePreviewScreen extends ConsumerWidget {
       }
       
       if (directory != null) {
-        final file = File('${directory.path}/HoaDon_${invoice.invoiceNumber}.pdf');
+        final file = File('${directory.path}/$safeFileName');
         await file.writeAsBytes(bytes);
         
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Đã lưu PDF tại:\n${file.path}'),
+              content: const Text('Đã lưu file PDF hóa đơn thành công!'),
               backgroundColor: const Color(0xFF10B981),
               duration: const Duration(seconds: 5),
               action: SnackBarAction(
@@ -588,9 +651,10 @@ class InvoicePreviewScreen extends ConsumerWidget {
   Future<void> _printInvoice(BuildContext context, InvoiceEntity invoice) async {
     try {
       final pdf = await _generatePdfDocument(invoice);
+      final safeFileName = _getSafeFileName(invoice);
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'HoaDon_${invoice.invoiceNumber}.pdf',
+        name: safeFileName,
       );
     } catch (e) {
       if (context.mounted) {

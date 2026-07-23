@@ -9,6 +9,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:open_filex/open_filex.dart';
+import 'dart:convert';
+import 'dart:ui';
+import 'package:http/http.dart' as http;
+import 'package:printing/printing.dart';
 import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/core/providers/role_provider.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
@@ -605,7 +609,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                             const SizedBox(height: 20),
                           ],
 
-                          // Image View Section
+                          // Image/PDF View Section
                           if (invoice.imagePath != null &&
                               invoice.imagePath!.isNotEmpty) ...[
                             Text(
@@ -619,61 +623,10 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            Container(
-                              width: double.infinity,
-                              constraints: const BoxConstraints(maxHeight: 400),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? const Color(0xFF0D251C)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isDark
-                                      ? const Color(0xFF1E3A2F)
-                                      : const Color(0xFFE2E8F0),
-                                ),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(20),
-                                child: invoice.imagePath == 'mock_path_ocr.png'
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(40.0),
-                                        child: Center(
-                                          child: Icon(
-                                            Icons.image_outlined,
-                                            size: 64,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                      )
-                                    : (invoice.imagePath!.startsWith('http') || kIsWeb)
-                                        ? Image.network(
-                                            invoice.imagePath!,
-                                            fit: BoxFit.contain,
-                                            loadingBuilder: (context, child, progress) {
-                                              if (progress == null) return child;
-                                              return const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E)));
-                                            },
-                                            errorBuilder: (context, error, stackTrace) => const Center(
-                                              child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey),
-                                            ),
-                                          )
-                                        : ((kIsWeb || File(invoice.imagePath!).existsSync())
-                                            ? Image.file(
-                                                File(invoice.imagePath!),
-                                                fit: BoxFit.contain,
-                                              )
-                                            : const Padding(
-                                                padding: EdgeInsets.all(40.0),
-                                                child: Center(
-                                                  child: Icon(
-                                                    Icons.broken_image_rounded,
-                                                    size: 64,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
-                                              )),
-                              ),
+                            _buildAttachmentPreview(
+                              context: context,
+                              path: invoice.imagePath!,
+                              isDark: isDark,
                             ),
                           ],
                         ],
@@ -1129,6 +1082,284 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       }
     }
   }
+
+  bool _isWebOrNetworkPath(String? path) {
+    if (path == null || path.isEmpty) return false;
+    return kIsWeb || path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:');
+  }
+
+  bool _isPdfFile(String path, {String? fileName, String? mimeType}) {
+    if (mimeType == 'application/pdf') return true;
+    if (fileName != null && fileName.toLowerCase().endsWith('.pdf')) return true;
+    final lower = path.toLowerCase();
+    return lower.endsWith('.pdf') || lower.contains('.pdf') || lower.startsWith('data:application/pdf');
+  }
+
+  void _openPdfFile(String path) async {
+    try {
+      if (path.startsWith('data:application/pdf;base64,')) {
+        final base64Str = path.split(',').last;
+        final bytes = base64Decode(base64Str);
+        if (kIsWeb) {
+          await Printing.sharePdf(bytes: bytes, filename: 'HoaDon_DinhKem.pdf');
+        } else {
+          final tempDir = await getTemporaryDirectory();
+          final tempFile = File('${tempDir.path}/HoaDon_DinhKem.pdf');
+          await tempFile.writeAsBytes(bytes);
+          final result = await OpenFilex.open(tempFile.path);
+          if (result.type != ResultType.done && mounted) {
+            await Printing.layoutPdf(onLayout: (_) async => bytes, name: 'HoaDon_DinhKem.pdf');
+          }
+        }
+      } else if (kIsWeb) {
+        final response = await http.get(Uri.parse(path));
+        if (response.statusCode == 200) {
+          await Printing.sharePdf(bytes: response.bodyBytes, filename: 'HoaDon_DinhKem.pdf');
+        }
+      } else {
+        final result = await OpenFilex.open(path);
+        if (result.type != ResultType.done && mounted) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            await Printing.layoutPdf(onLayout: (_) async => bytes);
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi mở file PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _showFullScreenImage(String path, {required bool isNetwork}) {
+    showDialog(
+      context: context,
+      useSafeArea: false,
+      builder: (context) => _FullScreenImageViewer(path: path, isNetwork: isNetwork),
+    );
+  }
+
+  Widget _buildAttachmentPreview({
+    required BuildContext context,
+    required String path,
+    required bool isDark,
+  }) {
+    final isPdf = _isPdfFile(path);
+    final displayFileName = path.split(RegExp(r'[/\\]')).last.split('?').first;
+
+    if (isPdf) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F261C) : const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF00D09E).withValues(alpha: 0.35),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00D09E).withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00D09E), Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00D09E).withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.picture_as_pdf_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Tệp đính kèm PDF',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : const Color(0xFF064E3B),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    displayFileName.startsWith('data:') ? 'HoaDon_DinhKem.pdf' : displayFileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ScaleOnTap(
+              onTap: () => _openPdfFile(path),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00D09E), Color(0xFF059669)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00D09E).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.visibility_rounded, size: 16, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text(
+                      'Xem PDF',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final isNet = _isWebOrNetworkPath(path);
+    return GestureDetector(
+      onTap: () => _showFullScreenImage(path, isNetwork: isNet),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxHeight: 400),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0B1712) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? const Color(0xFF00D09E).withValues(alpha: 0.3) : const Color(0xFFE2E8F0),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              path == 'mock_path_ocr.png'
+                  ? const Padding(
+                      padding: EdgeInsets.all(40.0),
+                      child: Center(
+                        child: Icon(Icons.image_outlined, size: 64, color: Colors.grey),
+                      ),
+                    )
+                  : isNet
+                      ? Image.network(
+                          path,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, progress) => progress == null
+                              ? child
+                              : const Center(
+                                  child: CircularProgressIndicator(color: Color(0xFF00D09E)),
+                                ),
+                          errorBuilder: (context, error, stackTrace) => const Center(
+                            child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey),
+                          ),
+                        )
+                      : ((kIsWeb || File(path).existsSync())
+                          ? Image.file(File(path), fit: BoxFit.contain)
+                          : const Padding(
+                              padding: EdgeInsets.all(40.0),
+                              child: Center(
+                                child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey),
+                              ),
+                            )),
+              Positioned(
+                bottom: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.zoom_in_rounded, color: Color(0xFF00D09E), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Xem chi tiết',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DetailRow extends StatelessWidget {
@@ -1173,6 +1404,159 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FullScreenImageViewer extends StatefulWidget {
+  final String path;
+  final bool isNetwork;
+
+  const _FullScreenImageViewer({required this.path, required this.isNetwork});
+
+  @override
+  State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
+  final TransformationController _controller = TransformationController();
+
+  void _zoomBy(double factor) {
+    final Matrix4 matrix = _controller.value.clone();
+    final double currentScale = matrix.getMaxScaleOnAxis();
+    final double targetScale = (currentScale * factor).clamp(1.0, 4.0);
+    final double actualFactor = targetScale / currentScale;
+
+    if (actualFactor == 1.0) return;
+
+    final Size screenSize = MediaQuery.of(context).size;
+    final Offset screenCenter = Offset(screenSize.width / 2, screenSize.height / 2);
+
+    final double currentDx = matrix.getTranslation().x;
+    final double currentDy = matrix.getTranslation().y;
+
+    final double newDx = screenCenter.dx - (screenCenter.dx - currentDx) * actualFactor;
+    final double newDy = screenCenter.dy - (screenCenter.dy - currentDy) * actualFactor;
+
+    matrix.scale(actualFactor);
+    matrix.setTranslationRaw(newDx, newDy, 0.0);
+
+    _controller.value = matrix;
+  }
+
+  void _zoomIn() => _zoomBy(1.5);
+  void _zoomOut() => _zoomBy(1 / 1.5);
+
+  void _resetZoom() {
+    _controller.value = Matrix4.identity();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _isMobile {
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: Colors.black.withOpacity(0.95),
+            ),
+          ),
+          InteractiveViewer(
+            transformationController: _controller,
+            panEnabled: true,
+            boundaryMargin: EdgeInsets.zero,
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Center(
+              child: (kIsWeb || widget.isNetwork || widget.path.startsWith('http://') || widget.path.startsWith('https://') || widget.path.startsWith('blob:') || widget.path.startsWith('data:'))
+                  ? Image.network(widget.path, fit: BoxFit.contain)
+                  : Image.file(File(widget.path), fit: BoxFit.contain),
+            ),
+          ),
+          if (!_isMobile)
+            Positioned(
+              bottom: 40,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToolbarBtn(Icons.remove_rounded, _zoomOut, 'Thu nhỏ'),
+                        const SizedBox(width: 24),
+                        _buildToolbarBtn(Icons.fit_screen_rounded, _resetZoom, 'Khôi phục', isPrimary: true),
+                        const SizedBox(width: 24),
+                        _buildToolbarBtn(Icons.add_rounded, _zoomIn, 'Phóng to'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            top: 40,
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbarBtn(IconData icon, VoidCallback onTap, String tooltip, {bool isPrimary = false}) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isPrimary ? const Color(0xFF00D09E).withOpacity(0.8) : Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: Colors.white,
+            size: isPrimary ? 28 : 24,
+          ),
+        ),
       ),
     );
   }

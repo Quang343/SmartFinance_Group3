@@ -12,6 +12,8 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:printing/printing.dart';
 import '../../../core/utils/number_to_text.dart';
 import '../../../core/utils/money_formatter.dart';
 
@@ -63,6 +65,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   String? _invoiceImagePath;
   final _picker = ImagePicker();
   String? _selectedImagePath;
+  String? _selectedAttachmentFileName;
+  String? _selectedAttachmentMimeType;
   
   DateTime _transactionDate = DateTime.now();
   DateTime? _createdAt;
@@ -168,8 +172,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         final attachmentRepo = ref.read(attachmentRepositoryProvider);
         final attachments = await attachmentRepo.getByOwnerId(widget.transactionId!);
         if (attachments.isNotEmpty) {
+          final att = attachments.first;
           setState(() {
-            _selectedImagePath = attachments.first.filePath;
+            _selectedImagePath = att.filePath;
+            _selectedAttachmentFileName = att.fileName;
+            _selectedAttachmentMimeType = att.mimeType;
           });
         }
       }
@@ -189,6 +196,322 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
+  bool get _isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  bool _isWebOrNetworkPath(String? path) {
+    if (path == null || path.isEmpty) return false;
+    return kIsWeb || path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:');
+  }
+
+  bool _isPdfFile(String path, {String? fileName, String? mimeType}) {
+    if (mimeType == 'application/pdf') return true;
+    if (fileName != null && fileName.toLowerCase().endsWith('.pdf')) return true;
+    final lower = path.toLowerCase();
+    return lower.endsWith('.pdf') || lower.contains('.pdf') || lower.startsWith('data:application/pdf');
+  }
+
+  void _openPdfFile(String path) async {
+    try {
+      if (path.startsWith('data:application/pdf;base64,')) {
+        final base64Str = path.split(',').last;
+        final bytes = base64Decode(base64Str);
+        if (kIsWeb) {
+          await Printing.sharePdf(bytes: bytes, filename: 'HoaDon_DinhKem.pdf');
+        } else {
+          final tempDir = await getTemporaryDirectory();
+          final fileName = _selectedAttachmentFileName ?? 'HoaDon_DinhKem.pdf';
+          final safeName = fileName.endsWith('.pdf') ? fileName : '$fileName.pdf';
+          final tempFile = File('${tempDir.path}/$safeName');
+          await tempFile.writeAsBytes(bytes);
+          final result = await OpenFilex.open(tempFile.path);
+          if (result.type != ResultType.done && mounted) {
+            await Printing.layoutPdf(onLayout: (_) async => bytes, name: safeName);
+          }
+        }
+      } else if (kIsWeb) {
+        final response = await http.get(Uri.parse(path));
+        if (response.statusCode == 200) {
+          await Printing.sharePdf(bytes: response.bodyBytes, filename: 'HoaDon_DinhKem.pdf');
+        }
+      } else {
+        final result = await OpenFilex.open(path);
+        if (result.type != ResultType.done && mounted) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            await Printing.layoutPdf(onLayout: (_) async => bytes);
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi mở file PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildAttachmentPreview({
+    required String path,
+    String? customFileName,
+    String? customMimeType,
+    required bool isDark,
+    required Color inputBorderColor,
+    required bool isReadOnly,
+    required VoidCallback onRemove,
+  }) {
+    final isPdf = _isPdfFile(path, fileName: customFileName, mimeType: customMimeType);
+    final displayFileName = (customFileName != null && customFileName.isNotEmpty)
+        ? customFileName
+        : path.split(RegExp(r'[/\\]')).last.split('?').first;
+
+    if (isPdf) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F261C) : const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF00D09E).withValues(alpha: 0.35),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00D09E).withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00D09E), Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00D09E).withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.picture_as_pdf_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Tệp đính kèm PDF',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : const Color(0xFF064E3B),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    displayFileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ScaleOnTap(
+              onTap: () => _openPdfFile(path),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00D09E), Color(0xFF059669)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00D09E).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.visibility_rounded, size: 16, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text(
+                      'Xem PDF',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (!isReadOnly) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: onRemove,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final isNet = _isWebOrNetworkPath(path);
+    return Stack(
+      alignment: Alignment.topRight,
+      children: [
+        GestureDetector(
+          onTap: () => _showFullScreenImage(path, isNetwork: isNet),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 240),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B1712) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? const Color(0xFF00D09E).withValues(alpha: 0.3) : const Color(0xFFE2E8F0),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  isNet
+                      ? Image.network(
+                          path,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null
+                                  ? child
+                                  : const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFF00D09E),
+                                      ),
+                                    ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                                child: Icon(
+                                  Icons.broken_image_rounded,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                        )
+                      : Image.file(
+                          File(path),
+                          fit: BoxFit.contain,
+                        ),
+                  Positioned(
+                    bottom: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.zoom_in_rounded, color: Color(0xFF00D09E), size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Xem chi tiết',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (!isReadOnly)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: InkWell(
+              onTap: onRemove,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(source: source);
@@ -199,12 +522,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = 'Lỗi chọn ảnh: $e';
-        if (e.toString().contains('cameraDelegate')) {
-          errorMsg = 'Tính năng chụp ảnh chưa được hỗ trợ trên thiết bị này (Windows/Desktop). Vui lòng chọn từ Thư viện!';
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+          SnackBar(content: Text('Lỗi chọn ảnh: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -215,11 +534,41 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: kIsWeb,
       );
-      if (result != null && result.files.single.path != null) {
-        setState(() {
-          _selectedImagePath = result.files.single.path;
-        });
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        final bool isPdf = (file.extension?.toLowerCase() == 'pdf') ||
+            file.name.toLowerCase().endsWith('.pdf') ||
+            (file.path != null && file.path!.toLowerCase().endsWith('.pdf'));
+        _selectedAttachmentFileName = file.name;
+        _selectedAttachmentMimeType = isPdf ? 'application/pdf' : 'image/png';
+
+        if (isPdf) {
+          Uint8List? bytes = file.bytes;
+          if (bytes == null && file.path != null) {
+            bytes = await File(file.path!).readAsBytes();
+          }
+          if (bytes != null) {
+            final dataUrl = Uri.dataFromBytes(bytes, mimeType: 'application/pdf').toString();
+            setState(() {
+              _selectedImagePath = dataUrl;
+            });
+            return;
+          }
+        }
+
+        if (kIsWeb && file.bytes != null) {
+          final mime = isPdf ? 'application/pdf' : 'image/png';
+          final dataUrl = Uri.dataFromBytes(file.bytes!, mimeType: mime).toString();
+          setState(() {
+            _selectedImagePath = dataUrl;
+          });
+        } else if (file.path != null) {
+          setState(() {
+            _selectedImagePath = file.path;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -291,13 +640,16 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final int amount = int.parse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), ''));
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !kIsWeb && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
+      if (_selectedImagePath != null && !kIsWeb && !_isWebOrNetworkPath(_selectedImagePath) && !File(_selectedImagePath!).existsSync()) {
         _selectedImagePath = null;
       }
 
-      // Upload image if it is a local file
+      final bool isPdf = _selectedImagePath != null && _isPdfFile(_selectedImagePath!, fileName: _selectedAttachmentFileName, mimeType: _selectedAttachmentMimeType);
       String? finalImagePath = _selectedImagePath;
-      if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
+      final bool isRemoteUrl = _selectedImagePath != null && (_selectedImagePath!.startsWith('http://') || _selectedImagePath!.startsWith('https://'));
+
+      // Upload image to ImgBB ONLY IF IT IS NOT A PDF FILE
+      if (_selectedImagePath != null && !isRemoteUrl && !isPdf) {
         try {
           if (kIsWeb) {
             final response = await http.get(Uri.parse(_selectedImagePath!));
@@ -315,9 +667,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           }
         } catch (e) {
           debugPrint('Không thể tải ảnh đính kèm lên ImgBB (giữ đường dẫn local/fallback): $e');
-          // Không return; để cho phép giao dịch tiếp tục được lưu vào Firestore!
         }
       }
+
+      final String attachmentFileName = _selectedAttachmentFileName ?? (_selectedImagePath != null ? _selectedImagePath!.split(RegExp(r'[/\\]')).last.split('?').first : 'Attachment');
+      final String attachmentMimeType = isPdf ? 'application/pdf' : 'image/png';
 
       final transaction = TransactionEntity(
         id: id,
@@ -343,6 +697,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ownerId: id,
             ownerType: 'transaction',
             filePath: finalImagePath,
+            fileName: attachmentFileName,
+            mimeType: attachmentMimeType,
             createdAt: DateTime.now(),
           );
           await attachmentRepo.create(attachment);
@@ -366,6 +722,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ownerId: id,
               ownerType: 'transaction',
               filePath: finalImagePath,
+              fileName: attachmentFileName,
+              mimeType: attachmentMimeType,
               createdAt: DateTime.now(),
             );
             await attachmentRepo.create(attachment);
@@ -1387,7 +1745,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         ),
                       ),
                     ),
-                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || kIsWeb || File(_invoiceImagePath!).existsSync())) ...[
+                  ] else if (_invoiceImagePath != null && (_isWebOrNetworkPath(_invoiceImagePath) || (!kIsWeb && File(_invoiceImagePath!).existsSync()))) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1401,7 +1759,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
+                              'Chứng từ đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: isDark ? Colors.white70 : const Color(0xFF093021),
@@ -1412,209 +1770,58 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: () {
-                        final isNet = _invoiceImagePath!.startsWith('http');
-                        _showFullScreenImage(_invoiceImagePath!, isNetwork: isNet);
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxHeight: 250),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F1E15) : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: inputBorderColor, width: 1.5),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            alignment: Alignment.center,
+                    _buildAttachmentPreview(
+                      path: _invoiceImagePath!,
+                      isDark: isDark,
+                      inputBorderColor: inputBorderColor,
+                      isReadOnly: true,
+                      onRemove: () {},
+                    ),
+                  ],
+                ],
+              )
+            else if (_selectedImagePath != null && (_isWebOrNetworkPath(_selectedImagePath) || (!kIsWeb && File(_selectedImagePath!).existsSync())))
+              _buildAttachmentPreview(
+                path: _selectedImagePath!,
+                customFileName: _selectedAttachmentFileName,
+                customMimeType: _selectedAttachmentMimeType,
+                isDark: isDark,
+                inputBorderColor: inputBorderColor,
+                isReadOnly: _isReadOnly,
+                onRemove: () => setState(() {
+                  _selectedImagePath = null;
+                  _selectedAttachmentFileName = null;
+                  _selectedAttachmentMimeType = null;
+                }),
+              )
+            else if (!_isReadOnly)
+              Row(
+                children: [
+                  if (_isMobile) ...[
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _pickImage(ImageSource.camera),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: inputFillColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: inputBorderColor, width: 1.5),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _invoiceImagePath!.startsWith('http')
-                                  ? Image.network(
-                                      _invoiceImagePath!,
-                                      fit: BoxFit.contain,
-                                      loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                      errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                                    )
-                                  : Image.file(
-                                      File(_invoiceImagePath!),
-                                      fit: BoxFit.contain,
-                                    ),
-                              Positioned(
-                                bottom: 12,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.zoom_in_rounded, color: Colors.white, size: 18),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        'Xem chi tiết',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
+                              SizedBox(width: 8),
+                              Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             ],
                           ),
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                   ],
-                ],
-              )
-            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || kIsWeb || File(_selectedImagePath!).existsSync()))
-              Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      if (!_selectedImagePath!.toLowerCase().endsWith('.pdf')) {
-                        final isNet = _selectedImagePath!.startsWith('http');
-                        _showFullScreenImage(_selectedImagePath!, isNetwork: isNet);
-                      }
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      constraints: const BoxConstraints(maxHeight: 250),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F1E15) : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: inputBorderColor, width: 1.5),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
-                            ? Container(
-                                color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _selectedImagePath!.split(Platform.pathSeparator).last,
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white70 : const Color(0xFF093021),
-                                        fontSize: 14,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  _selectedImagePath!.startsWith('http')
-                                      ? Image.network(
-                                          _selectedImagePath!,
-                                          fit: BoxFit.contain,
-                                          loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                          errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                                        )
-                                      : Image.file(
-                                          File(_selectedImagePath!),
-                                          fit: BoxFit.contain,
-                                        ),
-                                  Positioned(
-                                    bottom: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.7),
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.2),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.zoom_in_rounded, color: Colors.white, size: 18),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            'Xem chi tiết',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ),
-                  if (!_isReadOnly)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                    child: InkWell(
-                      onTap: () => setState(() => _selectedImagePath = null),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else if (!_isReadOnly)
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _pickImage(ImageSource.camera),
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: inputFillColor,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: inputBorderColor, width: 1.5),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
-                            SizedBox(width: 8),
-                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: InkWell(
                       onTap: () => _pickImage(ImageSource.gallery),
@@ -1814,7 +2021,7 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
             minScale: 1.0,
             maxScale: 4.0,
             child: Center(
-              child: widget.isNetwork
+              child: (kIsWeb || widget.isNetwork || widget.path.startsWith('http://') || widget.path.startsWith('https://') || widget.path.startsWith('blob:') || widget.path.startsWith('data:'))
                   ? Image.network(widget.path, fit: BoxFit.contain)
                   : Image.file(File(widget.path), fit: BoxFit.contain),
             ),

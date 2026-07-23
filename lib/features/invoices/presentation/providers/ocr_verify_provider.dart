@@ -58,17 +58,8 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
     );
     try {
       final isRealApi = _ref.read(isRealApiProvider);
-      // Call API or Mock based on isRealApiProvider
-      DraftInvoice draft;
-      if (isRealApi) {
-        // Gọi API thật sử dụng schema V2
-        final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: false);
-        draft = OcrMapper.toDraftV2(dtoV2, image);
-      } else {
-        // Dùng OCR Mock V2 (đầy đủ các trường)
-        final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: true);
-        draft = OcrMapper.toDraftV2(dtoV2, image);
-      }
+      final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: !isRealApi);
+      DraftInvoice draft = OcrMapper.toDraftV2(dtoV2, image);
 
       // Fill Buyer / Client information with current accountant & company data
       final String buyerPerson = (_currentUser?.fullName.isNotEmpty == true)
