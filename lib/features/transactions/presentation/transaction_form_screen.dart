@@ -264,6 +264,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       return;
     }
 
+    if (_status == TransactionStatus.confirmed) {
+      final hasAttachment = _selectedImagePath != null || _invoiceId != null;
+      if (!hasAttachment) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Vui lòng tải lên ảnh đính kèm chứng từ để Xác nhận giao dịch!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     setState(() {
       _isSaving = true;
     });

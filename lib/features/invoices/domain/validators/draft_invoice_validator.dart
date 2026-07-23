@@ -21,6 +21,12 @@ class DraftInvoiceValidator {
     final missingFields = <String>[];
     String? mathWarning;
 
+    if (draft.formNumber?.trim().isEmpty ?? true) {
+      missingFields.add('Mẫu số');
+    }
+    if (draft.serialNumber?.trim().isEmpty ?? true) {
+      missingFields.add('Ký hiệu');
+    }
     if (draft.invoiceNumber.trim().isEmpty) {
       missingFields.add('Số hóa đơn');
     }

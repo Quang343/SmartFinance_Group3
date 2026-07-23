@@ -83,6 +83,11 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   final List<_ItemFormState> _items = [_ItemFormState()];
   final _vatRateController = TextEditingController(text: '10');
 
+  final _formNumberController = TextEditingController();
+  final _serialNumberController = TextEditingController();
+  final _invoiceNumberController = TextEditingController();
+  bool _isLoadingFormatInfo = false;
+
   bool _isLoadingCategories = false;
 
   int get _subtotal => _items.fold(0, (sum, item) => sum + item.amount);
@@ -125,6 +130,37 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       if (widget.scannedVatRate != null) {
         _vatRateController.text = widget.scannedVatRate.toString();
       }
+      
+      if (widget.invoiceType == InvoiceType.incoming) {
+          _sellerNameController.text = widget.scannedSellerName ?? '';
+          _sellerTaxCodeController.text = widget.scannedTaxCode ?? '';
+          int subtotalVal = widget.scannedSubtotal ?? 0;
+          _vatRateController.text = (widget.scannedVatRate ?? 0).toString();
+          if (subtotalVal > 0) {
+            _items.clear();
+            _items.add(_ItemFormState(name: 'Hàng hóa / Dịch vụ (OCR)', unit: 'Gói', quantity: 1, price: subtotalVal));
+          }
+        }
+    }
+
+    _loadOutgoingInvoiceFormat();
+  }
+
+  Future<void> _loadOutgoingInvoiceFormat() async {
+    if (widget.invoiceType != InvoiceType.outgoing) return;
+    setState(() => _isLoadingFormatInfo = true);
+    try {
+      final repo = ref.read(invoiceRepositoryProvider);
+      final nextId = await repo.getNextSequentialId(InvoiceType.outgoing);
+      final yearSuffix = DateTime.now().year.toString().substring(2);
+      
+      _formNumberController.text = '01GTKT0/001';
+      _serialNumberController.text = 'AA/${yearSuffix}E';
+      _invoiceNumberController.text = nextId.toString().padLeft(8, '0');
+    } catch (e) {
+      debugPrint('Error loading next sequential ID: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingFormatInfo = false);
     }
   }
 
@@ -133,12 +169,22 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
     _partnerContactNameController.dispose();
     _partnerNameController.dispose();
     _partnerTaxCodeController.dispose();
+    _partnerAddressController.dispose();
     _bankNameController.dispose();
     _bankAccountController.dispose();
+    _sellerNameController.dispose();
+    _sellerTaxCodeController.dispose();
+    _sellerAddressController.dispose();
+    _sellerPhoneController.dispose();
+    _sellerBankNameController.dispose();
+    _sellerBankAccountController.dispose();
+    _vatRateController.dispose();
+    _formNumberController.dispose();
+    _serialNumberController.dispose();
+    _invoiceNumberController.dispose();
     for (var item in _items) {
       item.dispose();
     }
-    _vatRateController.dispose();
     super.dispose();
   }
 
@@ -160,7 +206,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       try {
         final repo = ref.read(invoiceRepositoryProvider);
         final storageRepo = ref.read(storageRepositoryProvider);
-        final id = const Uuid().v4();
+        final newInvoiceId = const Uuid().v4();
         
         String? finalImagePath;
         
@@ -170,13 +216,13 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
              if (kIsWeb) {
               final response = await http.get(Uri.parse(widget.scannedImagePath!));
               if (response.statusCode == 200) {
-                final uploadedUrl = await storageRepo.uploadInvoiceImage(id, webFile: response.bodyBytes, fileName: 'invoice.png');
+                final uploadedUrl = await storageRepo.uploadInvoiceImage(newInvoiceId, webFile: response.bodyBytes, fileName: 'invoice.png');
                 if (uploadedUrl != null) {
                   finalImagePath = uploadedUrl;
                 }
               }
             } else {
-              final uploadedUrl = await storageRepo.uploadInvoiceImage(id, file: File(widget.scannedImagePath!));
+              final uploadedUrl = await storageRepo.uploadInvoiceImage(newInvoiceId, file: File(widget.scannedImagePath!));
               if (uploadedUrl != null) {
                 finalImagePath = uploadedUrl;
               }
@@ -202,9 +248,38 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           );
         }).toList();
 
+        String formNum = _formNumberController.text.trim();
+        String serialNum = _serialNumberController.text.trim();
+        String seqNum = _invoiceNumberController.text.trim();
+        String sellerTax = _sellerTaxCodeController.text.trim();
+        
+        String generatedInvoiceNumber;
+        if (widget.invoiceType == InvoiceType.outgoing) {
+           generatedInvoiceNumber = 'INV-$formNum-$serialNum-$seqNum';
+        } else {
+           generatedInvoiceNumber = 'OCR-INV-$sellerTax-$formNum-$serialNum-$seqNum';
+        }
+
+        // Check if invoice already exists
+        final isExists = await repo.checkInvoiceExists(sellerTax, formNum, serialNum, generatedInvoiceNumber);
+        if (isExists) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Hóa đơn $generatedInvoiceNumber đã tồn tại, vui lòng sửa lại thông tin'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            setState(() => _isSaving = false);
+          }
+          return;
+        }
+
         final newInvoice = InvoiceEntity(
-          id: const Uuid().v4(),
-          invoiceNumber: 'INV-${DateTime.now().year}-${1000 + DateTime.now().millisecond}',
+          id: newInvoiceId,
+          invoiceNumber: generatedInvoiceNumber,
+          formNumber: formNum,
+          serialNumber: serialNum,
           sellerName: _sellerNameController.text,
           sellerTaxCode: _sellerTaxCodeController.text,
           sellerAddress: _sellerAddressController.text,
@@ -601,6 +676,32 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
               const SizedBox(height: 24),
             ],
 
+            // Thông tin hóa đơn mẫu
+            if (_isLoadingFormatInfo) 
+              const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+            else if (widget.invoiceType == InvoiceType.outgoing)
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  title: Text('THÔNG TIN HÓA ĐƠN (Đã điền tự động)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: primaryColor)),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: 16),
+                  iconColor: primaryColor,
+                  collapsedIconColor: Colors.grey,
+                  children: _buildInvoiceFormatFields(isDark, inputFillColor, inputBorderColor, isOutgoing: true),
+                ),
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('THÔNG TIN HÓA ĐƠN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  ..._buildInvoiceFormatFields(isDark, inputFillColor, inputBorderColor, isOutgoing: false),
+                  const SizedBox(height: 24),
+                ],
+              ),
+
             // Đơn vị bán
             widget.invoiceType == InvoiceType.outgoing
               ? Theme(
@@ -933,6 +1034,35 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       ),
       ),
     );
+  }
+  List<Widget> _buildInvoiceFormatFields(bool isDark, Color inputFillColor, Color inputBorderColor, {required bool isOutgoing}) {
+    final textColor = isDark ? Colors.white : Colors.black87;
+    return [
+      TextFormField(
+        controller: _formNumberController,
+        readOnly: isOutgoing,
+        style: TextStyle(fontSize: 15, color: textColor),
+        decoration: _buildInputDeco('Mẫu số (VD: 01GTKT0/001)', Icons.description_outlined, isDark, const Color(0xFF00D09E), inputFillColor, inputBorderColor),
+        validator: (value) => value == null || value.trim().isEmpty ? 'Nhập mẫu số' : null,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _serialNumberController,
+        readOnly: isOutgoing,
+        style: TextStyle(fontSize: 15, color: textColor),
+        decoration: _buildInputDeco('Ký hiệu (VD: AA/26E)', Icons.tag_outlined, isDark, const Color(0xFF00D09E), inputFillColor, inputBorderColor),
+        validator: (value) => value == null || value.trim().isEmpty ? 'Nhập ký hiệu' : null,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _invoiceNumberController,
+        readOnly: isOutgoing,
+        keyboardType: isOutgoing ? TextInputType.none : TextInputType.number,
+        style: TextStyle(fontSize: 15, color: textColor),
+        decoration: _buildInputDeco('Số hóa đơn (VD: 00001238)', Icons.numbers_outlined, isDark, const Color(0xFF00D09E), inputFillColor, inputBorderColor),
+        validator: (value) => value == null || value.trim().isEmpty ? 'Nhập số hóa đơn' : null,
+      ),
+    ];
   }
 
   List<Widget> _buildSellerFields(bool isDark, Color primaryColor, Color inputFillColor, Color inputBorderColor) {

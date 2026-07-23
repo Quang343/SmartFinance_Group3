@@ -58,6 +58,7 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
     );
     try {
       final isRealApi = _ref.read(isRealApiProvider);
+      // Call API or Mock based on isRealApiProvider
       DraftInvoice draft;
       if (isRealApi) {
         // Gọi API thật sử dụng schema V2
@@ -68,10 +69,6 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
         final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: true);
         draft = OcrMapper.toDraftV2(dtoV2, image);
       }
-      
-      // Call scanInvoiceV2 (isMock: true for Mock mode with 1.8s delay and exact Hitachi sample JSON)
-      final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: !isRealApi);
-      DraftInvoice draft = OcrMapper.toDraftV2(dtoV2, image);
 
       // Fill Buyer / Client information with current accountant & company data
       final String buyerPerson = (_currentUser?.fullName.isNotEmpty == true)
@@ -156,6 +153,23 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
     state = state.copyWith(status: OcrStatus.saving, clearErrorMessage: true);
     try {
       final draft = state.draft!;
+      
+      // Check for uniqueness
+      final String sellerTax = draft.taxCode.trim();
+      final String formNum = draft.formNumber?.trim() ?? '';
+      final String serialNum = draft.serialNumber?.trim() ?? '';
+      final String seqNum = draft.invoiceNumber.trim();
+      final String generatedInvoiceNumber = 'OCR-INV-$sellerTax-$formNum-$serialNum-$seqNum';
+      
+      final isExists = await _invoiceRepository.checkInvoiceExists(sellerTax, formNum, serialNum, generatedInvoiceNumber);
+      if (isExists) {
+        state = state.copyWith(
+          status: OcrStatus.error,
+          errorMessage: 'Hóa đơn $generatedInvoiceNumber đã tồn tại, vui lòng sửa lại thông tin',
+        );
+        return;
+      }
+      
       final invoiceId = const Uuid().v4();
       
       String? imageUrl;

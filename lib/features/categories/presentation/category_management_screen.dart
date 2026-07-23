@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
@@ -501,6 +502,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                                 colorHex: selectedColor,
                                 isDefault: cat.isDefault,
                                 isActive: cat.isActive,
+                                orderIndex: cat.orderIndex,
                                 createdAt: cat.createdAt,
                                 updatedAt: DateTime.now(),
                               );
@@ -553,6 +555,8 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
   }
 
   void _onReorder(int oldIndex, int newIndex, List<CategoryEntity> list) async {
+    final updatedCats = <CategoryEntity>[];
+    
     setState(() {
       if (newIndex > oldIndex) newIndex -= 1;
       final item = list.removeAt(oldIndex);
@@ -562,7 +566,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
         final catIndex = _allCats.indexWhere((c) => c.id == list[i].id);
         if (catIndex != -1) {
           final old = _allCats[catIndex];
-          _allCats[catIndex] = CategoryEntity(
+          final updated = CategoryEntity(
             id: old.id,
             name: old.name,
             type: old.type,
@@ -574,17 +578,21 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
             createdAt: old.createdAt,
             updatedAt: DateTime.now(),
           );
+          _allCats[catIndex] = updated;
+          updatedCats.add(updated);
         }
       }
     });
 
     final repo = ref.read(categoryRepositoryProvider);
-    for (int i = 0; i < list.length; i++) {
-      final catIndex = _allCats.indexWhere((c) => c.id == list[i].id);
-      if (catIndex != -1) {
-        await repo.update(_allCats[catIndex]);
-      }
+    try {
+      await repo.updateOrder(updatedCats);
+    } catch (e) {
+      debugPrint('Lỗi cập nhật thứ tự danh mục: $e');
     }
+    
+    // Refresh the global provider so other screens (like forms) see the new order
+    ref.invalidate(allCategoriesProvider);
   }
 
   void _showDeleteConfirmDialog(CategoryEntity cat, bool hasTransactions) {
@@ -913,6 +921,7 @@ class _CategoryManagementScreenState extends ConsumerState<CategoryManagementScr
                     colorHex: cat.colorHex,
                     isDefault: cat.isDefault,
                     isActive: val,
+                    orderIndex: cat.orderIndex,
                     createdAt: cat.createdAt,
                     updatedAt: DateTime.now(),
                   );

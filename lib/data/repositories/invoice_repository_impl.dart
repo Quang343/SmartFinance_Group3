@@ -50,6 +50,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     final model = InvoiceModel(
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      formNumber: invoice.formNumber,
+      serialNumber: invoice.serialNumber,
       sellerName: invoice.sellerName,
       sellerTaxCode: invoice.sellerTaxCode,
       sellerAddress: invoice.sellerAddress,
@@ -88,6 +90,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     final model = InvoiceModel(
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      formNumber: invoice.formNumber,
+      serialNumber: invoice.serialNumber,
       sellerName: invoice.sellerName,
       sellerTaxCode: invoice.sellerTaxCode,
       sellerAddress: invoice.sellerAddress,
@@ -133,5 +137,40 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       'transactionStatus': status.name,
       'updatedAt': DateTime.now().toIso8601String(),
     });
+  }
+
+  @override
+  Future<int> getNextSequentialId(InvoiceType type) async {
+    if (_uid.isEmpty) return 1;
+    // Để tối ưu, ta có thể query tất cả hóa đơn theo type và đếm số lượng
+    // Lấy count() của Firestore (hoặc query length)
+    try {
+      final AggregateQuerySnapshot snapshot = await _collection
+          .where('company', isEqualTo: _company)
+          .where('type', isEqualTo: type.name)
+          .count()
+          .get();
+      return (snapshot.count ?? 0) + 1;
+    } catch (e) {
+      // Fallback nếu count() bị lỗi
+      final snapshot = await _collection
+          .where('company', isEqualTo: _company)
+          .where('type', isEqualTo: type.name)
+          .get();
+      return snapshot.docs.length + 1;
+    }
+  }
+
+  @override
+  Future<bool> checkInvoiceExists(String sellerTaxCode, String formNumber, String serialNumber, String invoiceNumber) async {
+    if (_uid.isEmpty) return false;
+    // Check if the unique composite key exists
+    final snapshot = await _collection
+        .where('company', isEqualTo: _company)
+        .where('invoiceNumber', isEqualTo: invoiceNumber)
+        .limit(1)
+        .get();
+    
+    return snapshot.docs.isNotEmpty;
   }
 }
