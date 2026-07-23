@@ -170,7 +170,9 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         _existingInvoice = invoice;
         _formNumberController.text = invoice.formNumber ?? '';
         _serialNumberController.text = invoice.serialNumber ?? '';
-        _invoiceNumberController.text = invoice.invoiceNumber;
+        
+        final parts = invoice.invoiceNumber.split('-');
+        _invoiceNumberController.text = parts.isNotEmpty ? parts.last : invoice.invoiceNumber;
         
         _sellerNameController.text = invoice.sellerName;
         _sellerTaxCodeController.text = invoice.sellerTaxCode;
@@ -202,6 +204,8 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         } else {
           _items.add(_ItemFormState());
         }
+        
+        if (mounted) setState(() {});
       }
     } catch (e) {
       debugPrint('Error loading existing invoice: $e');
