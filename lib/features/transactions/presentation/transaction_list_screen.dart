@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +32,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _selectedType = 'all'; // 'all', 'income', 'expense'
   DateTimeRange? _customDateRange;
   int _displayLimit = 15;
+  int _currentPage = 1;
+  int _itemsPerPage = 10;
 
   @override
   void initState() {
@@ -312,6 +316,56 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           ),
         ),
         actions: [
+          if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900)
+            if (currentRole.canEditTransactions)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF00D09E), Color(0xFF34D399)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00D09E).withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        context.push('/transactions/form');
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add_rounded, size: 18, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Tạo Giao dịch',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: Center(
@@ -476,19 +530,30 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final netBalance = totalIncome - totalExpense;
 
-          return RefreshIndicator(
+          final isDesktopOrWeb = kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900;
+          final totalCount = list.length;
+          final totalPages = max(1, (totalCount / _itemsPerPage).ceil());
+          final currentPage = _currentPage.clamp(1, totalPages);
+          final startIndex = (currentPage - 1) * _itemsPerPage;
+          final endIndex = min(startIndex + _itemsPerPage, totalCount);
+          final displayList = isDesktopOrWeb
+              ? ((totalCount > 0) ? list.sublist(startIndex, endIndex) : <TransactionEntity>[])
+              : list;
+
+          // ---------- Shared scrollable body (Desktop wraps in Expanded + sticky pagination) ----------
+          final scrollable = RefreshIndicator(
             color: primaryColor,
             onRefresh: () async {
               _refreshData(showLoading: false);
             },
             child: NotificationListener<ScrollNotification>(
               onNotification: (ScrollNotification scrollInfo) {
-                if (scrollInfo.metrics.pixels ==
-                        scrollInfo.metrics.maxScrollExtent &&
-                    list.length > _displayLimit) {
-                  setState(() {
-                    _displayLimit += 15;
-                  });
+                if (!isDesktopOrWeb && scrollInfo.metrics.extentAfter < 50 && list.length > _displayLimit) {
+                  if (_displayLimit < list.length) {
+                    setState(() {
+                      _displayLimit = min(_displayLimit + 15, list.length);
+                    });
+                  }
                   return true;
                 }
                 return false;
@@ -1159,28 +1224,73 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                            itemCount:
-                                min(_displayLimit, list.length) +
-                                (list.length > _displayLimit ? 1 : 0),
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                            itemBuilder: (context, index) {
-                              if (index == _displayLimit) {
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: isDesktopOrWeb ? displayList.length : min(_displayLimit, list.length) + 1,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          itemBuilder: (context, index) {
+                            if (!isDesktopOrWeb && index == min(_displayLimit, list.length)) {
+                              if (_displayLimit < list.length) {
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16.0,
-                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 20.0),
                                   child: Center(
-                                    child: CircularProgressIndicator(
-                                      color: primaryColor,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF0F2C20) : const Color(0xFFF0FDF4),
+                                        borderRadius: BorderRadius.circular(24),
+                                        border: Border.all(color: const Color(0xFF00D09E).withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF00D09E)),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            'Đang tải thêm giao dịch...',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? const Color(0xFF00D09E) : const Color(0xFF065F46),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
                               }
-                              final isMobile = MediaQuery.of(context).size.width < 600;
-                              final tx = list[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.check_circle_outline_rounded, size: 16, color: isDark ? Colors.white38 : Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Đã hiển thị tất cả ${list.length} giao dịch',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark ? Colors.white38 : Colors.grey,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                            final isMobile = MediaQuery.of(context).size.width < 600;
+                            final tx = displayList[index];
                               final isIncome =
                                   tx.type == TransactionType.income;
                               final cat = catMap[tx.categoryId];
@@ -1559,14 +1669,37 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               );
                             },
                           ),
+                        // Pagination for Desktop is rendered sticky outside the scroll area
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
           );
+
+          // Desktop: sticky pagination bar below the scrollable list
+          if (isDesktopOrWeb) {
+            return Column(
+              children: [
+                Expanded(child: scrollable),
+                _buildPaginationBar(
+                  context: context,
+                  totalCount: totalCount,
+                  totalPages: totalPages,
+                  currentPage: currentPage,
+                  startIndex: startIndex,
+                  endIndex: endIndex,
+                  primaryColor: primaryColor,
+                  isDark: isDark,
+                ),
+              ],
+            );
+          }
+          return scrollable;
         },
       ),
-      floatingActionButton: currentRole.canEditTransactions
+      floatingActionButton: (currentRole.canEditTransactions && !(kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900))
           ? ScaleOnTap(
               onTap: () {
                 context.push('/transactions/form');
@@ -1666,6 +1799,237 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required BuildContext context,
+    required int totalCount,
+    required int totalPages,
+    required int currentPage,
+    required int startIndex,
+    required int endIndex,
+    required Color primaryColor,
+    required bool isDark,
+  }) {
+    if (totalCount == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0E2219) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1A382B) : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 650;
+
+          final infoText = Text(
+            'Hiển thị ${totalCount > 0 ? startIndex + 1 : 0} - $endIndex trên tổng số $totalCount mục',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          );
+
+          final itemsPerPageDropdown = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Số dòng:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _itemsPerPage,
+                    isDense: true,
+                    dropdownColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    items: const [10, 15, 30, 50].map((val) {
+                      return DropdownMenuItem<int>(
+                        value: val,
+                        child: Text('$val dòng'),
+                      );
+                    }).toList(),
+                    onChanged: (newVal) {
+                      if (newVal != null) {
+                        setState(() {
+                          _itemsPerPage = newVal;
+                          _currentPage = 1;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          );
+
+          List<Widget> pageButtons = [];
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.first_page_rounded,
+              enabled: currentPage > 1,
+              onTap: () => setState(() => _currentPage = 1),
+              isDark: isDark,
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 4));
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.chevron_left_rounded,
+              enabled: currentPage > 1,
+              onTap: () => setState(() => _currentPage = currentPage - 1),
+              isDark: isDark,
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 6));
+
+          for (int p = 1; p <= totalPages; p++) {
+            if (totalPages > 7) {
+              if (p != 1 && p != totalPages && (p < currentPage - 1 || p > currentPage + 1)) {
+                if (p == currentPage - 2 || p == currentPage + 2) {
+                  pageButtons.add(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: Text('...', style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
+                    ),
+                  );
+                }
+                continue;
+              }
+            }
+            final isSelected = p == currentPage;
+            pageButtons.add(
+              GestureDetector(
+                onTap: () => setState(() => _currentPage = p),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? primaryColor : (isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$p',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          pageButtons.add(const SizedBox(width: 6));
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.chevron_right_rounded,
+              enabled: currentPage < totalPages,
+              onTap: () => setState(() => _currentPage = currentPage + 1),
+              isDark: isDark,
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 4));
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.last_page_rounded,
+              enabled: currentPage < totalPages,
+              onTap: () => setState(() => _currentPage = totalPages),
+              isDark: isDark,
+            ),
+          );
+
+          if (isCompact) {
+            return Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    infoText,
+                    itemsPerPageDropdown,
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: pageButtons,
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              infoText,
+              Row(
+                children: [
+                  itemsPerPageDropdown,
+                  const SizedBox(width: 16),
+                  Row(children: pageButtons),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPageIconButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: enabled ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.white24 : Colors.grey.shade400),
         ),
       ),
     );
