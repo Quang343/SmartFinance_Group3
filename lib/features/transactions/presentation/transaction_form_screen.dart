@@ -459,11 +459,12 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   Future<void> _selectDateTime() async {
+    final now = DateTime.now();
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: _transactionDate,
+      initialDate: _transactionDate.isAfter(now) ? now : _transactionDate,
       firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
+      lastDate: now,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -491,14 +492,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         },
       );
       if (pickedTime != null && mounted) {
-        setState(() {
-          _transactionDate = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            pickedTime.hour,
-            pickedTime.minute,
+        DateTime finalDateTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+        
+        final currentTime = DateTime.now();
+        if (finalDateTime.isAfter(currentTime)) {
+          finalDateTime = currentTime;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Không thể chọn thời gian trong tương lai. Đã tự động chuyển về hiện tại.'),
+              backgroundColor: Colors.orange,
+            ),
           );
+        }
+
+        setState(() {
+          _transactionDate = finalDateTime;
         });
       }
     }

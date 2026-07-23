@@ -80,6 +80,9 @@ class OcrApiService {
       final uri = Uri.parse('https://escapable-latitude-augmented.ngrok-free.dev/extract_invoice');
       final request = http.MultipartRequest('POST', uri);
       
+      // Bỏ qua trang cảnh báo của ngrok
+      request.headers['ngrok-skip-browser-warning'] = 'true';
+      request.headers['Accept'] = 'application/json';
       if (kIsWeb) {
         // Handle web by fetching bytes from the blob URL
         final fileResponse = await http.get(Uri.parse(image.path));
