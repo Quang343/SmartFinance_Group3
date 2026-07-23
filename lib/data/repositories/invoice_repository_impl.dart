@@ -37,6 +37,17 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
         .toList();
   }
 
+  @override
+  Stream<List<InvoiceEntity>> watchAll() {
+    if (_uid.isEmpty) return Stream.value([]);
+    return _collection
+        .where('company', isEqualTo: _company)
+        .snapshots(includeMetadataChanges: true)
+        .map((snapshot) => snapshot.docs
+            .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+            .toList());
+  }
+
   Future<List<InvoiceEntity>> getDeletedInvoices() async {
     if (_uid.isEmpty) return [];
     Query query = _collection.where('company', isEqualTo: _company);

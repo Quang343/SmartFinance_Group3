@@ -3,16 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
-import '../../../domain/entities/invoice_entity.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import 'package:collection/collection.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/widgets/app_dialogs.dart';
+import '../../../domain/entities/invoice_entity.dart';
 import '../providers/invoice_provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
 import '../../../core/sync/sync_item.dart';
-import 'package:collection/collection.dart';
 import '../../../data/models/invoice_model.dart';
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
@@ -35,247 +38,220 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   }
 
   void _confirmSoftDelete(InvoiceEntity invoice) {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Xác nhận xóa'),
-        content: Text('Bạn có chắc chắn muốn xóa hóa đơn ${invoice.invoiceNumber}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final queueService = ref.read(syncQueueServiceProvider);
-              final invoiceRepo = ref.read(invoiceRepositoryProvider);
-              
-              final updatedModel = InvoiceModel(
-                id: invoice.id,
-                invoiceNumber: invoice.invoiceNumber,
-                formNumber: invoice.formNumber,
-                serialNumber: invoice.serialNumber,
-                sellerName: invoice.sellerName,
-                sellerTaxCode: invoice.sellerTaxCode,
-                sellerAddress: invoice.sellerAddress,
-                sellerPhone: invoice.sellerPhone,
-                sellerBankName: invoice.sellerBankName,
-                sellerBankAccount: invoice.sellerBankAccount,
-                buyerContactName: invoice.buyerContactName,
-                buyerName: invoice.buyerName,
-                buyerTaxCode: invoice.buyerTaxCode,
-                buyerAddress: invoice.buyerAddress,
-                buyerBankName: invoice.buyerBankName,
-                buyerBankAccount: invoice.buyerBankAccount,
-                paymentMethod: invoice.paymentMethod,
-                items: invoice.items,
-                subtotal: invoice.subtotal,
-                vatRate: invoice.vatRate,
-                vatAmount: invoice.vatAmount,
-                totalAmount: invoice.totalAmount,
-                ocrStatus: invoice.ocrStatus,
-                transactionStatus: invoice.transactionStatus,
-                ocrConfidence: invoice.ocrConfidence,
-                type: invoice.type,
-                issuedDate: invoice.issuedDate,
-                createdAt: invoice.createdAt,
-                updatedAt: DateTime.now(),
-                imagePath: invoice.imagePath,
-                status: InvoiceStatus.deleted, // Update status
-              );
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa hóa đơn ${invoice.invoiceNumber}? Hóa đơn sẽ được chuyển vào thùng rác.',
+      icon: Icons.delete_outline_rounded,
+      color: Colors.redAccent,
+      confirmText: 'Xóa hóa đơn',
+      onConfirm: () async {
+        final queueService = ref.read(syncQueueServiceProvider);
+        final invoiceRepo = ref.read(invoiceRepositoryProvider);
+        
+        final updatedModel = InvoiceModel(
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          formNumber: invoice.formNumber,
+          serialNumber: invoice.serialNumber,
+          sellerName: invoice.sellerName,
+          sellerTaxCode: invoice.sellerTaxCode,
+          sellerAddress: invoice.sellerAddress,
+          sellerPhone: invoice.sellerPhone,
+          sellerBankName: invoice.sellerBankName,
+          sellerBankAccount: invoice.sellerBankAccount,
+          buyerContactName: invoice.buyerContactName,
+          buyerName: invoice.buyerName,
+          buyerTaxCode: invoice.buyerTaxCode,
+          buyerAddress: invoice.buyerAddress,
+          buyerBankName: invoice.buyerBankName,
+          buyerBankAccount: invoice.buyerBankAccount,
+          paymentMethod: invoice.paymentMethod,
+          items: invoice.items,
+          subtotal: invoice.subtotal,
+          vatRate: invoice.vatRate,
+          vatAmount: invoice.vatAmount,
+          totalAmount: invoice.totalAmount,
+          ocrStatus: invoice.ocrStatus,
+          transactionStatus: invoice.transactionStatus,
+          ocrConfidence: invoice.ocrConfidence,
+          type: invoice.type,
+          issuedDate: invoice.issuedDate,
+          createdAt: invoice.createdAt,
+          updatedAt: DateTime.now(),
+          imagePath: invoice.imagePath,
+          status: InvoiceStatus.deleted, // Update status
+        );
 
-              final syncItem = SyncItem(
-                id: const Uuid().v4(),
-                collection: 'invoices',
-                action: SyncAction.update,
-                entityId: invoice.id,
-                payload: updatedModel.toJson(),
-              );
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          collection: 'invoices',
+          action: SyncAction.update,
+          entityId: invoice.id,
+          payload: updatedModel.toJson(),
+        );
 
-              await queueService.enqueue(syncItem);
-              _refreshInvoices();
+        await queueService.enqueue(syncItem);
 
-              try {
-                await invoiceRepo.softDelete(invoice.id).timeout(const Duration(seconds: 3));
-                await queueService.removeItem(syncItem.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã chuyển hóa đơn vào thùng rác'), backgroundColor: Colors.green),
-                  );
-                }
-              } on TimeoutException {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã lưu ngoại tuyến (Chuyển vào thùng rác)'), backgroundColor: Colors.orange),
-                  );
-                }
-              } catch (e) {
-                await queueService.markAsError(syncItem.id, e.toString());
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+        try {
+          await invoiceRepo.softDelete(invoice.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã chuyển hóa đơn vào thùng rác'), backgroundColor: Colors.green),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã lưu ngoại tuyến (Chuyển vào thùng rác)'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.markAsError(syncItem.id, e.toString());
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          _refreshInvoices();
+        }
+      },
     );
   }
 
   Future<void> _confirmRestore(InvoiceEntity invoice) async {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Khôi phục hóa đơn'),
-        content: Text('Bạn có muốn khôi phục hóa đơn ${invoice.invoiceNumber}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final queueService = ref.read(syncQueueServiceProvider);
-              final invoiceRepo = ref.read(invoiceRepositoryProvider);
-              
-              final updatedModel = InvoiceModel(
-                id: invoice.id,
-                invoiceNumber: invoice.invoiceNumber,
-                formNumber: invoice.formNumber,
-                serialNumber: invoice.serialNumber,
-                sellerName: invoice.sellerName,
-                sellerTaxCode: invoice.sellerTaxCode,
-                sellerAddress: invoice.sellerAddress,
-                sellerPhone: invoice.sellerPhone,
-                sellerBankName: invoice.sellerBankName,
-                sellerBankAccount: invoice.sellerBankAccount,
-                buyerContactName: invoice.buyerContactName,
-                buyerName: invoice.buyerName,
-                buyerTaxCode: invoice.buyerTaxCode,
-                buyerAddress: invoice.buyerAddress,
-                buyerBankName: invoice.buyerBankName,
-                buyerBankAccount: invoice.buyerBankAccount,
-                paymentMethod: invoice.paymentMethod,
-                items: invoice.items,
-                subtotal: invoice.subtotal,
-                vatRate: invoice.vatRate,
-                vatAmount: invoice.vatAmount,
-                totalAmount: invoice.totalAmount,
-                ocrStatus: invoice.ocrStatus,
-                transactionStatus: invoice.transactionStatus,
-                ocrConfidence: invoice.ocrConfidence,
-                type: invoice.type,
-                issuedDate: invoice.issuedDate,
-                createdAt: invoice.createdAt,
-                updatedAt: DateTime.now(),
-                imagePath: invoice.imagePath,
-                status: InvoiceStatus.active, // Khôi phục
-              );
+      title: 'Khôi phục hóa đơn',
+      message: 'Bạn có muốn khôi phục hóa đơn ${invoice.invoiceNumber}?',
+      icon: Icons.restore_rounded,
+      color: const Color(0xFF00D09E),
+      confirmText: 'Khôi phục',
+      onConfirm: () async {
+        final queueService = ref.read(syncQueueServiceProvider);
+        final invoiceRepo = ref.read(invoiceRepositoryProvider);
+        
+        final updatedModel = InvoiceModel(
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          formNumber: invoice.formNumber,
+          serialNumber: invoice.serialNumber,
+          sellerName: invoice.sellerName,
+          sellerTaxCode: invoice.sellerTaxCode,
+          sellerAddress: invoice.sellerAddress,
+          sellerPhone: invoice.sellerPhone,
+          sellerBankName: invoice.sellerBankName,
+          sellerBankAccount: invoice.sellerBankAccount,
+          buyerContactName: invoice.buyerContactName,
+          buyerName: invoice.buyerName,
+          buyerTaxCode: invoice.buyerTaxCode,
+          buyerAddress: invoice.buyerAddress,
+          buyerBankName: invoice.buyerBankName,
+          buyerBankAccount: invoice.buyerBankAccount,
+          paymentMethod: invoice.paymentMethod,
+          items: invoice.items,
+          subtotal: invoice.subtotal,
+          vatRate: invoice.vatRate,
+          vatAmount: invoice.vatAmount,
+          totalAmount: invoice.totalAmount,
+          ocrStatus: invoice.ocrStatus,
+          transactionStatus: invoice.transactionStatus,
+          ocrConfidence: invoice.ocrConfidence,
+          type: invoice.type,
+          issuedDate: invoice.issuedDate,
+          createdAt: invoice.createdAt,
+          updatedAt: DateTime.now(),
+          imagePath: invoice.imagePath,
+          status: InvoiceStatus.active, // Khôi phục
+        );
 
-              final syncItem = SyncItem(
-                id: const Uuid().v4(),
-                collection: 'invoices',
-                action: SyncAction.update,
-                entityId: invoice.id,
-                payload: updatedModel.toJson(),
-              );
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          collection: 'invoices',
+          action: SyncAction.update,
+          entityId: invoice.id,
+          payload: updatedModel.toJson(),
+        );
 
-              await queueService.enqueue(syncItem);
-              _refreshInvoices();
+        await queueService.enqueue(syncItem);
 
-              try {
-                await invoiceRepo.restore(invoice.id).timeout(const Duration(seconds: 3));
-                await queueService.removeItem(syncItem.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Khôi phục thành công!'), backgroundColor: Colors.green),
-                  );
-                }
-              } on TimeoutException {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã lưu ngoại tuyến (Khôi phục)'), backgroundColor: Colors.orange),
-                  );
-                }
-              } catch (e) {
-                await queueService.markAsError(syncItem.id, e.toString());
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Khôi phục', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+        try {
+          await invoiceRepo.restore(invoice.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Khôi phục thành công!'), backgroundColor: Colors.green),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã lưu ngoại tuyến (Khôi phục)'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.markAsError(syncItem.id, e.toString());
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          _refreshInvoices();
+        }
+      },
     );
   }
 
   Future<void> _confirmHardDelete(InvoiceEntity invoice) async {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Xóa vĩnh viễn', style: TextStyle(color: Colors.red)),
-        content: Text('Bạn có chắc chắn muốn xóa vĩnh viễn hóa đơn ${invoice.invoiceNumber} không? Hành động này không thể hoàn tác!'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final queueService = ref.read(syncQueueServiceProvider);
-              final invoiceRepo = ref.read(invoiceRepositoryProvider);
+      title: 'Xóa vĩnh viễn',
+      message: 'Hành động này không thể hoàn tác! Bạn có chắc chắn muốn xóa vĩnh viễn hóa đơn ${invoice.invoiceNumber} không?',
+      icon: Icons.delete_forever_rounded,
+      color: Colors.red,
+      confirmText: 'Xóa vĩnh viễn',
+      onConfirm: () async {
+        final queueService = ref.read(syncQueueServiceProvider);
+        final invoiceRepo = ref.read(invoiceRepositoryProvider);
 
-              final syncItem = SyncItem(
-                id: const Uuid().v4(),
-                collection: 'invoices',
-                action: SyncAction.delete,
-                entityId: invoice.id,
-                payload: {},
-              );
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          collection: 'invoices',
+          action: SyncAction.delete,
+          entityId: invoice.id,
+          payload: {},
+        );
 
-              await queueService.enqueue(syncItem);
-              _refreshInvoices();
+        await queueService.enqueue(syncItem);
 
-              try {
-                await invoiceRepo.delete(invoice.id).timeout(const Duration(seconds: 3));
-                await queueService.removeItem(syncItem.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã xóa vĩnh viễn hóa đơn'), backgroundColor: Colors.red),
-                  );
-                }
-              } on TimeoutException {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã lưu ngoại tuyến (Xóa vĩnh viễn)'), backgroundColor: Colors.orange),
-                  );
-                }
-              } catch (e) {
-                await queueService.markAsError(syncItem.id, e.toString());
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa vĩnh viễn', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+        try {
+          await invoiceRepo.delete(invoice.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa vĩnh viễn hóa đơn'), backgroundColor: Colors.red),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã lưu ngoại tuyến (Xóa vĩnh viễn)'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.markAsError(syncItem.id, e.toString());
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          _refreshInvoices();
+        }
+      },
     );
   }
 
@@ -537,6 +513,21 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               ),
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                tooltip: 'Xóa toàn bộ data',
+                onPressed: () async {
+                  final db = FirebaseFirestore.instance;
+                  final invs = await db.collection('invoices').get();
+                  for(var doc in invs.docs) { await doc.reference.delete(); }
+                  final trans = await db.collection('transactions').get();
+                  for(var doc in trans.docs) { await doc.reference.delete(); }
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa toàn bộ data!')));
+                  _refreshInvoices();
+                },
+              )
+            ],
           ),
           body: RefreshIndicator(
             onRefresh: _refreshInvoices,
@@ -874,6 +865,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+
 
               // Invoice List Area
               list.isEmpty

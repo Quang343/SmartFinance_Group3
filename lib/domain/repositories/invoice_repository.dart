@@ -2,6 +2,7 @@ import '../entities/invoice_entity.dart';
 
 abstract class InvoiceRepository {
   Future<List<InvoiceEntity>> getAll();
+  Stream<List<InvoiceEntity>> watchAll();
   Future<List<InvoiceEntity>> getByOcrStatus(OcrStatus status);
   Future<InvoiceEntity?> getById(String id);
   Future<void> create(InvoiceEntity invoice);
