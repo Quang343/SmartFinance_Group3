@@ -32,7 +32,19 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     if (_uid.isEmpty) return [];
     Query query = _collection.where('company', isEqualTo: _company);
     final snapshot = await _getWithCacheFallback(query);
-    return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    return snapshot.docs
+        .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<InvoiceEntity>> getDeletedInvoices() async {
+    if (_uid.isEmpty) return [];
+    Query query = _collection.where('company', isEqualTo: _company);
+    final snapshot = await _getWithCacheFallback(query);
+    return snapshot.docs
+        .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+        .where((invoice) => invoice.status == InvoiceStatus.deleted)
+        .toList();
   }
 
   @override
@@ -42,7 +54,10 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
         .where('company', isEqualTo: _company)
         .where('ocrStatus', isEqualTo: status.name);
     final snapshot = await _getWithCacheFallback(query);
-    return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    return snapshot.docs
+        .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+        .where((invoice) => invoice.status == InvoiceStatus.active)
+        .toList();
   }
 
   @override
@@ -151,6 +166,24 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<void> delete(String id) async {
     if (_uid.isEmpty) return;
     await _collection.doc(id).delete();
+  }
+
+  @override
+  Future<void> softDelete(String id) async {
+    if (_uid.isEmpty) return;
+    await _collection.doc(id).update({
+      'status': InvoiceStatus.deleted.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  @override
+  Future<void> restore(String id) async {
+    if (_uid.isEmpty) return;
+    await _collection.doc(id).update({
+      'status': InvoiceStatus.active.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
   }
 
   @override

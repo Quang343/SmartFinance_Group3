@@ -4,7 +4,9 @@ enum OcrStatus { notStarted, imageSelected, scanning, extracted, failed }
 
 enum InvoiceType { incoming, outgoing }
 
-enum InvoiceTransactionStatus { notCreated, created }
+enum InvoiceStatus { active, deleted }
+
+enum InvoiceTransactionStatus { notCreated, draftCreated, confirmedCreated }
 
 class InvoiceEntity {
   final String id;
@@ -46,6 +48,7 @@ class InvoiceEntity {
   final DateTime createdAt;
   final DateTime updatedAt;
   final InvoiceType type;
+  final InvoiceStatus status;
 
   const InvoiceEntity({
     required this.id,
@@ -80,6 +83,6 @@ class InvoiceEntity {
     required this.type,
     this.imagePath,
     this.ocrConfidence,
+    this.status = InvoiceStatus.active,
   });
 }
-

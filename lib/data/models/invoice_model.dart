@@ -35,6 +35,7 @@ class InvoiceModel extends InvoiceEntity {
     required super.type,
     super.imagePath,
     super.ocrConfidence,
+    super.status = InvoiceStatus.active,
   });
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -70,10 +71,14 @@ class InvoiceModel extends InvoiceEntity {
         orElse: () => OcrStatus.notStarted,
       ),
       ocrConfidence: (json['ocrConfidence'] as num?)?.toDouble(),
-      transactionStatus: InvoiceTransactionStatus.values.firstWhere(
-        (e) => e.name == json['transactionStatus'],
-        orElse: () => InvoiceTransactionStatus.notCreated,
-      ),
+      transactionStatus: () {
+        final ts = json['transactionStatus'] as String?;
+        if (ts == 'created') return InvoiceTransactionStatus.confirmedCreated;
+        return InvoiceTransactionStatus.values.firstWhere(
+          (e) => e.name == ts,
+          orElse: () => InvoiceTransactionStatus.notCreated,
+        );
+      }(),
       issuedDate: json['issuedDate'] != null
           ? DateTime.parse(json['issuedDate'] as String)
           : DateTime.now(),
@@ -88,6 +93,10 @@ class InvoiceModel extends InvoiceEntity {
       type: InvoiceType.values.firstWhere(
         (e) => e.name == json['type'],
         orElse: () => InvoiceType.incoming,
+      ),
+      status: InvoiceStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+        orElse: () => InvoiceStatus.active,
       ),
     );
   }
@@ -126,6 +135,7 @@ class InvoiceModel extends InvoiceEntity {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'type': type.name,
+      'status': status.name,
     };
   }
 }

@@ -12,6 +12,7 @@ import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/transactions/presentation/transaction_list_screen.dart';
 import '../features/transactions/presentation/transaction_form_screen.dart';
+import '../features/invoices/presentation/deleted_invoice_list_screen.dart';
 import 'package:smart_finance/features/invoices/presentation/screens/invoice_capture_screen.dart';
 import 'package:smart_finance/features/invoices/presentation/ocr_verify_screen.dart';
 import 'dart:io';
@@ -142,6 +143,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: '/invoices/incoming/edit/:id',
+            name: 'incomingInvoiceEdit',
+            builder: (context, state) => InvoiceCreateScreen(
+              invoiceId: state.pathParameters['id'],
+              invoiceType: InvoiceType.incoming,
+            ),
+          ),
+          GoRoute(
+            path: '/invoices/deleted',
+            builder: (context, state) => const DeletedInvoiceListScreen(),
+          ),
+          GoRoute(
             path: '/invoices/outgoing',
             name: RouteNames.outgoingInvoices,
             builder: (context, state) => const InvoiceListScreen(type: 'outgoing'),
@@ -167,6 +180,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: RouteNames.invoicePreview,
             builder: (context, state) => InvoicePreviewScreen(
               invoiceId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: '/invoices/outgoing/edit/:id',
+            name: 'outgoingInvoiceEdit',
+            builder: (context, state) => InvoiceCreateScreen(
+              invoiceId: state.pathParameters['id'],
+              invoiceType: InvoiceType.outgoing,
             ),
           ),
           GoRoute(
