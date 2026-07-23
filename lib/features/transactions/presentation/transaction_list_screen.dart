@@ -127,7 +127,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     );
   }
 
-  Widget _buildStatusChip(String value, String label, bool isDark) {
+  Widget _buildStatusChip(String value, String label, bool isDark, int count) {
     final isSelected = _selectedStatus == value;
     return InkWell(
       onTap: () {
@@ -145,7 +145,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
-          label,
+          '$label ($count)',
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
@@ -377,8 +377,14 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
           final catMap = {for (var c in allCats) c.id: c};
 
+          // Pre-filter by time period to calculate accurate status counts
+          var timeFilteredList = allTxs.where((tx) => _isWithinPeriod(tx.transactionDate)).toList();
+          final allCount = timeFilteredList.where((tx) => tx.status != TransactionStatus.deleted).length;
+          final confirmedCount = timeFilteredList.where((tx) => tx.status == TransactionStatus.confirmed).length;
+          final draftCount = timeFilteredList.where((tx) => tx.status == TransactionStatus.draft).length;
+
           // Filter by status and handle 'deleted' explicitly
-          var list = allTxs;
+          var list = timeFilteredList;
           if (_selectedStatus == 'deleted') {
             list = list
                 .where((tx) => tx.status == TransactionStatus.deleted)
@@ -391,11 +397,6 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           }
 
           // Note: No need to filter by role here because the Provider already filtered it!
-
-          // Filter by time period
-          list = list
-              .where((tx) => _isWithinPeriod(tx.transactionDate))
-              .toList();
 
           // Filter by status
           if (_selectedStatus == 'confirmed') {
@@ -968,15 +969,16 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            _buildStatusChip('all', 'Tất cả', isDark),
+                            _buildStatusChip('all', 'Tất cả', isDark, allCount),
                             const SizedBox(width: 8),
                             _buildStatusChip(
                               'confirmed',
                               'Đã xác nhận',
                               isDark,
+                              confirmedCount,
                             ),
                             const SizedBox(width: 8),
-                            _buildStatusChip('draft', 'Bản nháp', isDark),
+                            _buildStatusChip('draft', 'Bản nháp', isDark, draftCount),
                           ],
                         ),
                       ),
@@ -1018,6 +1020,27 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               );
                             }),
                           ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Note about editing
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 12, color: primaryColor.withOpacity(0.8)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Chỉ có thể sửa hoặc xóa đối với giao dịch "Bản nháp"',
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),

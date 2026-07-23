@@ -859,11 +859,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
           );
-          if (Navigator.canPop(context)) {
-            context.pop();
-          } else {
-            context.go('/transactions');
-          }
+          context.go('/transactions');
         }
       },
     );
@@ -886,11 +882,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
           );
-          if (Navigator.canPop(context)) {
-            context.pop();
-          } else {
-            context.go('/transactions');
-          }
+          context.go('/transactions');
         }
       },
     );
@@ -1256,11 +1248,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         leading: Center(
           child: ScaleOnTap(
             onTap: () {
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              } else {
-                context.go('/transactions');
-              }
+              context.go('/transactions');
             },
             child: Container(
               padding: const EdgeInsets.all(8),
