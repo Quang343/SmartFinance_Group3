@@ -55,6 +55,12 @@ class SyncWorker {
   Future<void> _syncTransaction(SyncItem item) async {
     try {
       final repo = _ref.read(transactionRepositoryProvider);
+      if (item.action == SyncAction.delete) {
+        await repo.hardDelete(item.entityId);
+        await _queueService.removeItem(item.id);
+        return;
+      }
+
       final model = TransactionModel.fromJson(item.payload);
       final entity = TransactionEntity(
         id: model.id,
@@ -74,9 +80,6 @@ class SyncWorker {
       );
 
       if (item.action == SyncAction.create) {
-        // Thực thi create thực sự qua DB (để check trùng lặp Server-side)
-        // Lưu ý: repository cần cung cấp method `createOnlineOnly` hoặc xử lý validation
-        // Nhưng hiện tại `repo.create` đã có sãn logic check Uniqueness.
         await repo.create(entity);
       } else if (item.action == SyncAction.update) {
         await repo.update(entity);

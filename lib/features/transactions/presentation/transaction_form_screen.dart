@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -843,23 +844,61 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       confirmText: 'Xóa giao dịch',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.softDelete(widget.transactionId!);
+        final queueService = ref.read(syncQueueServiceProvider);
 
+        final payload = {
+          'id': widget.transactionId,
+          'amount': int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0,
+          'type': _type.name,
+          'categoryId': _categoryId,
+          'transactionDate': _transactionDate.toIso8601String(),
+          'status': TransactionStatus.deleted.name,
+          'title': _titleController.text.trim(),
+          'note': _noteController.text.trim(),
+          'invoiceId': _invoiceId,
+          'createdAt': _createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': const [],
+        };
 
-        
-        // Refresh list
-        ref.invalidate(allTransactionsProvider);
-        ref.invalidate(incomeTransactionsProvider);
-        ref.invalidate(expenseTransactionsProvider);
-        if (_invoiceId != null) {
-          ref.invalidate(allInvoicesProvider);
-        }
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
-          );
-          context.go('/transactions');
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: widget.transactionId!,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.softDelete(widget.transactionId!).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          ref.invalidate(allTransactionsProvider);
+          ref.invalidate(incomeTransactionsProvider);
+          ref.invalidate(expenseTransactionsProvider);
+          if (_invoiceId != null) {
+            ref.invalidate(allInvoicesProvider);
+          }
+          if (mounted) context.go('/transactions');
         }
       },
     );
@@ -875,14 +914,61 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       confirmText: 'Khôi phục',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.restore(widget.transactionId!);
+        final queueService = ref.read(syncQueueServiceProvider);
 
+        final payload = {
+          'id': widget.transactionId,
+          'amount': int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0,
+          'type': _type.name,
+          'categoryId': _categoryId,
+          'transactionDate': _transactionDate.toIso8601String(),
+          'status': TransactionStatus.draft.name,
+          'title': _titleController.text.trim(),
+          'note': _noteController.text.trim(),
+          'invoiceId': _invoiceId,
+          'createdAt': _createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': const [],
+        };
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
-          );
-          context.go('/transactions');
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: widget.transactionId!,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.restore(widget.transactionId!).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã khôi phục ngoại tuyến. Sẽ đồng bộ khi có mạng.'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          ref.invalidate(allTransactionsProvider);
+          ref.invalidate(incomeTransactionsProvider);
+          ref.invalidate(expenseTransactionsProvider);
+          if (_invoiceId != null) {
+            ref.invalidate(allInvoicesProvider);
+          }
+          if (mounted) context.go('/transactions');
         }
       },
     );

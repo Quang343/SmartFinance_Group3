@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
@@ -65,14 +67,60 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       confirmText: 'Xóa giao dịch',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.softDelete(tx.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã xóa giao dịch thành công!'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final payload = {
+          'id': tx.id,
+          'amount': tx.amount,
+          'type': tx.type.name,
+          'categoryId': tx.categoryId,
+          'transactionDate': tx.transactionDate.toIso8601String(),
+          'status': TransactionStatus.deleted.name,
+          'title': tx.title,
+          'note': tx.note,
+          'invoiceId': tx.invoiceId,
+          'createdAt': tx.createdAt.toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': tx.tags,
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.softDelete(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã chuyển giao dịch vào thùng rác!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
           _refreshData();
         }
       },
@@ -89,14 +137,60 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       confirmText: 'Khôi phục',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.restore(tx.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final payload = {
+          'id': tx.id,
+          'amount': tx.amount,
+          'type': tx.type.name,
+          'categoryId': tx.categoryId,
+          'transactionDate': tx.transactionDate.toIso8601String(),
+          'status': TransactionStatus.draft.name,
+          'title': tx.title,
+          'note': tx.note,
+          'invoiceId': tx.invoiceId,
+          'createdAt': tx.createdAt.toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': tx.tags,
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.restore(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã khôi phục ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
           _refreshData();
         }
       },
@@ -113,14 +207,45 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       confirmText: 'Xóa vĩnh viễn',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.hardDelete(tx.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã xóa vĩnh viễn giao dịch'),
-              backgroundColor: Colors.red,
-            ),
-          );
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.delete,
+          payload: {},
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.hardDelete(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa vĩnh viễn giao dịch'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
           _refreshData();
         }
       },
