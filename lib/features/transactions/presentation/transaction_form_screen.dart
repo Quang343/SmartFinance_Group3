@@ -189,6 +189,11 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
+  bool _isWebOrNetworkPath(String? path) {
+    if (path == null || path.isEmpty) return false;
+    return kIsWeb || path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:');
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(source: source);
@@ -215,11 +220,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: kIsWeb,
       );
-      if (result != null && result.files.single.path != null) {
-        setState(() {
-          _selectedImagePath = result.files.single.path;
-        });
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        if (kIsWeb && file.bytes != null) {
+          final mime = (file.extension?.toLowerCase() == 'pdf') ? 'application/pdf' : 'image/png';
+          final dataUrl = Uri.dataFromBytes(file.bytes!, mimeType: mime).toString();
+          setState(() {
+            _selectedImagePath = dataUrl;
+          });
+        } else if (file.path != null) {
+          setState(() {
+            _selectedImagePath = file.path;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -276,13 +291,14 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final int amount = int.parse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), ''));
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !kIsWeb && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
+      if (_selectedImagePath != null && !kIsWeb && !_isWebOrNetworkPath(_selectedImagePath) && !File(_selectedImagePath!).existsSync()) {
         _selectedImagePath = null;
       }
 
-      // Upload image if it is a local file
+      // Upload image if it is a local file or web blob/data
       String? finalImagePath = _selectedImagePath;
-      if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
+      final bool isRemoteUrl = _selectedImagePath != null && (_selectedImagePath!.startsWith('http://') || _selectedImagePath!.startsWith('https://'));
+      if (_selectedImagePath != null && !isRemoteUrl) {
         try {
           if (kIsWeb) {
             final response = await http.get(Uri.parse(_selectedImagePath!));
@@ -1372,7 +1388,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         ),
                       ),
                     ),
-                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || kIsWeb || File(_invoiceImagePath!).existsSync())) ...[
+                  ] else if (_invoiceImagePath != null && (_isWebOrNetworkPath(_invoiceImagePath) || (!kIsWeb && File(_invoiceImagePath!).existsSync()))) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1399,7 +1415,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     const SizedBox(height: 16),
                     GestureDetector(
                       onTap: () {
-                        final isNet = _invoiceImagePath!.startsWith('http');
+                        final isNet = _isWebOrNetworkPath(_invoiceImagePath);
                         _showFullScreenImage(_invoiceImagePath!, isNetwork: isNet);
                       },
                       child: Container(
@@ -1415,7 +1431,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              _invoiceImagePath!.startsWith('http')
+                              _isWebOrNetworkPath(_invoiceImagePath)
                                   ? Image.network(
                                       _invoiceImagePath!,
                                       fit: BoxFit.contain,
@@ -1466,14 +1482,14 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   ],
                 ],
               )
-            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || kIsWeb || File(_selectedImagePath!).existsSync()))
+            else if (_selectedImagePath != null && (_isWebOrNetworkPath(_selectedImagePath) || (!kIsWeb && File(_selectedImagePath!).existsSync())))
               Stack(
                 alignment: Alignment.topRight,
                 children: [
                   GestureDetector(
                     onTap: () {
                       if (!_selectedImagePath!.toLowerCase().endsWith('.pdf')) {
-                        final isNet = _selectedImagePath!.startsWith('http');
+                        final isNet = _isWebOrNetworkPath(_selectedImagePath);
                         _showFullScreenImage(_selectedImagePath!, isNetwork: isNet);
                       }
                     },
@@ -1496,7 +1512,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                                     const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
                                     const SizedBox(height: 12),
                                     Text(
-                                      _selectedImagePath!.split(Platform.pathSeparator).last,
+                                      _selectedImagePath!.split(RegExp(r'[/\\]')).last,
                                       style: TextStyle(
                                         color: isDark ? Colors.white70 : const Color(0xFF093021),
                                         fontSize: 14,
@@ -1509,7 +1525,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                             : Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  _selectedImagePath!.startsWith('http')
+                                  _isWebOrNetworkPath(_selectedImagePath)
                                       ? Image.network(
                                           _selectedImagePath!,
                                           fit: BoxFit.contain,
@@ -1799,7 +1815,7 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
             minScale: 1.0,
             maxScale: 4.0,
             child: Center(
-              child: widget.isNetwork
+              child: (kIsWeb || widget.isNetwork || widget.path.startsWith('http://') || widget.path.startsWith('https://') || widget.path.startsWith('blob:') || widget.path.startsWith('data:'))
                   ? Image.network(widget.path, fit: BoxFit.contain)
                   : Image.file(File(widget.path), fit: BoxFit.contain),
             ),

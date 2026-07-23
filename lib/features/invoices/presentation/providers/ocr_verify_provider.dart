@@ -71,7 +71,7 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
       
       // Call scanInvoiceV2 (isMock: true for Mock mode with 1.8s delay and exact Hitachi sample JSON)
       final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: !isRealApi);
-      DraftInvoice draft = OcrMapper.toDraftV2(dtoV2, image);
+      draft = OcrMapper.toDraftV2(dtoV2, image);
 
       // Fill Buyer / Client information with current accountant & company data
       final String buyerPerson = (_currentUser?.fullName.isNotEmpty == true)
