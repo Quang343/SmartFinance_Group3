@@ -69,7 +69,33 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
         draft = OcrMapper.toDraftV2(dtoV2, image);
       }
       
-      // No auto-fill fallback, use strict AI result
+      // Call scanInvoiceV2 (isMock: true for Mock mode with 1.8s delay and exact Hitachi sample JSON)
+      final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: !isRealApi);
+      DraftInvoice draft = OcrMapper.toDraftV2(dtoV2, image);
+
+      // Fill Buyer / Client information with current accountant & company data
+      final String buyerPerson = (_currentUser?.fullName.isNotEmpty == true)
+          ? _currentUser!.fullName
+          : (draft.buyerContactName ?? '');
+      
+      final String clientName = (_currentUser?.company.isNotEmpty == true)
+          ? _currentUser!.company
+          : (draft.buyerName ?? '');
+          
+      final String clientTaxId = (_currentUser?.taxCode.isNotEmpty == true)
+          ? _currentUser!.taxCode
+          : (draft.buyerTaxCode ?? '');
+          
+      final String clientAddress = (_currentUser?.address.isNotEmpty == true)
+          ? _currentUser!.address
+          : (draft.buyerAddress ?? '');
+
+      draft = draft.copyWith(
+        buyerContactName: buyerPerson,
+        buyerName: clientName,
+        buyerTaxCode: clientTaxId,
+        buyerAddress: clientAddress,
+      );
 
       _applyDraftState(draft, OcrStatus.editing);
     } catch (e) {
@@ -116,7 +142,16 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
   }
 
   Future<void> saveInvoice() async {
-    if (!state.validation.isValid || state.draft == null) return;
+    if (state.draft == null) return;
+    
+    if (!state.validation.isValid) {
+      final missingText = state.validation.missingFields.join(', ');
+      state = state.copyWith(
+        status: OcrStatus.error,
+        errorMessage: 'Vui lòng điền đầy đủ các thông tin bắt buộc: $missingText',
+      );
+      return;
+    }
     
     state = state.copyWith(status: OcrStatus.saving, clearErrorMessage: true);
     try {

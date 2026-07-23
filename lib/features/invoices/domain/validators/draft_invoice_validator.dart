@@ -30,6 +30,9 @@ class DraftInvoiceValidator {
     if (draft.sellerName.trim().isEmpty) {
       missingFields.add('Tên người bán');
     }
+    if (draft.taxCode.trim().isEmpty) {
+      missingFields.add('MST người bán');
+    }
     if (draft.buyerName?.trim().isEmpty ?? true) {
       missingFields.add('Tên người mua');
     }

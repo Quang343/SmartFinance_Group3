@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../../../core/providers/auth_provider.dart';
 import '../../providers/ocr_verify_provider.dart';
 
 class HeaderSection extends ConsumerStatefulWidget {
@@ -69,20 +68,20 @@ class _HeaderSectionState extends ConsumerState<HeaderSection> {
     if (currentDraft == null) return;
     
     final updated = currentDraft.copyWith(
-      formNumber: _formNumberController.text.trim().isNotEmpty ? _formNumberController.text.trim() : null,
-      serialNumber: _serialNumberController.text.trim().isNotEmpty ? _serialNumberController.text.trim() : null,
-      invoiceNumber: _invoiceNumberController.text.trim().isNotEmpty ? _invoiceNumberController.text.trim() : null,
+      formNumber: _formNumberController.text.trim(),
+      serialNumber: _serialNumberController.text.trim(),
+      invoiceNumber: _invoiceNumberController.text.trim(),
       invoiceDate: _invoiceDate,
-      sellerName: _sellerController.text.trim().isNotEmpty ? _sellerController.text.trim() : null,
-      taxCode: _taxCodeController.text.trim().isNotEmpty ? _taxCodeController.text.trim() : null,
-      sellerAddress: _sellerAddressController.text.trim().isNotEmpty ? _sellerAddressController.text.trim() : null,
-      sellerPhone: _sellerPhoneController.text.trim().isNotEmpty ? _sellerPhoneController.text.trim() : null,
-      sellerBankName: _sellerBankNameController.text.trim().isNotEmpty ? _sellerBankNameController.text.trim() : null,
-      sellerBankAccount: _sellerBankAccountController.text.trim().isNotEmpty ? _sellerBankAccountController.text.trim() : null,
-      buyerContactName: _buyerContactNameController.text.trim().isNotEmpty ? _buyerContactNameController.text.trim() : null,
-      buyerName: _buyerNameController.text.trim().isNotEmpty ? _buyerNameController.text.trim() : null,
-      buyerTaxCode: _buyerTaxCodeController.text.trim().isNotEmpty ? _buyerTaxCodeController.text.trim() : null,
-      buyerAddress: _buyerAddressController.text.trim().isNotEmpty ? _buyerAddressController.text.trim() : null,
+      sellerName: _sellerController.text.trim(),
+      taxCode: _taxCodeController.text.trim(),
+      sellerAddress: _sellerAddressController.text.trim(),
+      sellerPhone: _sellerPhoneController.text.trim(),
+      sellerBankName: _sellerBankNameController.text.trim(),
+      sellerBankAccount: _sellerBankAccountController.text.trim(),
+      buyerContactName: _buyerContactNameController.text.trim(),
+      buyerName: _buyerNameController.text.trim(),
+      buyerTaxCode: _buyerTaxCodeController.text.trim(),
+      buyerAddress: _buyerAddressController.text.trim(),
     );
     
     if (updated != currentDraft) {
@@ -270,7 +269,9 @@ class _HeaderSectionState extends ConsumerState<HeaderSection> {
               child: TextFormField(
                 controller: _taxCodeController,
                 style: textStyle,
-                decoration: _buildInputDeco('Mã số thuế', Icons.credit_card_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
+                decoration: _buildInputDeco('Mã số thuế', Icons.credit_card_outlined, isDark, primaryColor, inputFillColor, inputBorderColor).copyWith(
+                  errorText: getError('MST người bán'),
+                ),
               ),
             ),
             const SizedBox(width: 8),
