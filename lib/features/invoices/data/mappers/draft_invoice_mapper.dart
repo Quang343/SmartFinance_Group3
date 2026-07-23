@@ -15,11 +15,18 @@ class DraftInvoiceMapper {
     // Calculate vatAmount from subtotal and vatRate
     final int vatAmount = (draft.subtotal * draft.vatRate / 100).round();
     
-    final String generatedInvoiceNumber = 'OCR-INV-${now.year}-${Random().nextInt(9000) + 1000}';
+    final String sellerTax = draft.taxCode.trim();
+    final String formNum = draft.formNumber?.trim() ?? '';
+    final String serialNum = draft.serialNumber?.trim() ?? '';
+    final String seqNum = draft.invoiceNumber.trim();
+    
+    final String generatedInvoiceNumber = 'OCR-INV-$sellerTax-$formNum-$serialNum-$seqNum';
 
     return InvoiceEntity(
       id: id,
-      invoiceNumber: generatedInvoiceNumber, // Generated as fallback
+      invoiceNumber: generatedInvoiceNumber,
+      formNumber: formNum.isNotEmpty ? formNum : null,
+      serialNumber: serialNum.isNotEmpty ? serialNum : null,
       sellerName: draft.sellerName,
       sellerTaxCode: draft.taxCode,
       sellerAddress: draft.sellerAddress.isNotEmpty ? draft.sellerAddress : null,

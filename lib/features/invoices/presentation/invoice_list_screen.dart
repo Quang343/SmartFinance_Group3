@@ -10,6 +10,7 @@ import '../../../domain/entities/invoice_entity.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../providers/invoice_provider.dart';
 
 Color _parseColor(String? hexString) {
   if (hexString == null || hexString.isEmpty) return Colors.grey;
@@ -37,25 +38,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   DateTimeRange? _customDateRange;
   InvoiceTransactionStatus? _filterTransactionStatus; // null = all, notCreated, created
-  late Future<List<dynamic>> _dataFuture;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _dataFuture = Future.wait([
-      ref.read(invoiceRepositoryProvider).getAll(),
-      ref.read(transactionRepositoryProvider).getAll(),
-    ]);
-  }
 
   Future<void> _refreshInvoices() async {
-    setState(() {
-      _dataFuture = Future.wait([
-        ref.read(invoiceRepositoryProvider).getAll(),
-        ref.read(transactionRepositoryProvider).getAll(),
-      ]);
-    });
-    await _dataFuture;
+    ref.invalidate(allInvoicesProvider);
   }
 
   @override
@@ -92,49 +77,44 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       );
     }
 
-    return FutureBuilder<List<dynamic>>(
-      future: _dataFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-          return Scaffold(
-            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SpinKitWaveSpinner(
-                    color: const Color(0xFF00D09E),
-                    size: 100,
-                    trackColor: const Color(0xFF00D09E).withValues(alpha: 0.2),
-                    waveColor: const Color(0xFF00D09E).withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Đang tải dữ liệu...',
-                    style: TextStyle(
-                      color: isDark ? Colors.white70 : Colors.black54,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        if (snapshot.hasError) {
-          return Scaffold(
-            backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
-            body: Center(
-              child: Text(
-                'Lỗi: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-          );
-        }
+    final invoicesAsync = ref.watch(allInvoicesProvider);
 
-        final invoices = (snapshot.data?[0] as List<InvoiceEntity>?) ?? [];
+    return invoicesAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SpinKitWaveSpinner(
+                color: const Color(0xFF00D09E),
+                size: 100,
+                trackColor: const Color(0xFF00D09E).withValues(alpha: 0.2),
+                waveColor: const Color(0xFF00D09E).withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Đang tải dữ liệu...',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      error: (error, stack) => Scaffold(
+        backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+        body: Center(
+          child: Text(
+            'Lỗi: $error',
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      ),
+      data: (invoices) {
         final categories = categoriesAsync.value ?? [];
 
         var list = invoices;
@@ -582,7 +562,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Số HĐ: ${inv.invoiceNumber}',
+                                                inv.invoiceNumber,
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: isDark ? Colors.white : const Color(0xFF093021),
