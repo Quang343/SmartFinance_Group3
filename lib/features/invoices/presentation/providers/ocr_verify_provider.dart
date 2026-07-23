@@ -64,9 +64,9 @@ class OcrVerifyNotifier extends StateNotifier<OcrVerifyState> {
         final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: false);
         draft = OcrMapper.toDraftV2(dtoV2, image);
       } else {
-        // Dùng OCR Mock gốc
-        final dto = await _apiService.scanInvoice(image);
-        draft = OcrMapper.toDraft(dto, image);
+        // Dùng OCR Mock V2 (đầy đủ các trường)
+        final dtoV2 = await _apiService.scanInvoiceV2(image, isMock: true);
+        draft = OcrMapper.toDraftV2(dtoV2, image);
       }
       
       // No auto-fill fallback, use strict AI result
