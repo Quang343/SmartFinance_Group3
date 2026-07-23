@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/transaction_providers.dart';
@@ -407,52 +408,19 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E382B)
-                      : const Color(0xFFE8F6F1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF00D09E).withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF00D09E),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      currentRole == UserRole.expenseAccountant
-                          ? 'Kế toán Chi phí'
-                          : currentRole == UserRole.revenueAccountant
-                          ? 'Kế toán Doanh thu'
-                          : 'Quản lý',
-                      style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF00D09E),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.red),
+            tooltip: 'Xóa toàn bộ data',
+            onPressed: () async {
+              final db = FirebaseFirestore.instance;
+              final invs = await db.collection('invoices').get();
+              for(var doc in invs.docs) { await doc.reference.delete(); }
+              final trans = await db.collection('transactions').get();
+              for(var doc in trans.docs) { await doc.reference.delete(); }
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa toàn bộ data!')));
+              _refreshData();
+            },
+          )
         ],
       ),
       body: Builder(
