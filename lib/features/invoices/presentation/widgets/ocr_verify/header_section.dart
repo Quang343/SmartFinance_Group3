@@ -210,7 +210,9 @@ class _HeaderSectionState extends ConsumerState<HeaderSection> {
               child: TextFormField(
                 controller: _formNumberController,
                 style: textStyle,
-                decoration: _buildInputDeco('Mẫu số', null, isDark, primaryColor, inputFillColor, inputBorderColor),
+                decoration: _buildInputDeco('Mẫu số', null, isDark, primaryColor, inputFillColor, inputBorderColor).copyWith(
+                  errorText: getError('Mẫu số'),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -219,7 +221,9 @@ class _HeaderSectionState extends ConsumerState<HeaderSection> {
               child: TextFormField(
                 controller: _serialNumberController,
                 style: textStyle,
-                decoration: _buildInputDeco('Ký hiệu', null, isDark, primaryColor, inputFillColor, inputBorderColor),
+                decoration: _buildInputDeco('Ký hiệu', null, isDark, primaryColor, inputFillColor, inputBorderColor).copyWith(
+                  errorText: getError('Ký hiệu'),
+                ),
               ),
             ),
             const SizedBox(width: 8),

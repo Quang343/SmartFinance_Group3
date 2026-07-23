@@ -8,4 +8,6 @@ abstract class InvoiceRepository {
   Future<void> update(InvoiceEntity invoice);
   Future<void> delete(String id);
   Future<void> updateTransactionStatus(String id, InvoiceTransactionStatus status);
+  Future<int> getNextSequentialId(InvoiceType type);
+  Future<bool> checkInvoiceExists(String sellerTaxCode, String formNumber, String serialNumber, String invoiceNumber);
 }

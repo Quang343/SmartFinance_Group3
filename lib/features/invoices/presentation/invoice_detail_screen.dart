@@ -375,6 +375,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                           ),
                           const SizedBox(height: 20),
 
+                          // Invoice Format Info Section
+                          _buildSection(
+                            title: 'Thông tin hóa đơn',
+                            isDark: isDark,
+                            children: [
+                              _DetailRow(label: 'Mẫu số', value: invoice.formNumber ?? '-'),
+                              _DetailRow(label: 'Ký hiệu', value: invoice.serialNumber ?? '-'),
+                              _DetailRow(label: 'Số hóa đơn', value: invoice.invoiceNumber.split('-').last.replaceAll(RegExp(r'[^0-9]'), '').padLeft(7, '0')),
+                            ],
+                          ),
+                            
                           // Detail Fields Card
                           _buildSection(
                             title: 'Thông tin đơn vị bán',

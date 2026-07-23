@@ -314,9 +314,9 @@ class InvoicePreviewScreen extends ConsumerWidget {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('Mẫu số: 01GTKT0/001', style: pw.TextStyle(font: ttf, fontSize: 10)),
-                      pw.Text('Ký hiệu: HM/26E', style: pw.TextStyle(font: ttf, fontSize: 10)),
-                      pw.Text('Số: ${invoice.invoiceNumber.replaceAll(RegExp(r'[^0-9]'), '').padLeft(7, '0')}', style: pw.TextStyle(font: ttfBold, fontSize: 10)),
+                      pw.Text('Mẫu số: ${invoice.formNumber ?? '01GTKT0/001'}', style: pw.TextStyle(font: ttf, fontSize: 10)),
+                      pw.Text('Ký hiệu: ${invoice.serialNumber ?? 'AA/${DateTime.now().year.toString().substring(2)}E'}', style: pw.TextStyle(font: ttf, fontSize: 10)),
+                      pw.Text('Số: ${invoice.invoiceNumber.split('-').last.replaceAll(RegExp(r'[^0-9]'), '').padLeft(7, '0')}', style: pw.TextStyle(font: ttfBold, fontSize: 10)),
                     ],
                   ),
                 ],
