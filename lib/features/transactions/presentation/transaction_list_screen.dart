@@ -500,14 +500,26 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           IconButton(
             icon: const Icon(Icons.delete_sweep, color: Colors.red),
             tooltip: 'Xóa toàn bộ data',
-            onPressed: () async {
-              final db = FirebaseFirestore.instance;
-              final invs = await db.collection('invoices').get();
-              for(var doc in invs.docs) { await doc.reference.delete(); }
-              final trans = await db.collection('transactions').get();
-              for(var doc in trans.docs) { await doc.reference.delete(); }
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa toàn bộ data!')));
-              _refreshData();
+            onPressed: () {
+              AppDialogs.showConfirmDialog(
+                context: context,
+                title: 'Xóa toàn bộ dữ liệu',
+                message: 'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu hóa đơn và giao dịch không? Hành động này không thể hoàn tác.',
+                icon: Icons.warning_amber_rounded,
+                color: Colors.redAccent,
+                confirmText: 'Xóa toàn bộ',
+                onConfirm: () async {
+                  final db = FirebaseFirestore.instance;
+                  final invs = await db.collection('invoices').get();
+                  for(var doc in invs.docs) { await doc.reference.delete(); }
+                  final trans = await db.collection('transactions').get();
+                  for(var doc in trans.docs) { await doc.reference.delete(); }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa toàn bộ data!')));
+                  }
+                  _refreshData();
+                },
+              );
             },
           )
         ],
