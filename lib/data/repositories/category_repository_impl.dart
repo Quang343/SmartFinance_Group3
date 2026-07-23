@@ -29,21 +29,27 @@ class CategoryRepositoryImpl implements CategoryRepository {
   Future<List<CategoryEntity>> getAll() async {
     if (_uid.isEmpty) return [];
     final snapshot = await _scopeQuery(_collection).get();
-    return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    return list;
   }
 
   @override
   Future<List<CategoryEntity>> getActive() async {
     if (_uid.isEmpty) return [];
     final snapshot = await _scopeQuery(_collection).where('isActive', isEqualTo: true).get();
-    return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    return list;
   }
 
   @override
   Future<List<CategoryEntity>> getByType(TransactionType type) async {
     if (_uid.isEmpty) return [];
     final snapshot = await _scopeQuery(_collection).where('type', isEqualTo: type.name).where('isActive', isEqualTo: true).get();
-    return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    return list;
   }
 
   @override
@@ -129,10 +135,24 @@ class CategoryRepositoryImpl implements CategoryRepository {
     );
     try {
       await _collection.doc(category.id).update(model.toJson());
-    } on FirebaseException catch (e) {
-      if (e.code == 'not-found') throw Exception('Không tìm thấy danh mục.');
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'not-found') throw Exception('Không tìm thấy danh mục.');
       rethrow;
     }
+  }
+
+  @override
+  Future<void> updateOrder(List<CategoryEntity> categories) async {
+    if (_uid.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final cat in categories) {
+      final docRef = _collection.doc(cat.id);
+      batch.update(docRef, {
+        'orderIndex': cat.orderIndex,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+    }
+    await batch.commit();
   }
 
   @override
