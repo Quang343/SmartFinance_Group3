@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -14,6 +15,8 @@ import '../../../domain/entities/invoice_entity.dart';
 import '../providers/invoice_provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
 import 'package:uuid/uuid.dart';
 import '../../../core/sync/sync_item.dart';
 import '../../../data/models/invoice_model.dart';
@@ -32,6 +35,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   DateTimeRange? _customDateRange;
   String _selectedStatus = 'all'; // null = all, notCreated, created
+  int _displayLimit = 15;
+  int _currentPage = 1;
+  int _itemsPerPage = 10;
 
   Future<void> _refreshInvoices() async {
     ref.invalidate(allInvoicesProvider);
@@ -379,6 +385,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy');
     final queueItems = ref.watch(syncQueueServiceProvider).queue;
+    final isDesktopOrWeb = kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900;
     
     // Orange for incoming invoices, Teal/Green for outgoing invoices
     final primaryColor = isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E);
@@ -486,6 +493,14 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         final totalSubtotal = list.fold<double>(0.0, (sum, inv) => sum + inv.subtotal);
         final totalVat = list.fold<double>(0.0, (sum, inv) => sum + inv.vatAmount);
 
+        int totalCount = list.length;
+        int totalPages = (totalCount / _itemsPerPage).ceil();
+        if (_currentPage > totalPages && totalPages > 0) _currentPage = totalPages;
+        
+        int startIndex = (_currentPage - 1) * _itemsPerPage;
+        int endIndex = min(startIndex + _itemsPerPage, totalCount);
+        List<InvoiceEntity> displayList = isDesktopOrWeb ? list.sublist(startIndex, endIndex) : list;
+
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
           appBar: AppBar(
@@ -514,6 +529,59 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ),
             ),
             actions: [
+              if (isDesktopOrWeb && canManage)
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [primaryColor, gradientEnd],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          if (isIncoming) {
+                            context.push('/invoices/capture');
+                          } else {
+                            context.push('/invoices/outgoing/new');
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(isIncoming ? Icons.qr_code_scanner_rounded : Icons.add_rounded, size: 18, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Text(
+                                isIncoming ? 'Quét hóa đơn' : 'Tạo Hóa đơn',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               IconButton(
                 icon: const Icon(Icons.delete_sweep, color: Colors.red),
                 tooltip: 'Xóa toàn bộ data',
@@ -883,10 +951,10 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                           padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
-                          itemCount: list.length,
+                          itemCount: displayList.length,
                           itemBuilder: (context, index) {
                             final isMobile = MediaQuery.of(context).size.width < 600;
-                            final inv = list[index];
+                            final inv = displayList[index];
                             Widget card = Container(
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
@@ -1154,11 +1222,22 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                             return card;
                             },
                           ),
+                    if (isDesktopOrWeb)
+                      _buildPaginationBar(
+                        context: context,
+                        totalCount: totalCount,
+                        totalPages: totalPages,
+                        currentPage: _currentPage,
+                        startIndex: startIndex,
+                        endIndex: endIndex,
+                        primaryColor: primaryColor,
+                        isDark: isDark,
+                      ),
                   ],
                 ),
               ),
             ),
-          floatingActionButton: canManage
+          floatingActionButton: !isDesktopOrWeb && canManage
               ? ScaleOnTap(
                   onTap: () {
                     if (isIncoming) {
@@ -1258,6 +1337,128 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required BuildContext context,
+    required int totalCount,
+    required int totalPages,
+    required int currentPage,
+    required int startIndex,
+    required int endIndex,
+    required Color primaryColor,
+    required bool isDark,
+  }) {
+    if (totalCount == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0E2219) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? const Color(0xFF1A382B) : const Color(0xFFE2E8F0), width: 1),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 650;
+
+          final infoText = Text(
+            'Hiển thị ${totalCount > 0 ? startIndex + 1 : 0} - $endIndex trên tổng số $totalCount hóa đơn',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isDark ? Colors.white70 : Colors.black87),
+          );
+
+          final itemsPerPageDropdown = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Số dòng:', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54)),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _itemsPerPage,
+                    isDense: true,
+                    dropdownColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87),
+                    items: const [10, 15, 30, 50].map((val) => DropdownMenuItem<int>(value: val, child: Text('$val dòng'))).toList(),
+                    onChanged: (newVal) {
+                      if (newVal != null) setState(() { _itemsPerPage = newVal; _currentPage = 1; });
+                    },
+                  ),
+                ),
+              ),
+            ],
+          );
+
+          final List<Widget> pageButtons = [];
+          pageButtons.add(_buildPageIconButton(icon: Icons.first_page_rounded, enabled: currentPage > 1, onTap: () => setState(() => _currentPage = 1), isDark: isDark));
+          pageButtons.add(const SizedBox(width: 4));
+          pageButtons.add(_buildPageIconButton(icon: Icons.chevron_left_rounded, enabled: currentPage > 1, onTap: () => setState(() => _currentPage = currentPage - 1), isDark: isDark));
+          pageButtons.add(const SizedBox(width: 6));
+
+          for (int p = 1; p <= totalPages; p++) {
+            if (totalPages > 7) {
+              if (p != 1 && p != totalPages && (p < currentPage - 1 || p > currentPage + 1)) {
+                if (p == currentPage - 2 || p == currentPage + 2) {
+                  pageButtons.add(Padding(padding: const EdgeInsets.symmetric(horizontal: 2.0), child: Text('...', style: TextStyle(color: isDark ? Colors.white38 : Colors.grey))));
+                }
+                continue;
+              }
+            }
+            final isSelected = p == currentPage;
+            pageButtons.add(
+              GestureDetector(
+                onTap: () => setState(() => _currentPage = p),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? primaryColor : (isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('$p', style: TextStyle(fontSize: 13, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87))),
+                ),
+              ),
+            );
+          }
+
+          pageButtons.add(const SizedBox(width: 6));
+          pageButtons.add(_buildPageIconButton(icon: Icons.chevron_right_rounded, enabled: currentPage < totalPages, onTap: () => setState(() => _currentPage = currentPage + 1), isDark: isDark));
+          pageButtons.add(const SizedBox(width: 4));
+          pageButtons.add(_buildPageIconButton(icon: Icons.last_page_rounded, enabled: currentPage < totalPages, onTap: () => setState(() => _currentPage = totalPages), isDark: isDark));
+
+          if (isCompact) {
+            return Column(
+              children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [infoText, itemsPerPageDropdown]),
+                const SizedBox(height: 10),
+                SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: pageButtons)),
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [infoText, Row(children: [itemsPerPageDropdown, const SizedBox(width: 16), Row(children: pageButtons)])],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPageIconButton({required IconData icon, required bool enabled, required VoidCallback onTap, required bool isDark}) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(color: isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, size: 18, color: enabled ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.white24 : Colors.grey.shade400)),
       ),
     );
   }
