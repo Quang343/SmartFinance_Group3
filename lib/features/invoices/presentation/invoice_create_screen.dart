@@ -6,7 +6,6 @@ import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/domain/entities/partner_entity.dart';
 import 'package:smart_finance/domain/entities/invoice_item_entity.dart';
-import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 import 'package:smart_finance/data/repositories/storage_repository.dart';
 import 'package:smart_finance/core/providers/auth_provider.dart';
@@ -14,8 +13,11 @@ import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'dart:async';
+import 'package:collection/collection.dart';
+import 'package:smart_finance/core/sync/sync_item.dart';
+import 'package:smart_finance/data/models/invoice_model.dart';
 import '../providers/invoice_provider.dart';
-
 class _ItemFormState {
   final TextEditingController nameController;
   final TextEditingController unitController;
@@ -90,8 +92,6 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   final _invoiceNumberController = TextEditingController();
   bool _isLoadingFormatInfo = false;
 
-  bool _isLoadingCategories = false;
-
   int get _subtotal => _items.fold(0, (sum, item) => sum + item.amount);
   int get _vatRate => int.tryParse(_vatRateController.text) ?? 0;
   int get _vatAmount => (_subtotal * _vatRate / 100).round();
@@ -99,7 +99,6 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
 
   bool _isSaving = false;
   bool _saveToPartner = false;
-  bool _isLoadingData = false;
   InvoiceEntity? _existingInvoice;
 
 
@@ -155,10 +154,18 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
   }
 
   Future<void> _loadExistingInvoice() async {
-    setState(() => _isLoadingData = true);
     try {
       final repo = ref.read(invoiceRepositoryProvider);
-      final invoice = await repo.getById(widget.invoiceId!);
+      final queueService = ref.read(syncQueueServiceProvider);
+
+      InvoiceEntity? invoice = await repo.getById(widget.invoiceId!);
+
+      // Kiểm tra hàng đợi để lấy bản nháp offline mới nhất
+      final syncItem = queueService.queue.firstWhereOrNull((e) => e.entityId == widget.invoiceId);
+      if (syncItem != null && syncItem.payload.isNotEmpty) {
+        invoice = InvoiceModel.fromJson(syncItem.payload);
+      }
+
       if (invoice != null) {
         _existingInvoice = invoice;
         _formNumberController.text = invoice.formNumber ?? '';
@@ -198,8 +205,6 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       }
     } catch (e) {
       debugPrint('Error loading existing invoice: $e');
-    } finally {
-      if (mounted) setState(() => _isLoadingData = false);
     }
   }
 
@@ -369,10 +374,89 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           imagePath: finalImagePath,
         );
 
-        if (_existingInvoice != null) {
-          await repo.update(newInvoice);
-        } else {
-          await repo.create(newInvoice);
+        final newInvoiceModel = InvoiceModel(
+          id: newInvoice.id,
+          invoiceNumber: newInvoice.invoiceNumber,
+          formNumber: newInvoice.formNumber,
+          serialNumber: newInvoice.serialNumber,
+          sellerName: newInvoice.sellerName,
+          sellerTaxCode: newInvoice.sellerTaxCode,
+          sellerAddress: newInvoice.sellerAddress,
+          sellerPhone: newInvoice.sellerPhone,
+          sellerBankName: newInvoice.sellerBankName,
+          sellerBankAccount: newInvoice.sellerBankAccount,
+          buyerContactName: newInvoice.buyerContactName,
+          buyerName: newInvoice.buyerName,
+          buyerTaxCode: newInvoice.buyerTaxCode,
+          buyerAddress: newInvoice.buyerAddress,
+          buyerBankName: newInvoice.buyerBankName,
+          buyerBankAccount: newInvoice.buyerBankAccount,
+          paymentMethod: newInvoice.paymentMethod,
+          items: newInvoice.items,
+          subtotal: newInvoice.subtotal,
+          vatRate: newInvoice.vatRate,
+          vatAmount: newInvoice.vatAmount,
+          totalAmount: newInvoice.totalAmount,
+          ocrStatus: newInvoice.ocrStatus,
+          transactionStatus: newInvoice.transactionStatus,
+          ocrConfidence: newInvoice.ocrConfidence,
+          type: newInvoice.type,
+          issuedDate: newInvoice.issuedDate,
+          createdAt: newInvoice.createdAt,
+          updatedAt: newInvoice.updatedAt,
+          imagePath: newInvoice.imagePath,
+          status: newInvoice.status,
+        );
+
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          collection: 'invoices',
+          action: _existingInvoice != null ? SyncAction.update : SyncAction.create,
+          entityId: newInvoiceId,
+          payload: newInvoiceModel.toJson(),
+        );
+
+        bool isOfflineSuccess = false;
+
+        if (widget.invoiceType == InvoiceType.outgoing) {
+           await queueService.enqueue(syncItem);
+        }
+
+        try {
+          if (_existingInvoice != null) {
+            await repo.update(newInvoice).timeout(const Duration(seconds: 3));
+          } else {
+            await repo.create(newInvoice).timeout(const Duration(seconds: 3));
+          }
+          if (widget.invoiceType == InvoiceType.outgoing) {
+             await queueService.removeItem(syncItem.id);
+          }
+        } on TimeoutException {
+          if (widget.invoiceType == InvoiceType.incoming) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Yêu cầu kết nối mạng để lưu hóa đơn đầu vào (Cần để upload ảnh scan)'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              setState(() => _isSaving = false);
+            }
+            return;
+          } else {
+            isOfflineSuccess = true;
+          }
+        } catch (e) {
+          if (widget.invoiceType == InvoiceType.outgoing) {
+             await queueService.markAsError(syncItem.id, e.toString());
+          }
+          if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+             setState(() => _isSaving = false);
+          }
+          return;
         }
 
         if (_saveToPartner) {
@@ -438,8 +522,12 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(widget.invoiceType == InvoiceType.outgoing ? 'Hóa đơn đã được tạo thành công!' : 'Hóa đơn đã được lưu thành công!'),
-              backgroundColor: Colors.green,
+              content: Text(
+                isOfflineSuccess
+                    ? 'Đã lưu ngoại tuyến (Sẽ đồng bộ khi có mạng)'
+                    : (widget.invoiceType == InvoiceType.outgoing ? 'Hóa đơn đã được tạo thành công!' : 'Hóa đơn đã được lưu thành công!')
+              ),
+              backgroundColor: isOfflineSuccess ? Colors.orange : Colors.green,
             ),
           );
           if (widget.invoiceType == InvoiceType.outgoing) {
@@ -477,8 +565,6 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           builder: (context, scrollController) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             final primaryColor = const Color(0xFF00D09E);
-            final partnersAsync = ref.watch(partnerStreamProvider);
-
             return Container(
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF060E0A) : Colors.white,
@@ -491,7 +577,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
+                      color: Colors.grey.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -503,49 +589,54 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                     ),
                   ),
                   Expanded(
-                    child: partnersAsync.when(
-                      data: (partners) {
-                        if (partners.isEmpty) {
-                          return const Center(child: Text('Danh bạ trống', style: TextStyle(color: Colors.grey)));
-                        }
-                        return ListView.builder(
-                          controller: scrollController,
-                          itemCount: partners.length,
-                          itemBuilder: (context, index) {
-                            final p = partners[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: primaryColor.withOpacity(0.1),
-                                child: Icon(Icons.business, color: primaryColor),
-                              ),
-                              title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('MST: ${p.taxCode}'),
-                              onTap: () {
-                                setState(() {
-                                  if (isBuyer) {
-                                    _partnerNameController.text = p.name;
-                                    _partnerTaxCodeController.text = p.taxCode;
-                                    _partnerAddressController.text = p.address ?? '';
-                                    _bankNameController.text = p.bankName ?? '';
-                                    _bankAccountController.text = p.bankAccount ?? '';
-                                  } else {
-                                    _sellerNameController.text = p.name;
-                                    _sellerTaxCodeController.text = p.taxCode;
-                                    _sellerAddressController.text = p.address ?? '';
-                                    _sellerPhoneController.text = p.phone ?? '';
-                                    _sellerBankNameController.text = p.bankName ?? '';
-                                    _sellerBankAccountController.text = p.bankAccount ?? '';
-                                  }
-                                  _saveToPartner = false; // Đã chọn từ danh bạ thì không cần lưu mới
-                                });
-                                Navigator.pop(context);
+                    child: Consumer(
+                      builder: (context, ref, child) {
+                        final partnersAsync = ref.watch(partnerStreamProvider);
+                        return partnersAsync.when(
+                          data: (partners) {
+                            if (partners.isEmpty) {
+                              return const Center(child: Text('Danh bạ trống', style: TextStyle(color: Colors.grey)));
+                            }
+                            return ListView.builder(
+                              controller: scrollController,
+                              itemCount: partners.length,
+                              itemBuilder: (context, index) {
+                                final p = partners[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: primaryColor.withValues(alpha: 0.1),
+                                    child: Icon(Icons.business, color: primaryColor),
+                                  ),
+                                  title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: Text('MST: ${p.taxCode}'),
+                                  onTap: () {
+                                    setState(() {
+                                      if (isBuyer) {
+                                        _partnerNameController.text = p.name;
+                                        _partnerTaxCodeController.text = p.taxCode;
+                                        _partnerAddressController.text = p.address ?? '';
+                                        _bankNameController.text = p.bankName ?? '';
+                                        _bankAccountController.text = p.bankAccount ?? '';
+                                      } else {
+                                        _sellerNameController.text = p.name;
+                                        _sellerTaxCodeController.text = p.taxCode;
+                                        _sellerAddressController.text = p.address ?? '';
+                                        _sellerPhoneController.text = p.phone ?? '';
+                                        _sellerBankNameController.text = p.bankName ?? '';
+                                        _sellerBankAccountController.text = p.bankAccount ?? '';
+                                      }
+                                      _saveToPartner = false; // Đã chọn từ danh bạ thì không cần lưu mới
+                                    });
+                                    Navigator.pop(context);
+                                  },
+                                );
                               },
                             );
                           },
+                          loading: () => Center(child: CircularProgressIndicator(color: primaryColor)),
+                          error: (err, stack) => Center(child: Text('Lỗi: $err')),
                         );
                       },
-                      loading: () => Center(child: CircularProgressIndicator(color: primaryColor)),
-                      error: (err, stack) => Center(child: Text('Lỗi: $err')),
                     ),
                   ),
                 ],
@@ -658,6 +749,9 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen early to cache data for offline use
+    ref.watch(partnerStreamProvider);
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = const Color(0xFF00D09E);
     final inputFillColor = isDark ? const Color(0xFF0F1E15) : Colors.grey.shade50;

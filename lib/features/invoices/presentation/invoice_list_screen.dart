@@ -5,14 +5,15 @@ import 'package:intl/intl.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
-import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
-import '../../../domain/entities/transaction_entity.dart';
-import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../providers/invoice_provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-
+import 'dart:async';
+import 'package:uuid/uuid.dart';
+import '../../../core/sync/sync_item.dart';
+import 'package:collection/collection.dart';
+import '../../../data/models/invoice_model.dart';
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
   final String type; // 'incoming' or 'outgoing'
@@ -47,15 +48,70 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              final queueService = ref.read(syncQueueServiceProvider);
+              final invoiceRepo = ref.read(invoiceRepositoryProvider);
+              
+              final updatedModel = InvoiceModel(
+                id: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                formNumber: invoice.formNumber,
+                serialNumber: invoice.serialNumber,
+                sellerName: invoice.sellerName,
+                sellerTaxCode: invoice.sellerTaxCode,
+                sellerAddress: invoice.sellerAddress,
+                sellerPhone: invoice.sellerPhone,
+                sellerBankName: invoice.sellerBankName,
+                sellerBankAccount: invoice.sellerBankAccount,
+                buyerContactName: invoice.buyerContactName,
+                buyerName: invoice.buyerName,
+                buyerTaxCode: invoice.buyerTaxCode,
+                buyerAddress: invoice.buyerAddress,
+                buyerBankName: invoice.buyerBankName,
+                buyerBankAccount: invoice.buyerBankAccount,
+                paymentMethod: invoice.paymentMethod,
+                items: invoice.items,
+                subtotal: invoice.subtotal,
+                vatRate: invoice.vatRate,
+                vatAmount: invoice.vatAmount,
+                totalAmount: invoice.totalAmount,
+                ocrStatus: invoice.ocrStatus,
+                transactionStatus: invoice.transactionStatus,
+                ocrConfidence: invoice.ocrConfidence,
+                type: invoice.type,
+                issuedDate: invoice.issuedDate,
+                createdAt: invoice.createdAt,
+                updatedAt: DateTime.now(),
+                imagePath: invoice.imagePath,
+                status: InvoiceStatus.deleted, // Update status
+              );
+
+              final syncItem = SyncItem(
+                id: const Uuid().v4(),
+                collection: 'invoices',
+                action: SyncAction.update,
+                entityId: invoice.id,
+                payload: updatedModel.toJson(),
+              );
+
+              await queueService.enqueue(syncItem);
+              _refreshInvoices();
+
               try {
-                await ref.read(invoiceRepositoryProvider).softDelete(invoice.id);
-                _refreshInvoices();
+                await invoiceRepo.softDelete(invoice.id).timeout(const Duration(seconds: 3));
+                await queueService.removeItem(syncItem.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Đã chuyển hóa đơn vào thùng rác'), backgroundColor: Colors.green),
                   );
                 }
+              } on TimeoutException {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã lưu ngoại tuyến (Chuyển vào thùng rác)'), backgroundColor: Colors.orange),
+                  );
+                }
               } catch (e) {
+                await queueService.markAsError(syncItem.id, e.toString());
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
@@ -85,15 +141,70 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final queueService = ref.read(syncQueueServiceProvider);
+              final invoiceRepo = ref.read(invoiceRepositoryProvider);
+              
+              final updatedModel = InvoiceModel(
+                id: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                formNumber: invoice.formNumber,
+                serialNumber: invoice.serialNumber,
+                sellerName: invoice.sellerName,
+                sellerTaxCode: invoice.sellerTaxCode,
+                sellerAddress: invoice.sellerAddress,
+                sellerPhone: invoice.sellerPhone,
+                sellerBankName: invoice.sellerBankName,
+                sellerBankAccount: invoice.sellerBankAccount,
+                buyerContactName: invoice.buyerContactName,
+                buyerName: invoice.buyerName,
+                buyerTaxCode: invoice.buyerTaxCode,
+                buyerAddress: invoice.buyerAddress,
+                buyerBankName: invoice.buyerBankName,
+                buyerBankAccount: invoice.buyerBankAccount,
+                paymentMethod: invoice.paymentMethod,
+                items: invoice.items,
+                subtotal: invoice.subtotal,
+                vatRate: invoice.vatRate,
+                vatAmount: invoice.vatAmount,
+                totalAmount: invoice.totalAmount,
+                ocrStatus: invoice.ocrStatus,
+                transactionStatus: invoice.transactionStatus,
+                ocrConfidence: invoice.ocrConfidence,
+                type: invoice.type,
+                issuedDate: invoice.issuedDate,
+                createdAt: invoice.createdAt,
+                updatedAt: DateTime.now(),
+                imagePath: invoice.imagePath,
+                status: InvoiceStatus.active, // Khôi phục
+              );
+
+              final syncItem = SyncItem(
+                id: const Uuid().v4(),
+                collection: 'invoices',
+                action: SyncAction.update,
+                entityId: invoice.id,
+                payload: updatedModel.toJson(),
+              );
+
+              await queueService.enqueue(syncItem);
+              _refreshInvoices();
+
               try {
-                await ref.read(invoiceRepositoryProvider).restore(invoice.id);
-                _refreshInvoices();
+                await invoiceRepo.restore(invoice.id).timeout(const Duration(seconds: 3));
+                await queueService.removeItem(syncItem.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Khôi phục thành công!'), backgroundColor: Colors.green),
                   );
                 }
+              } on TimeoutException {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã lưu ngoại tuyến (Khôi phục)'), backgroundColor: Colors.orange),
+                  );
+                }
               } catch (e) {
+                await queueService.markAsError(syncItem.id, e.toString());
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
@@ -123,15 +234,36 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final queueService = ref.read(syncQueueServiceProvider);
+              final invoiceRepo = ref.read(invoiceRepositoryProvider);
+
+              final syncItem = SyncItem(
+                id: const Uuid().v4(),
+                collection: 'invoices',
+                action: SyncAction.delete,
+                entityId: invoice.id,
+                payload: {},
+              );
+
+              await queueService.enqueue(syncItem);
+              _refreshInvoices();
+
               try {
-                await ref.read(invoiceRepositoryProvider).delete(invoice.id);
-                _refreshInvoices();
+                await invoiceRepo.delete(invoice.id).timeout(const Duration(seconds: 3));
+                await queueService.removeItem(syncItem.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Đã xóa vĩnh viễn hóa đơn'), backgroundColor: Colors.red),
                   );
                 }
+              } on TimeoutException {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã lưu ngoại tuyến (Xóa vĩnh viễn)'), backgroundColor: Colors.orange),
+                  );
+                }
               } catch (e) {
+                await queueService.markAsError(syncItem.id, e.toString());
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
@@ -266,11 +398,11 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
-    final categoriesAsync = ref.watch(allCategoriesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isIncoming = widget.type == 'incoming';
     final currencyFormatter = NumberFormat.currency(locale: 'vi_VN', symbol: '₫', decimalDigits: 0);
     final dateFormatter = DateFormat('dd/MM/yyyy');
+    final queueItems = ref.watch(syncQueueServiceProvider).queue;
     
     // Orange for incoming invoices, Teal/Green for outgoing invoices
     final primaryColor = isIncoming ? const Color(0xFFF97316) : const Color(0xFF00D09E);
@@ -335,8 +467,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         ),
       ),
       data: (invoices) {
-        final categories = categoriesAsync.value ?? [];
-
         var list = invoices;
          // Filter by invoice type
         list = list.where((inv) => inv.type == (isIncoming ? InvoiceType.incoming : InvoiceType.outgoing)).toList();
@@ -815,14 +945,42 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                inv.invoiceNumber,
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isDark ? Colors.white : const Color(0xFF093021),
-                                                  fontSize: 16,
-                                                ),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      inv.invoiceNumber,
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isDark ? Colors.white : const Color(0xFF093021),
+                                                        fontSize: 16,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  Builder(builder: (context) {
+                                                    final syncItem = queueItems.firstWhereOrNull((e) => e.entityId == inv.id);
+                                                    if (syncItem != null) {
+                                                      if (syncItem.status == SyncStatus.pending) {
+                                                        return const Icon(Icons.sync, color: Colors.blue, size: 16);
+                                                      } else {
+                                                        return const Icon(Icons.error_outline, color: Colors.red, size: 16);
+                                                      }
+                                                    } else {
+                                                      return const Icon(Icons.cloud_done_outlined, color: Colors.green, size: 16);
+                                                    }
+                                                  }),
+                                                ],
                                               ),
+                                              if (queueItems.any((e) => e.entityId == inv.id && e.status == SyncStatus.error))
+                                                Padding(
+                                                  padding: const EdgeInsets.only(top: 4),
+                                                  child: Text(
+                                                    queueItems.firstWhereOrNull((e) => e.entityId == inv.id)?.errorMessage ?? 'Lỗi đồng bộ',
+                                                    style: const TextStyle(color: Colors.red, fontSize: 11, fontStyle: FontStyle.italic),
+                                                  ),
+                                                ),
                                               const SizedBox(height: 4),
                                               Text(
                                                 '${inv.type == InvoiceType.incoming ? inv.sellerName : inv.buyerName} • ${dateFormatter.format(inv.issuedDate)}',

@@ -19,18 +19,9 @@ import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/widgets/scale_on_tap.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
+import 'package:smart_finance/core/sync/sync_item.dart';
 
-Color _parseColor(String? hexString) {
-  if (hexString == null || hexString.isEmpty) return Colors.grey;
-  try {
-    final buffer = StringBuffer();
-    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
-  } catch (e) {
-    return Colors.grey;
-  }
-}
+
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   final String invoiceId;
@@ -134,6 +125,8 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         final hasTransaction = linkedTxs.isNotEmpty;
 
         final isIncoming = invoice?.type != InvoiceType.outgoing;
+        final queueItems = ref.watch(syncQueueServiceProvider).queue;
+        final isOfflinePendingOrError = queueItems.any((e) => e.entityId == widget.invoiceId && (e.status == SyncStatus.pending || e.status == SyncStatus.error));
 
         String txStatusText = 'Chưa tạo GD';
         Color txStatusColor = const Color(0xFFF97316); // Orange
@@ -692,7 +685,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                               ),
                             ),
                           )
-                        : _buildInvoiceAction(invoice, linkedTxs, isIncoming, isDark, currentRole),
+                        : _buildInvoiceAction(invoice, linkedTxs, isIncoming, isDark, currentRole, isOfflinePendingOrError),
                   ),
                 )
               : null,
@@ -701,7 +694,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     );
   }
 
-  Widget _buildInvoiceAction(InvoiceEntity invoice, List<TransactionEntity> linkedTxs, bool isIncoming, bool isDark, UserRole currentRole) {
+  Widget _buildInvoiceAction(InvoiceEntity invoice, List<TransactionEntity> linkedTxs, bool isIncoming, bool isDark, UserRole currentRole, bool isOfflinePendingOrError) {
     final isFmReadOnly = currentRole == UserRole.financeManager;
     if (linkedTxs.isNotEmpty) {
       if (isFmReadOnly) {
@@ -783,6 +776,12 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           Expanded(
             child: ScaleOnTap(
               onTap: () {
+                if (isOfflinePendingOrError) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Vui lòng đợi hóa đơn được đồng bộ trước khi tạo giao dịch'), backgroundColor: Colors.orange),
+                  );
+                  return;
+                }
                 context.pushNamed(RouteNames.transactionForm, extra: {
                   'initialAmount': invoice.totalAmount,
                   'initialTitle': isIncoming ? 'Thanh toán hóa đơn: ${invoice.invoiceNumber}' : 'Doanh thu từ hóa đơn: ${invoice.invoiceNumber}',
@@ -803,7 +802,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        isIncoming ? 'Tạo khoản chi' : 'Tạo khoản thu',
+                        isOfflinePendingOrError ? 'Đang lưu ngoại tuyến...' : (isIncoming ? 'Tạo khoản chi' : 'Tạo khoản thu'),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
@@ -839,6 +838,12 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     }
     return ScaleOnTap(
       onTap: () {
+        if (isOfflinePendingOrError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Vui lòng đợi hóa đơn được đồng bộ trước khi tạo giao dịch'), backgroundColor: Colors.orange),
+          );
+          return;
+        }
         context.pushNamed(RouteNames.transactionForm, extra: {
           'initialAmount': invoice.totalAmount,
           'initialTitle': isIncoming ? 'Thanh toán hóa đơn: ${invoice.invoiceNumber}' : 'Doanh thu từ hóa đơn: ${invoice.invoiceNumber}',
@@ -859,7 +864,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
             Icon(isIncoming ? Icons.add_card_rounded : Icons.payments_rounded, color: Colors.white),
             const SizedBox(width: 8),
             Text(
-              isIncoming ? 'Tạo khoản chi' : 'Tạo khoản thu',
+              isOfflinePendingOrError ? 'Đang lưu ngoại tuyến...' : (isIncoming ? 'Tạo khoản chi' : 'Tạo khoản thu'),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
             ),
           ],

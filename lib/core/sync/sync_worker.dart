@@ -1,16 +1,15 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
 import 'sync_queue_service.dart';
 import 'sync_item.dart';
 import '../providers/app_providers.dart';
 import '../../domain/entities/transaction_entity.dart';
 import '../../data/models/transaction_model.dart';
+import '../../data/models/invoice_model.dart';
 
 final syncWorkerProvider = Provider<SyncWorker>((ref) {
   final queueService = ref.watch(syncQueueServiceProvider);
-  final repo = ref.watch(transactionRepositoryProvider);
   return SyncWorker(queueService, ref)..start();
 });
 
@@ -45,10 +44,44 @@ class SyncWorker {
       for (final item in pendingItems) {
         if (item.collection == 'transactions') {
           await _syncTransaction(item);
+        } else if (item.collection == 'invoices') {
+          await _syncInvoice(item);
         }
       }
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  Future<void> _syncInvoice(SyncItem item) async {
+    try {
+      final repo = _ref.read(invoiceRepositoryProvider);
+      if (item.action == SyncAction.delete) {
+        await repo.delete(item.entityId);
+        await _queueService.removeItem(item.id);
+        return;
+      }
+
+      final model = InvoiceModel.fromJson(item.payload);
+
+      if (item.action == SyncAction.create) {
+        await repo.create(model);
+      } else if (item.action == SyncAction.update) {
+        await repo.update(model);
+      }
+      
+      // Nếu thành công -> Xóa khỏi hàng đợi
+      await _queueService.removeItem(item.id);
+
+    } catch (e) {
+      String errorMsg = e.toString().replaceAll('Exception: ', '');
+      if (e is FirebaseException && e.code == 'unavailable') {
+        // Mất mạng, cứ để pending
+        return;
+      }
+      
+      // Lỗi thực sự -> Đánh dấu Error để UI hiện cảnh báo đỏ
+      await _queueService.markAsError(item.id, errorMsg);
     }
   }
 
