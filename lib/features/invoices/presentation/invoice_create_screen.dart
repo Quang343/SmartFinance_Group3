@@ -40,6 +40,7 @@ class _ItemFormState {
 
 class InvoiceCreateScreen extends ConsumerStatefulWidget {
   final InvoiceType invoiceType;
+  final String? invoiceId;
   final String? scannedImagePath;
   final String? scannedSellerName;
   final String? scannedTaxCode;
@@ -50,6 +51,7 @@ class InvoiceCreateScreen extends ConsumerStatefulWidget {
   const InvoiceCreateScreen({
     super.key,
     this.invoiceType = InvoiceType.outgoing,
+    this.invoiceId,
     this.scannedImagePath,
     this.scannedSellerName,
     this.scannedTaxCode,
@@ -97,6 +99,8 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
 
   bool _isSaving = false;
   bool _saveToPartner = false;
+  bool _isLoadingData = false;
+  InvoiceEntity? _existingInvoice;
 
 
   @override
@@ -111,27 +115,30 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
     final myBankName = user?.bankName ?? '';
     final myBankAccount = user?.bankAccount ?? '';
 
-    if (widget.invoiceType == InvoiceType.outgoing) {
-      _sellerNameController.text = myCompanyName;
-      _sellerTaxCodeController.text = myTaxCode;
-      _sellerAddressController.text = myAddress;
-      _sellerPhoneController.text = myPhone;
-      _sellerBankNameController.text = myBankName;
-      _sellerBankAccountController.text = myBankAccount;
+    if (widget.invoiceId != null) {
+      _loadExistingInvoice();
     } else {
-      _partnerNameController.text = myCompanyName;
-      _partnerTaxCodeController.text = myTaxCode;
-      _partnerAddressController.text = myAddress;
-      _bankNameController.text = myBankName;
-      _bankAccountController.text = myBankAccount;
-      
-      _sellerNameController.text = widget.scannedSellerName ?? '';
-      _sellerTaxCodeController.text = widget.scannedTaxCode ?? '';
-      if (widget.scannedVatRate != null) {
-        _vatRateController.text = widget.scannedVatRate.toString();
-      }
-      
-      if (widget.invoiceType == InvoiceType.incoming) {
+      if (widget.invoiceType == InvoiceType.outgoing) {
+        _sellerNameController.text = myCompanyName;
+        _sellerTaxCodeController.text = myTaxCode;
+        _sellerAddressController.text = myAddress;
+        _sellerPhoneController.text = myPhone;
+        _sellerBankNameController.text = myBankName;
+        _sellerBankAccountController.text = myBankAccount;
+      } else {
+        _partnerNameController.text = myCompanyName;
+        _partnerTaxCodeController.text = myTaxCode;
+        _partnerAddressController.text = myAddress;
+        _bankNameController.text = myBankName;
+        _bankAccountController.text = myBankAccount;
+        
+        _sellerNameController.text = widget.scannedSellerName ?? '';
+        _sellerTaxCodeController.text = widget.scannedTaxCode ?? '';
+        if (widget.scannedVatRate != null) {
+          _vatRateController.text = widget.scannedVatRate.toString();
+        }
+        
+        if (widget.invoiceType == InvoiceType.incoming) {
           _sellerNameController.text = widget.scannedSellerName ?? '';
           _sellerTaxCodeController.text = widget.scannedTaxCode ?? '';
           int subtotalVal = widget.scannedSubtotal ?? 0;
@@ -141,9 +148,59 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
             _items.add(_ItemFormState(name: 'Hàng hóa / Dịch vụ (OCR)', unit: 'Gói', quantity: 1, price: subtotalVal));
           }
         }
-    }
+      }
 
-    _loadOutgoingInvoiceFormat();
+      _loadOutgoingInvoiceFormat();
+    }
+  }
+
+  Future<void> _loadExistingInvoice() async {
+    setState(() => _isLoadingData = true);
+    try {
+      final repo = ref.read(invoiceRepositoryProvider);
+      final invoice = await repo.getById(widget.invoiceId!);
+      if (invoice != null) {
+        _existingInvoice = invoice;
+        _formNumberController.text = invoice.formNumber ?? '';
+        _serialNumberController.text = invoice.serialNumber ?? '';
+        _invoiceNumberController.text = invoice.invoiceNumber;
+        
+        _sellerNameController.text = invoice.sellerName;
+        _sellerTaxCodeController.text = invoice.sellerTaxCode;
+        _sellerAddressController.text = invoice.sellerAddress ?? '';
+        _sellerPhoneController.text = invoice.sellerPhone ?? '';
+        _sellerBankNameController.text = invoice.sellerBankName ?? '';
+        _sellerBankAccountController.text = invoice.sellerBankAccount ?? '';
+
+        _partnerContactNameController.text = invoice.buyerContactName ?? '';
+        _partnerNameController.text = invoice.buyerName;
+        _partnerTaxCodeController.text = invoice.buyerTaxCode;
+        _partnerAddressController.text = invoice.buyerAddress ?? '';
+        _bankNameController.text = invoice.buyerBankName ?? '';
+        _bankAccountController.text = invoice.buyerBankAccount ?? '';
+
+        _paymentMethod = invoice.paymentMethod ?? 'TM';
+        _vatRateController.text = invoice.vatRate.toString();
+
+        _items.clear();
+        if (invoice.items.isNotEmpty) {
+          for (var item in invoice.items) {
+            _items.add(_ItemFormState(
+              name: item.itemName,
+              unit: item.unit,
+              quantity: item.quantity.toInt(),
+              price: item.unitPrice,
+            ));
+          }
+        } else {
+          _items.add(_ItemFormState());
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading existing invoice: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingData = false);
+    }
   }
 
   Future<void> _loadOutgoingInvoiceFormat() async {
@@ -206,7 +263,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
       try {
         final repo = ref.read(invoiceRepositoryProvider);
         final storageRepo = ref.read(storageRepositoryProvider);
-        final newInvoiceId = const Uuid().v4();
+        final newInvoiceId = _existingInvoice?.id ?? const Uuid().v4();
         
         String? finalImagePath;
         
@@ -233,6 +290,8 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           } else {
              finalImagePath = widget.scannedImagePath;
           }
+        } else if (_existingInvoice != null) {
+          finalImagePath = _existingInvoice!.imagePath;
         }
       
         final invoiceItems = _items.map((item) {
@@ -261,18 +320,20 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
         }
 
         // Check if invoice already exists
-        final isExists = await repo.checkInvoiceExists(sellerTax, formNum, serialNum, generatedInvoiceNumber);
-        if (isExists) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Hóa đơn $generatedInvoiceNumber đã tồn tại, vui lòng sửa lại thông tin'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            setState(() => _isSaving = false);
+        if (_existingInvoice == null || _existingInvoice!.invoiceNumber != generatedInvoiceNumber) {
+          final isExists = await repo.checkInvoiceExists(sellerTax, formNum, serialNum, generatedInvoiceNumber);
+          if (isExists) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Hóa đơn $generatedInvoiceNumber đã tồn tại, vui lòng sửa lại thông tin'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              setState(() => _isSaving = false);
+            }
+            return;
           }
-          return;
         }
 
         final newInvoice = InvoiceEntity(
@@ -298,17 +359,21 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           vatRate: _vatRate,
           vatAmount: _vatAmount,
           totalAmount: _totalAmount,
-          ocrStatus: OcrStatus.extracted,
-          transactionStatus: InvoiceTransactionStatus.notCreated,
-          ocrConfidence: 1.0,
+          ocrStatus: _existingInvoice?.ocrStatus ?? OcrStatus.extracted,
+          transactionStatus: _existingInvoice?.transactionStatus ?? InvoiceTransactionStatus.notCreated,
+          ocrConfidence: _existingInvoice?.ocrConfidence ?? 1.0,
           type: widget.invoiceType,
-          issuedDate: DateTime.now(),
-          createdAt: DateTime.now(),
+          issuedDate: DateTime.now(), // Cập nhật lại ngày xuất? Có thể giữ nguyên
+          createdAt: _existingInvoice?.createdAt ?? DateTime.now(),
           updatedAt: DateTime.now(),
           imagePath: finalImagePath,
         );
 
-        await repo.create(newInvoice);
+        if (_existingInvoice != null) {
+          await repo.update(newInvoice);
+        } else {
+          await repo.create(newInvoice);
+        }
 
         if (_saveToPartner) {
           final partnerRepo = ref.read(partnerRepositoryProvider);
@@ -628,7 +693,7 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
           ),
         ),
         title: Text(
-          widget.invoiceType == InvoiceType.outgoing ? 'Tạo hóa đơn bán ra' : 'Hóa đơn đầu vào (OCR)',
+          widget.invoiceId != null ? 'Chỉnh sửa hóa đơn' : (widget.invoiceType == InvoiceType.outgoing ? 'Tạo hóa đơn bán ra' : 'Hóa đơn đầu vào (OCR)'),
           style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 20),
         ),
         actions: [
@@ -1024,8 +1089,11 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                     BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 6)),
                   ],
                 ),
-                child: const Center(
-                  child: Text('Lưu & Phát hành', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF060E0A))),
+                child: Center(
+                  child: Text(
+                    widget.invoiceId != null ? 'Cập nhật' : (widget.invoiceType == InvoiceType.outgoing ? 'Lưu & Phát hành' : 'Lưu hóa đơn'),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF060E0A)),
+                  ),
                 ),
               ),
             ),

@@ -11,18 +11,8 @@ import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../providers/invoice_provider.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
-Color _parseColor(String? hexString) {
-  if (hexString == null || hexString.isEmpty) return Colors.grey;
-  try {
-    final buffer = StringBuffer();
-    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
-  } catch (e) {
-    return Colors.grey;
-  }
-}
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
   final String type; // 'incoming' or 'outgoing'
@@ -37,10 +27,240 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   DateTimeRange? _customDateRange;
-  InvoiceTransactionStatus? _filterTransactionStatus; // null = all, notCreated, created
+  String _selectedStatus = 'all'; // null = all, notCreated, created
 
   Future<void> _refreshInvoices() async {
     ref.invalidate(allInvoicesProvider);
+  }
+
+  void _confirmSoftDelete(InvoiceEntity invoice) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận xóa'),
+        content: Text('Bạn có chắc chắn muốn xóa hóa đơn ${invoice.invoiceNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              try {
+                await ref.read(invoiceRepositoryProvider).softDelete(invoice.id);
+                _refreshInvoices();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã chuyển hóa đơn vào thùng rác'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Xóa', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmRestore(InvoiceEntity invoice) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Khôi phục hóa đơn'),
+        content: Text('Bạn có muốn khôi phục hóa đơn ${invoice.invoiceNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(invoiceRepositoryProvider).restore(invoice.id);
+                _refreshInvoices();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Khôi phục thành công!'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Khôi phục', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmHardDelete(InvoiceEntity invoice) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa vĩnh viễn', style: TextStyle(color: Colors.red)),
+        content: Text('Bạn có chắc chắn muốn xóa vĩnh viễn hóa đơn ${invoice.invoiceNumber} không? Hành động này không thể hoàn tác!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(invoiceRepositoryProvider).delete(invoice.id);
+                _refreshInvoices();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã xóa vĩnh viễn hóa đơn'), backgroundColor: Colors.red),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Xóa vĩnh viễn', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(InvoiceTransactionStatus status) {
+    Color color;
+    String text;
+    switch (status) {
+      case InvoiceTransactionStatus.confirmedCreated:
+        color = const Color(0xFF00D09E);
+        text = 'Đã xác nhận GD';
+        break;
+      case InvoiceTransactionStatus.draftCreated:
+        color = const Color(0xFF3B82F6); // Blue
+        text = 'Đã tạo GD nháp';
+        break;
+      case InvoiceTransactionStatus.notCreated:
+        color = const Color(0xFFF97316); // Orange
+        text = 'Chưa tạo GD';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String value, String label, bool isDark, Color primaryColor, int count) {
+    final isSelected = _selectedStatus == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedStatus = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primaryColor
+              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          '$label ($count)',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? primaryColor : Colors.black54),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrashChip(bool isDark) {
+    final isSelected = _selectedStatus == 'deleted';
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedStatus = 'deleted';
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.red
+              : (isDark ? const Color(0xFF3F1616) : const Color(0xFFFEE2E2)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Colors.red
+                : (isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFCA5A5)),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.delete_outline_rounded,
+              size: 14,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626)),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Thùng rác',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -133,9 +353,23 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           }).toList();
         }
 
-        // Filter by transaction status
-        if (_filterTransactionStatus != null) {
-          list = list.where((inv) => inv.transactionStatus == _filterTransactionStatus).toList();
+        final timeFilteredList = list;
+        final allCount = timeFilteredList.where((inv) => inv.status != InvoiceStatus.deleted).length;
+        final confirmedCount = timeFilteredList.where((inv) => inv.status != InvoiceStatus.deleted && inv.transactionStatus == InvoiceTransactionStatus.confirmedCreated).length;
+        final draftCount = timeFilteredList.where((inv) => inv.status != InvoiceStatus.deleted && inv.transactionStatus == InvoiceTransactionStatus.draftCreated).length;
+        final notCreatedCount = timeFilteredList.where((inv) => inv.status != InvoiceStatus.deleted && inv.transactionStatus == InvoiceTransactionStatus.notCreated).length;
+
+        if (_selectedStatus == 'deleted') {
+          list = list.where((inv) => inv.status == InvoiceStatus.deleted).toList();
+        } else {
+          list = list.where((inv) => inv.status != InvoiceStatus.deleted).toList();
+          if (_selectedStatus == 'confirmed') {
+            list = list.where((inv) => inv.transactionStatus == InvoiceTransactionStatus.confirmedCreated).toList();
+          } else if (_selectedStatus == 'draft') {
+            list = list.where((inv) => inv.transactionStatus == InvoiceTransactionStatus.draftCreated).toList();
+          } else if (_selectedStatus == 'notCreated') {
+            list = list.where((inv) => inv.transactionStatus == InvoiceTransactionStatus.notCreated).toList();
+          }
         }
 
         // Sort by date descending
@@ -421,76 +655,95 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
 
               // Search Bar & Filter
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                  decoration: InputDecoration(
+                    hintText: 'Tìm kiếm theo đối tác, số HĐ...',
+                    hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
+                    prefixIcon: Icon(Icons.search_rounded, color: isDark ? Colors.white38 : Colors.black38),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: primaryColor, width: 1.5),
+                    ),
+                  ),
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val.toLowerCase();
+                    });
+                  },
+                ),
+              ),
+
+              // Status Filter
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                        decoration: InputDecoration(
-                          hintText: 'Tìm kiếm theo đối tác, số HĐ...',
-                          hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
-                          prefixIcon: Icon(Icons.search_rounded, color: isDark ? Colors.white38 : Colors.black38),
-                          filled: true,
-                          fillColor: isDark ? const Color(0xFF0D251C) : Colors.white,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: primaryColor, width: 1.5),
-                          ),
-                        ),
-                        onChanged: (val) {
-                          setState(() {
-                            _searchQuery = val.toLowerCase();
-                          });
-                        },
+                    Text(
+                      'Trạng thái:',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      flex: 2,
-                      child: Container(
-                        height: 48, // matching textfield roughly
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0D251C) : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0),
-                          ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip('all', 'Tất cả', isDark, primaryColor, allCount),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('confirmed', 'Đã xác nhận', isDark, primaryColor, confirmedCount),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('draft', 'Bản nháp', isDark, primaryColor, draftCount),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('notCreated', 'Chưa tạo', isDark, primaryColor, notCreatedCount),
+                          ],
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<InvoiceTransactionStatus?>(
-                            isExpanded: true,
-                            value: _filterTransactionStatus,
-                            icon: Icon(Icons.filter_list_rounded, color: isDark ? Colors.white54 : Colors.black54, size: 20),
-                            dropdownColor: isDark ? const Color(0xFF0D251C) : Colors.white,
-                            style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 13, fontWeight: FontWeight.w500),
-                            items: const [
-                              DropdownMenuItem(value: null, child: Text('Tất cả trạng thái')),
-                              DropdownMenuItem(value: InvoiceTransactionStatus.created, child: Text('Đã tạo GD')),
-                              DropdownMenuItem(value: InvoiceTransactionStatus.notCreated, child: Text('Chưa tạo GD')),
-                            ],
-                            onChanged: (val) {
-                              setState(() {
-                                _filterTransactionStatus = val;
-                              });
-                            },
-                          ),
+                      ),
+                    ),
+                    if (canManage) ...[
+                      const SizedBox(width: 8),
+                      _buildTrashChip(isDark),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Note about editing
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 12, color: primaryColor.withOpacity(0.8)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Chỉ có thể sửa hoặc xóa đối với hóa đơn "Chưa tạo GD"',
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 8),
 
               // Invoice List Area
               list.isEmpty
@@ -510,8 +763,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                           padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
                           itemCount: list.length,
                           itemBuilder: (context, index) {
+                            final isMobile = MediaQuery.of(context).size.width < 600;
                             final inv = list[index];
-                            return Container(
+                            Widget card = Container(
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
                                 color: isDark ? const Color(0xFF0E2219) : Colors.white,
@@ -578,32 +832,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                                 ),
                                               ),
                                               const SizedBox(height: 6),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: inv.transactionStatus == InvoiceTransactionStatus.created
-                                                      ? const Color(0xFF00D09E).withOpacity(0.1)
-                                                      : const Color(0xFFF97316).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                    color: inv.transactionStatus == InvoiceTransactionStatus.created
-                                                        ? const Color(0xFF00D09E).withOpacity(0.3)
-                                                        : const Color(0xFFF97316).withOpacity(0.3),
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  inv.transactionStatus == InvoiceTransactionStatus.created
-                                                      ? 'Đã tạo GD'
-                                                      : 'Chưa tạo GD',
-                                                  style: TextStyle(
-                                                    color: inv.transactionStatus == InvoiceTransactionStatus.created
-                                                        ? const Color(0xFF00D09E)
-                                                        : const Color(0xFFF97316),
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),                                            ],
+                                              _buildStatusChip(inv.transactionStatus),
+                                            ],
                                           ),
                                         ),
                                         Column(
@@ -630,12 +860,148 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                             ],
                                           ],
                                         ),
+                                        if (!isMobile && canManage && (inv.status == InvoiceStatus.deleted || inv.transactionStatus == InvoiceTransactionStatus.notCreated)) ...[
+                                          const SizedBox(width: 8),
+                                          PopupMenuButton<String>(
+                                            icon: Icon(Icons.more_vert_rounded, color: isDark ? Colors.white54 : Colors.black54),
+                                            onSelected: (value) {
+                                              if (value == 'edit') {
+                                                if (isIncoming) {
+                                                  context.push('/invoices/incoming/edit/${inv.id}');
+                                                } else {
+                                                  context.push('/invoices/outgoing/edit/${inv.id}');
+                                                }
+                                              } else if (value == 'delete') {
+                                                _confirmSoftDelete(inv);
+                                              } else if (value == 'restore') {
+                                                _confirmRestore(inv);
+                                              } else if (value == 'hard_delete') {
+                                                _confirmHardDelete(inv);
+                                              }
+                                            },
+                                            itemBuilder: (context) {
+                                              if (inv.status == InvoiceStatus.deleted) {
+                                                return [
+                                                  const PopupMenuItem(
+                                                    value: 'restore',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.restore_rounded, size: 18, color: Colors.green),
+                                                        SizedBox(width: 8),
+                                                        Text('Khôi phục'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const PopupMenuItem(
+                                                    value: 'hard_delete',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.delete_forever_rounded, size: 18, color: Colors.red),
+                                                        SizedBox(width: 8),
+                                                        Text('Xóa vĩnh viễn', style: TextStyle(color: Colors.red)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ];
+                                              }
+                                              return [
+                                                const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.edit_rounded, size: 18, color: Colors.blue),
+                                                      SizedBox(width: 8),
+                                                      Text('Sửa'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.delete_rounded, size: 18, color: Colors.red),
+                                                      SizedBox(width: 8),
+                                                      Text('Xóa'),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ];
+                                            },
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
                                 ),
                               ),
                             );
+
+                            if (canManage && (inv.status == InvoiceStatus.deleted || inv.transactionStatus == InvoiceTransactionStatus.notCreated) && isMobile) {
+                              card = Slidable(
+                                key: ValueKey(inv.id),
+                                endActionPane: ActionPane(
+                                  motion: const ScrollMotion(),
+                                  children: inv.status == InvoiceStatus.deleted
+                                      ? [
+                                          SlidableAction(
+                                            onPressed: (context) => _confirmRestore(inv),
+                                            backgroundColor: Colors.green,
+                                            foregroundColor: Colors.white,
+                                            icon: Icons.restore_rounded,
+                                            label: 'Khôi phục',
+                                            borderRadius: const BorderRadius.only(
+                                              topLeft: Radius.circular(16),
+                                              bottomLeft: Radius.circular(16),
+                                            ),
+                                          ),
+                                          SlidableAction(
+                                            onPressed: (context) => _confirmHardDelete(inv),
+                                            backgroundColor: Colors.red,
+                                            foregroundColor: Colors.white,
+                                            icon: Icons.delete_forever_rounded,
+                                            label: 'Xóa VV',
+                                            borderRadius: const BorderRadius.only(
+                                              topRight: Radius.circular(16),
+                                              bottomRight: Radius.circular(16),
+                                            ),
+                                          ),
+                                        ]
+                                      : [
+                                          SlidableAction(
+                                            onPressed: (context) {
+                                              if (isIncoming) {
+                                                context.push('/invoices/incoming/edit/${inv.id}');
+                                              } else {
+                                                context.push('/invoices/outgoing/edit/${inv.id}');
+                                              }
+                                            },
+                                            backgroundColor: Colors.blue,
+                                            foregroundColor: Colors.white,
+                                            icon: Icons.edit_rounded,
+                                            label: 'Sửa',
+                                            borderRadius: const BorderRadius.only(
+                                              topLeft: Radius.circular(16),
+                                              bottomLeft: Radius.circular(16),
+                                            ),
+                                          ),
+                                          SlidableAction(
+                                            onPressed: (context) => _confirmSoftDelete(inv),
+                                            backgroundColor: Colors.red,
+                                            foregroundColor: Colors.white,
+                                            icon: Icons.delete_rounded,
+                                            label: 'Xóa',
+                                            borderRadius: const BorderRadius.only(
+                                              topRight: Radius.circular(16),
+                                              bottomRight: Radius.circular(16),
+                                            ),
+                                          ),
+                                        ],
+                                ),
+                                child: card,
+                              );
+                            }
+
+                            return card;
                             },
                           ),
                   ],

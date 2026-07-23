@@ -136,10 +136,22 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         final isIncoming = invoice?.type != InvoiceType.outgoing;
 
         String txStatusText = 'Chưa tạo GD';
-        Color txStatusColor = const Color(0xFFF97316);
-        if (confirmedTx != null) {
-          txStatusText = 'Đã tạo GD';
-          txStatusColor = const Color(0xFF00D09E);
+        Color txStatusColor = const Color(0xFFF97316); // Orange
+        if (invoice != null) {
+          switch (invoice.transactionStatus) {
+            case InvoiceTransactionStatus.confirmedCreated:
+              txStatusText = 'Đã xác nhận GD';
+              txStatusColor = const Color(0xFF00D09E); // Green
+              break;
+            case InvoiceTransactionStatus.draftCreated:
+              txStatusText = 'Đã tạo GD nháp';
+              txStatusColor = const Color(0xFF3B82F6); // Blue
+              break;
+            case InvoiceTransactionStatus.notCreated:
+              txStatusText = 'Chưa tạo GD';
+              txStatusColor = const Color(0xFFF97316); // Orange
+              break;
+          }
         }
 
         return Scaffold(
