@@ -10,6 +10,9 @@ import '../../../core/providers/transaction_providers.dart';
 import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
+import '../../../core/sync/sync_item.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import 'package:collection/collection.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../../../core/widgets/app_dialogs.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -232,6 +235,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
+    final syncQueueService = ref.watch(syncQueueServiceProvider);
+    final queueItems = syncQueueService.queue;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(
       locale: 'vi_VN',
@@ -1176,16 +1181,42 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   CrossAxisAlignment.start,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Text(
-                                                  tx.title,
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    color: isDark
-                                                        ? Colors.white
-                                                        : Colors.black87,
-                                                  ),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        tx.title,
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 15,
+                                                          color: isDark ? Colors.white : Colors.black87,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    Builder(builder: (context) {
+                                                      final syncItem = queueItems.firstWhereOrNull((e) => e.entityId == tx.id);
+                                                      if (syncItem != null) {
+                                                        if (syncItem.status == SyncStatus.pending) {
+                                                          return const Icon(Icons.sync, color: Colors.blue, size: 16);
+                                                        } else {
+                                                          return const Icon(Icons.error_outline, color: Colors.red, size: 16);
+                                                        }
+                                                      } else {
+                                                        return const Icon(Icons.cloud_done_outlined, color: Colors.green, size: 16);
+                                                      }
+                                                    }),
+                                                  ],
                                                 ),
+                                                if (queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 4),
+                                                    child: Text(
+                                                      queueItems.firstWhereOrNull((e) => e.entityId == tx.id)?.errorMessage ?? 'Lỗi đồng bộ',
+                                                      style: const TextStyle(color: Colors.red, fontSize: 11, fontStyle: FontStyle.italic),
+                                                    ),
+                                                  ),
                                                 const SizedBox(height: 6),
                                                 Wrap(
                                                   spacing: 6,
@@ -1281,7 +1312,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   fontSize: 14,
                                                 ),
                                               ),
-                                              if (!isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) ...[
+                                              if (!isMobile && currentRole.canEditTransactions && (tx.status != TransactionStatus.confirmed || queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))) ...[
                                                 const SizedBox(width: 4),
                                                 PopupMenuButton<String>(
                                                   icon: Icon(
@@ -1412,7 +1443,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                               );
 
-                              if (isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) {
+                              if (isMobile && currentRole.canEditTransactions && (tx.status != TransactionStatus.confirmed || queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))) {
                                 card = Slidable(
                                   key: ValueKey(tx.id),
                                   endActionPane: ActionPane(

@@ -18,11 +18,22 @@ class TransactionRepositoryImpl implements TransactionRepository {
   String get _role => _currentUser?.role ?? '';
   CollectionReference get _collection => _firestore.collection('transactions');
 
+  Future<QuerySnapshot> _getWithCacheFallback(Query query) async {
+    try {
+      return await query.get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => query.get(const GetOptions(source: Source.cache)),
+      );
+    } catch (e) {
+      return await query.get(const GetOptions(source: Source.cache));
+    }
+  }
+
   @override
   Future<List<TransactionEntity>> getAll() async {
     if (_uid.isEmpty) return [];
     Query query = _collection.where('company', isEqualTo: _company);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -32,7 +43,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
     Query query = _collection
         .where('company', isEqualTo: _company)
         .where('status', isEqualTo: TransactionStatus.confirmed.name);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -43,7 +54,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
         .where('company', isEqualTo: _company)
         .where('transactionDate', isGreaterThanOrEqualTo: start.toIso8601String())
         .where('transactionDate', isLessThanOrEqualTo: end.toIso8601String());
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -53,16 +64,28 @@ class TransactionRepositoryImpl implements TransactionRepository {
     Query query = _collection
         .where('company', isEqualTo: _company)
         .where('type', isEqualTo: type.name);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<TransactionEntity?> getById(String id) async {
     if (_uid.isEmpty) return null;
-    final doc = await _collection.doc(id).get();
-    if (doc.exists) {
-      return TransactionModel.fromJson(doc.data() as Map<String, dynamic>);
+    try {
+      final doc = await _collection.doc(id).get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => _collection.doc(id).get(const GetOptions(source: Source.cache)),
+      );
+      if (doc.exists) {
+        return TransactionModel.fromJson(doc.data() as Map<String, dynamic>);
+      }
+    } catch (e) {
+      try {
+        final doc = await _collection.doc(id).get(const GetOptions(source: Source.cache));
+        if (doc.exists) {
+          return TransactionModel.fromJson(doc.data() as Map<String, dynamic>);
+        }
+      } catch (_) {}
     }
     return null;
   }
@@ -146,6 +169,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
       company: _company,
       createdAt: transaction.createdAt,
       updatedAt: transaction.updatedAt,
+      tags: transaction.tags,
     );
     await _collection.doc(transaction.id).set(model.toJson());
     if (transaction.invoiceId != null && transaction.invoiceId!.isNotEmpty) {

@@ -4,12 +4,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
+import '../core/sync/sync_worker.dart';
 
 class SmartFinanceApp extends ConsumerWidget {
   const SmartFinanceApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Initialize SyncWorker
+    ref.watch(syncWorkerProvider);
+
     final themeMode = ref.watch(themeProvider);
     final router = ref.watch(routerProvider);
 

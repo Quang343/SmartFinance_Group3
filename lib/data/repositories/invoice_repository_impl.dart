@@ -16,11 +16,22 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   String get _company => _currentUser?.company ?? '';
   CollectionReference get _collection => _firestore.collection('invoices');
 
+  Future<QuerySnapshot> _getWithCacheFallback(Query query) async {
+    try {
+      return await query.get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => query.get(const GetOptions(source: Source.cache)),
+      );
+    } catch (e) {
+      return await query.get(const GetOptions(source: Source.cache));
+    }
+  }
+
   @override
   Future<List<InvoiceEntity>> getAll() async {
     if (_uid.isEmpty) return [];
     Query query = _collection.where('company', isEqualTo: _company);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -30,16 +41,28 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     Query query = _collection
         .where('company', isEqualTo: _company)
         .where('ocrStatus', isEqualTo: status.name);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<InvoiceEntity?> getById(String id) async {
     if (_uid.isEmpty) return null;
-    final doc = await _collection.doc(id).get();
-    if (doc.exists) {
-      return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+    try {
+      final doc = await _collection.doc(id).get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => _collection.doc(id).get(const GetOptions(source: Source.cache)),
+      );
+      if (doc.exists) {
+        return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+      }
+    } catch (e) {
+      try {
+        final doc = await _collection.doc(id).get(const GetOptions(source: Source.cache));
+        if (doc.exists) {
+          return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+        }
+      } catch (_) {}
     }
     return null;
   }
