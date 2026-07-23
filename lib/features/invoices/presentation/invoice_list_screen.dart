@@ -181,34 +181,62 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               ),
             ),
-            // Desktop/Web: action button in AppBar so no FAB overlapping pagination bar
+            // Desktop/Web: prominent action button in AppBar with gradient & glow
             actions: isDesktopOrWeb && canManage
                 ? [
                     Padding(
                       padding: const EdgeInsets.only(right: 16),
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          if (isIncoming) {
-                            context.push('/invoices/capture');
-                          } else {
-                            context.push('/invoices/outgoing/new');
-                          }
-                        },
-                        icon: Icon(
-                          isIncoming ? Icons.qr_code_scanner_rounded : Icons.add_rounded,
-                          size: 18,
-                          color: Colors.white,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [primaryColor, gradientEnd],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withValues(alpha: 0.4),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        label: Text(
-                          isIncoming ? 'Quét hóa đơn' : 'Tạo Hóa đơn',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 0,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () {
+                              if (isIncoming) {
+                                context.push('/invoices/capture');
+                              } else {
+                                context.push('/invoices/outgoing/new');
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isIncoming ? Icons.qr_code_scanner_rounded : Icons.add_rounded,
+                                    size: 18,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    isIncoming ? 'Quét hóa đơn' : 'Tạo Hóa đơn',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -253,6 +281,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                   isIncoming: isIncoming,
                                   dateFormatter: dateFormatter,
                                   currencyFormatter: currencyFormatter,
+                                  isCompact: isDesktopOrWeb,
                                 );
                               },
                             ),
@@ -604,21 +633,22 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     required bool isIncoming,
     required DateFormat dateFormatter,
     required NumberFormat currencyFormatter,
+    bool isCompact = false,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: isCompact ? 6 : 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF0E2219) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(isCompact ? 12 : 16),
         boxShadow: [
-          if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
         ],
         border: Border.all(color: isDark ? const Color(0xFF1A382B) : const Color(0xFFEDF2F7), width: 1),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(isCompact ? 12 : 16),
           onTap: () {
             if (isIncoming) {
               context.push('/invoices/incoming/${inv.id}');
@@ -627,37 +657,37 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
             }
           },
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(isCompact ? 10 : 16),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(isIncoming ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded, color: primaryColor, size: 20),
+                  padding: EdgeInsets.all(isCompact ? 7 : 10),
+                  decoration: BoxDecoration(color: primaryColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(isIncoming ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded, color: primaryColor, size: isCompact ? 16 : 20),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: isCompact ? 10 : 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(inv.invoiceNumber, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF093021), fontSize: 16)),
-                      const SizedBox(height: 4),
+                      Text(inv.invoiceNumber, style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF093021), fontSize: isCompact ? 14 : 16)),
+                      SizedBox(height: isCompact ? 2 : 4),
                       Text(
                         '${inv.type == InvoiceType.incoming ? inv.sellerName : inv.buyerName} • ${dateFormatter.format(inv.issuedDate)}',
-                        style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: 12),
+                        style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontSize: isCompact ? 11 : 12),
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: isCompact ? 4 : 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: inv.transactionStatus == InvoiceTransactionStatus.created
-                              ? const Color(0xFF00D09E).withOpacity(0.1)
-                              : const Color(0xFFF97316).withOpacity(0.1),
+                              ? const Color(0xFF00D09E).withValues(alpha: 0.1)
+                              : const Color(0xFFF97316).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: inv.transactionStatus == InvoiceTransactionStatus.created
-                                ? const Color(0xFF00D09E).withOpacity(0.3)
-                                : const Color(0xFFF97316).withOpacity(0.3),
+                                ? const Color(0xFF00D09E).withValues(alpha: 0.3)
+                                : const Color(0xFFF97316).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Text(
@@ -675,10 +705,10 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(currencyFormatter.format(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? primaryColor : const Color(0xFF093021), fontSize: 15)),
+                    Text(currencyFormatter.format(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? primaryColor : const Color(0xFF093021), fontSize: isCompact ? 14 : 15)),
                     if (inv.vatAmount > 0) ...[
                       const SizedBox(height: 2),
-                      Text('Thuế: +${currencyFormatter.format(inv.vatAmount)}', style: const TextStyle(color: Colors.blue, fontSize: 10, fontWeight: FontWeight.w500)),
+                      Text('Thuế: +${currencyFormatter.format(inv.vatAmount)}', style: TextStyle(color: Colors.blue, fontSize: isCompact ? 9 : 10, fontWeight: FontWeight.w500)),
                     ],
                   ],
                 ),

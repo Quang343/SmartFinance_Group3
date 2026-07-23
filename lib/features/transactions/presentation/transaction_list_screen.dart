@@ -281,6 +281,56 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           ),
         ),
         actions: [
+          if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900)
+            if (currentRole.canEditTransactions)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF00D09E), Color(0xFF34D399)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00D09E).withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        context.push('/transactions/form');
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add_rounded, size: 18, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Tạo Giao dịch',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: Center(
@@ -447,7 +497,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ? ((totalCount > 0) ? list.sublist(startIndex, endIndex) : <TransactionEntity>[])
               : list;
 
-          return RefreshIndicator(
+          // ---------- Shared scrollable body (Desktop wraps in Expanded + sticky pagination) ----------
+          final scrollable = RefreshIndicator(
             color: primaryColor,
             onRefresh: () async {
               _refreshData(showLoading: false);
@@ -1538,17 +1589,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               );
                             },
                           ),
-                        if (isDesktopOrWeb)
-                          _buildPaginationBar(
-                            context: context,
-                            totalCount: totalCount,
-                            totalPages: totalPages,
-                            currentPage: currentPage,
-                            startIndex: startIndex,
-                            endIndex: endIndex,
-                            primaryColor: primaryColor,
-                            isDark: isDark,
-                          ),
+                        // Pagination for Desktop is rendered sticky outside the scroll area
                       ],
                     ),
                   ],
@@ -1556,9 +1597,29 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
             ),
           );
+
+          // Desktop: sticky pagination bar below the scrollable list
+          if (isDesktopOrWeb) {
+            return Column(
+              children: [
+                Expanded(child: scrollable),
+                _buildPaginationBar(
+                  context: context,
+                  totalCount: totalCount,
+                  totalPages: totalPages,
+                  currentPage: currentPage,
+                  startIndex: startIndex,
+                  endIndex: endIndex,
+                  primaryColor: primaryColor,
+                  isDark: isDark,
+                ),
+              ],
+            );
+          }
+          return scrollable;
         },
       ),
-      floatingActionButton: currentRole.canEditTransactions
+      floatingActionButton: (currentRole.canEditTransactions && !(kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900))
           ? ScaleOnTap(
               onTap: () {
                 context.push('/transactions/form');
