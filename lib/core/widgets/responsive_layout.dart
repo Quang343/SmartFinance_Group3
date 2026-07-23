@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/role_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/connectivity_provider.dart';
 import 'app_dialogs.dart';
 import 'scale_on_tap.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -306,7 +307,30 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
               }
             }
           },
-          child: widget.child,
+          child: Column(
+            children: [
+              Consumer(
+                builder: (context, ref, child) {
+                  final isConnected = ref.watch(connectivityProvider).value ?? true;
+                  if (isConnected) return const SizedBox.shrink();
+                  return SafeArea(
+                    bottom: false,
+                    child: Container(
+                      width: double.infinity,
+                      color: Colors.red,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: const Text(
+                        'Không có kết nối mạng. Đang hoạt động ngoại tuyến.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Expanded(child: widget.child),
+            ],
+          ),
         ),
         drawer: hasDrawer
             ? Drawer(
