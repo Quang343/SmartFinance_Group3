@@ -27,6 +27,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   String _selectedStatus = 'confirmed'; // 'all', 'confirmed', 'draft'
   String _selectedCategory = 'all'; 
+  String _selectedType = 'all'; // 'all', 'income', 'expense'
   DateTimeRange? _customDateRange;
   int _displayLimit = 15;
 
@@ -149,6 +150,40 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             color: isSelected
                 ? Colors.white
                 : (isDark ? const Color(0xFF00D09E) : Colors.black54),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeChip(String value, String label, bool isDark) {
+    final isSelected = _selectedType == value;
+    final color = value == 'income'
+        ? const Color(0xFF00D09E)
+        : (value == 'expense' ? const Color(0xFFEF4444) : Colors.blue);
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedType = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color
+              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? color : Colors.black54),
           ),
         ),
       ),
@@ -410,6 +445,14 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                 .toList();
           }
 
+          // Filter by type
+          if (_selectedType != 'all') {
+            final typeFilter = _selectedType == 'income'
+                ? TransactionType.income
+                : TransactionType.expense;
+            list = list.where((tx) => tx.type == typeFilter).toList();
+          }
+
           // Filter by search query
           if (_searchQuery.isNotEmpty) {
             list = list.where((tx) {
@@ -666,7 +709,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        _getPeriodTitle('Tổng Số Dư'),
+                                        '${_getPeriodTitle('Tổng số dư')} (${list.length})',
                                         style: TextStyle(
                                           color: isDark
                                               ? Colors.white70
@@ -684,9 +727,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                     child: Text(
                                       currencyFormatter.format(netBalance),
                                       style: TextStyle(
-                                        color: isDark
-                                            ? const Color(0xFF00D09E)
-                                            : const Color(0xFF093021),
+                                        color: netBalance < 0
+                                            ? const Color(0xFFEF4444)
+                                            : (isDark
+                                                ? const Color(0xFF00D09E)
+                                                : const Color(0xFF093021)),
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 0.5,
@@ -791,8 +836,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  _getPeriodTitle('Tổng Chi Tiêu'),
-                                  style: TextStyle(
+                                '${_getPeriodTitle('Tổng chi tiêu')} (${list.length})',
+                                style: TextStyle(
                                     color: isDark
                                         ? Colors.white70
                                         : Colors.black54,
@@ -867,8 +912,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  _getPeriodTitle('Tổng Doanh Thu'),
-                                  style: TextStyle(
+                                '${_getPeriodTitle('Tổng doanh thu')} (${list.length})',
+                                style: TextStyle(
                                     color: isDark
                                         ? Colors.white70
                                         : Colors.black54,
@@ -1020,6 +1065,41 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+
+              // Type Filter
+              if (currentRole == UserRole.financeManager)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Loại dòng tiền: ',
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black54,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildTypeChip('all', 'Tất cả', isDark),
+                              const SizedBox(width: 8),
+                              _buildTypeChip('income', 'Nhận (Thu)', isDark),
+                              const SizedBox(width: 8),
+                              _buildTypeChip('expense', 'Mất đi (Chi)', isDark),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (currentRole == UserRole.financeManager)
+                const SizedBox(height: 8),
 
               if (_selectedStatus == 'deleted')
                 Container(

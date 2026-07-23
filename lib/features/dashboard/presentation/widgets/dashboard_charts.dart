@@ -160,10 +160,20 @@ class DashboardCharts extends StatelessWidget {
     final sections = <PieChartSectionData>[];
     for (int i = 0; i < data.length; i++) {
       final pct = (data[i].value / total * 100);
+      final bool showTitle = pct >= 5.0;
+      
+      String displayPct;
+      if (pct > 0 && pct < 1.0) {
+        displayPct = '<1%';
+      } else {
+        displayPct = '${pct.toStringAsFixed(1).replaceAll('.0', '')}%';
+      }
+
       sections.add(
         PieChartSectionData(
           value: data[i].value.toDouble(),
-          title: '${pct.toStringAsFixed(0)}%',
+          title: displayPct,
+          showTitle: showTitle,
           color: colors[i % colors.length],
           radius: 35,
           titleStyle: const TextStyle(
@@ -195,6 +205,12 @@ class DashboardCharts extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: List.generate(data.length, (i) {
                 final pct = total > 0 ? (data[i].value / total * 100) : 0.0;
+                String displayPct;
+                if (pct > 0 && pct < 1.0) {
+                  displayPct = '<1%';
+                } else {
+                  displayPct = '${pct.toStringAsFixed(1).replaceAll('.0', '')}%';
+                }
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
@@ -219,7 +235,7 @@ class DashboardCharts extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${pct.toStringAsFixed(0)}%',
+                        displayPct,
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -251,11 +267,24 @@ class DashboardCharts extends StatelessWidget {
     final sorted = catTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
+    final List<MapEntry<String, int>> displayData = [];
+    int otherSum = 0;
+    for (int i = 0; i < sorted.length; i++) {
+      if (i < 5) {
+        displayData.add(sorted[i]);
+      } else {
+        otherSum += sorted[i].value;
+      }
+    }
+    if (otherSum > 0) {
+      displayData.add(MapEntry('Các mục khác', otherSum));
+    }
+
     return _buildChartCard(
       title: 'CHI PHÍ THEO DANH MỤC',
       height: 160,
       child: _buildDonutWithLegend(
-        data: sorted,
+        data: displayData,
         colors: _expenseColors,
         total: total,
       ),
@@ -276,11 +305,24 @@ class DashboardCharts extends StatelessWidget {
     final sorted = catTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
+    final List<MapEntry<String, int>> displayData = [];
+    int otherSum = 0;
+    for (int i = 0; i < sorted.length; i++) {
+      if (i < 5) {
+        displayData.add(sorted[i]);
+      } else {
+        otherSum += sorted[i].value;
+      }
+    }
+    if (otherSum > 0) {
+      displayData.add(MapEntry('Các mục khác', otherSum));
+    }
+
     return _buildChartCard(
       title: 'DOANH THU THEO DANH MỤC',
       height: 160,
       child: _buildDonutWithLegend(
-        data: sorted,
+        data: displayData,
         colors: _incomeColors,
         total: total,
       ),
