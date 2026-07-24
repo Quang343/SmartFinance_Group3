@@ -216,6 +216,18 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_GETMINMAXINFO: {
+      // Enforce minimum window dimensions to prevent UI layout overflow.
+      // Min width: 480px, Min height: 600px (logical pixels at 96 DPI).
+      auto* minMaxInfo = reinterpret_cast<MINMAXINFO*>(lparam);
+      // Get current DPI scale so the min size is DPI-aware.
+      UINT dpi = GetDpiForWindow(hwnd);
+      double scale = static_cast<double>(dpi) / 96.0;
+      minMaxInfo->ptMinTrackSize.x = static_cast<LONG>(480 * scale);
+      minMaxInfo->ptMinTrackSize.y = static_cast<LONG>(600 * scale);
+      return 0;
+    }
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
