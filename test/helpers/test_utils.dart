@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_finance/core/providers/app_providers.dart';
 import 'package:smart_finance/domain/repositories/transaction_repository.dart';
 import 'package:smart_finance/domain/entities/transaction_entity.dart';
 
@@ -38,9 +40,12 @@ class FakeTransactionRepository implements TransactionRepository {
   Future<void> update(TransactionEntity transaction) async {}
 }
 
-Widget createTestApp(Widget child, {List<Override> overrides = const []}) {
+Widget createTestApp(Widget child, {List<Override> overrides = const [], SharedPreferences? mockPrefs}) {
   return ProviderScope(
-    overrides: overrides,
+    overrides: [
+      if (mockPrefs != null) sharedPreferencesProvider.overrideWithValue(mockPrefs),
+      ...overrides,
+    ],
     child: MaterialApp(
       home: child,
       theme: ThemeData.light(),

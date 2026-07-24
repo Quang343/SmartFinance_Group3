@@ -25,10 +25,21 @@ class CategoryRepositoryImpl implements CategoryRepository {
     return query.where('createdByUid', isEqualTo: _uid);
   }
 
+  Future<QuerySnapshot> _getWithCacheFallback(Query query) async {
+    try {
+      return await query.get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => query.get(const GetOptions(source: Source.cache)),
+      );
+    } catch (e) {
+      return await query.get(const GetOptions(source: Source.cache));
+    }
+  }
+
   @override
   Future<List<CategoryEntity>> getAll() async {
     if (_uid.isEmpty) return [];
-    final snapshot = await _scopeQuery(_collection).get();
+    final snapshot = await _getWithCacheFallback(_scopeQuery(_collection));
     final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
     list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     return list;
@@ -37,7 +48,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Future<List<CategoryEntity>> getActive() async {
     if (_uid.isEmpty) return [];
-    final snapshot = await _scopeQuery(_collection).where('isActive', isEqualTo: true).get();
+    final snapshot = await _getWithCacheFallback(_scopeQuery(_collection).where('isActive', isEqualTo: true));
     final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
     list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     return list;
@@ -46,7 +57,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Future<List<CategoryEntity>> getByType(TransactionType type) async {
     if (_uid.isEmpty) return [];
-    final snapshot = await _scopeQuery(_collection).where('type', isEqualTo: type.name).where('isActive', isEqualTo: true).get();
+    final snapshot = await _getWithCacheFallback(_scopeQuery(_collection).where('type', isEqualTo: type.name).where('isActive', isEqualTo: true));
     final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
     list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     return list;
@@ -55,9 +66,21 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Future<CategoryEntity?> getById(String id) async {
     if (_uid.isEmpty) return null;
-    final doc = await _collection.doc(id).get();
-    if (doc.exists) {
-      return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
+    try {
+      final doc = await _collection.doc(id).get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => _collection.doc(id).get(const GetOptions(source: Source.cache)),
+      );
+      if (doc.exists) {
+        return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
+      }
+    } catch (e) {
+      try {
+        final doc = await _collection.doc(id).get(const GetOptions(source: Source.cache));
+        if (doc.exists) {
+          return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
+        }
+      } catch (_) {}
     }
     return null;
   }

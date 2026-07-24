@@ -18,7 +18,7 @@ class PartnerRepositoryImpl implements PartnerRepository {
         .collection(_collection)
         .where('company', isEqualTo: company)
         .orderBy('createdAt', descending: true)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .map((snapshot) {
       return snapshot.docs
           .map((doc) => PartnerModel.fromJson(doc.data(), doc.id))

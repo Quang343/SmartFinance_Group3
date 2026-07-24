@@ -11,10 +11,16 @@ import 'package:smart_finance/domain/entities/category_entity.dart';
 import 'package:smart_finance/features/transactions/presentation/transaction_list_screen.dart';
 
 import '../../../helpers/test_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('TransactionListScreen Widget Tests', () {
     testWidgets('Expense Accountant sees Giao dịch Chi phí title', (WidgetTester tester) async {
+      final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(createTestApp(
         const TransactionListScreen(),
         overrides: [
@@ -22,6 +28,7 @@ void main() {
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
           expenseTransactionsProvider.overrideWith((ref) => Future.value(<TransactionEntity>[])),
           allCategoriesProvider.overrideWith((ref) => Future.value(<CategoryEntity>[])),
+          sharedPreferencesProvider.overrideWithValue(prefs),
         ],
       ));
 
@@ -39,6 +46,7 @@ void main() {
     });
 
     testWidgets('Revenue Accountant sees Giao dịch Doanh thu title', (WidgetTester tester) async {
+      final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(createTestApp(
         const TransactionListScreen(),
         overrides: [
@@ -46,6 +54,7 @@ void main() {
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
           incomeTransactionsProvider.overrideWith((ref) => Future.value(<TransactionEntity>[])),
           allCategoriesProvider.overrideWith((ref) => Future.value(<CategoryEntity>[])),
+          sharedPreferencesProvider.overrideWithValue(prefs),
         ],
       ));
 
@@ -63,6 +72,7 @@ void main() {
     });
 
     testWidgets('Shows loading indicator when async value is loading', (WidgetTester tester) async {
+      final prefs = await SharedPreferences.getInstance();
       final transactionsCompleter = Completer<List<TransactionEntity>>();
       final categoriesCompleter = Completer<List<CategoryEntity>>();
 
@@ -73,6 +83,7 @@ void main() {
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
           expenseTransactionsProvider.overrideWith((ref) => transactionsCompleter.future),
           allCategoriesProvider.overrideWith((ref) => categoriesCompleter.future),
+          sharedPreferencesProvider.overrideWithValue(prefs),
         ],
       ));
 

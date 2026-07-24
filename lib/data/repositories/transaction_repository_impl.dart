@@ -18,11 +18,22 @@ class TransactionRepositoryImpl implements TransactionRepository {
   String get _role => _currentUser?.role ?? '';
   CollectionReference get _collection => _firestore.collection('transactions');
 
+  Future<QuerySnapshot> _getWithCacheFallback(Query query) async {
+    try {
+      return await query.get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => query.get(const GetOptions(source: Source.cache)),
+      );
+    } catch (e) {
+      return await query.get(const GetOptions(source: Source.cache));
+    }
+  }
+
   @override
   Future<List<TransactionEntity>> getAll() async {
     if (_uid.isEmpty) return [];
     Query query = _collection.where('company', isEqualTo: _company);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -32,7 +43,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
     Query query = _collection
         .where('company', isEqualTo: _company)
         .where('status', isEqualTo: TransactionStatus.confirmed.name);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -43,7 +54,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
         .where('company', isEqualTo: _company)
         .where('transactionDate', isGreaterThanOrEqualTo: start.toIso8601String())
         .where('transactionDate', isLessThanOrEqualTo: end.toIso8601String());
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
@@ -53,16 +64,28 @@ class TransactionRepositoryImpl implements TransactionRepository {
     Query query = _collection
         .where('company', isEqualTo: _company)
         .where('type', isEqualTo: type.name);
-    final snapshot = await query.get();
+    final snapshot = await _getWithCacheFallback(query);
     return snapshot.docs.map((doc) => TransactionModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
   }
 
   @override
   Future<TransactionEntity?> getById(String id) async {
     if (_uid.isEmpty) return null;
-    final doc = await _collection.doc(id).get();
-    if (doc.exists) {
-      return TransactionModel.fromJson(doc.data() as Map<String, dynamic>);
+    try {
+      final doc = await _collection.doc(id).get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => _collection.doc(id).get(const GetOptions(source: Source.cache)),
+      );
+      if (doc.exists) {
+        return TransactionModel.fromJson(doc.data() as Map<String, dynamic>);
+      }
+    } catch (e) {
+      try {
+        final doc = await _collection.doc(id).get(const GetOptions(source: Source.cache));
+        if (doc.exists) {
+          return TransactionModel.fromJson(doc.data() as Map<String, dynamic>);
+        }
+      } catch (_) {}
     }
     return null;
   }
@@ -146,17 +169,10 @@ class TransactionRepositoryImpl implements TransactionRepository {
       company: _company,
       createdAt: transaction.createdAt,
       updatedAt: transaction.updatedAt,
+      tags: transaction.tags,
     );
     await _collection.doc(transaction.id).set(model.toJson());
-    if (transaction.invoiceId != null && transaction.invoiceId!.isNotEmpty) {
-      final invStatus = transaction.status == TransactionStatus.confirmed
-          ? InvoiceTransactionStatus.created.name
-          : InvoiceTransactionStatus.notCreated.name;
-      await _firestore.collection('invoices').doc(transaction.invoiceId).update({
-        'transactionStatus': invStatus,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-    }
+    await _updateInvoiceTransactionStatus(transaction.invoiceId);
   }
 
   @override
@@ -182,19 +198,7 @@ class TransactionRepositoryImpl implements TransactionRepository {
       updatedAt: transaction.updatedAt,
     );
     await _collection.doc(transaction.id).update(model.toJson());
-    if (transaction.invoiceId != null && transaction.invoiceId!.isNotEmpty) {
-      final confirmedQuery = await _collection
-          .where('invoiceId', isEqualTo: transaction.invoiceId)
-          .where('status', isEqualTo: TransactionStatus.confirmed.name)
-          .get();
-      final invStatus = confirmedQuery.docs.isNotEmpty
-          ? InvoiceTransactionStatus.created.name
-          : InvoiceTransactionStatus.notCreated.name;
-      await _firestore.collection('invoices').doc(transaction.invoiceId).update({
-        'transactionStatus': invStatus,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-    }
+    await _updateInvoiceTransactionStatus(transaction.invoiceId);
   }
 
   @override
@@ -202,77 +206,50 @@ class TransactionRepositoryImpl implements TransactionRepository {
     if (_uid.isEmpty) return;
     await _checkImmutableStatus(id);
     final doc = await _collection.doc(id).get();
+    String? invoiceIdToUpdate;
     if (doc.exists) {
       final data = doc.data() as Map<String, dynamic>?;
-      final invoiceId = data?['invoiceId'] as String?;
-      if (invoiceId != null && invoiceId.isNotEmpty) {
-        final confirmedQuery = await _collection
-            .where('invoiceId', isEqualTo: invoiceId)
-            .where('status', isEqualTo: TransactionStatus.confirmed.name)
-            .get();
-        final remainingConfirmed = confirmedQuery.docs.where((d) => d.id != id).isNotEmpty;
-        await _firestore.collection('invoices').doc(invoiceId).update({
-          'transactionStatus': remainingConfirmed ? InvoiceTransactionStatus.created.name : InvoiceTransactionStatus.notCreated.name,
-          'updatedAt': DateTime.now().toIso8601String(),
-        });
-      }
+      invoiceIdToUpdate = data?['invoiceId'] as String?;
     }
     await _collection.doc(id).update({
       'status': TransactionStatus.deleted.name,
       'updatedAt': DateTime.now().toIso8601String(),
     });
+    await _updateInvoiceTransactionStatus(invoiceIdToUpdate);
   }
 
   @override
   Future<void> hardDelete(String id) async {
     if (_uid.isEmpty) return;
     final doc = await _collection.doc(id).get();
+    String? invoiceIdToUpdate;
     if (doc.exists) {
       final data = doc.data() as Map<String, dynamic>?;
-      final invoiceId = data?['invoiceId'] as String?;
-      if (invoiceId != null && invoiceId.isNotEmpty) {
-        final confirmedQuery = await _collection
-            .where('invoiceId', isEqualTo: invoiceId)
-            .where('status', isEqualTo: TransactionStatus.confirmed.name)
-            .get();
-        final remainingConfirmed = confirmedQuery.docs.where((d) => d.id != id).isNotEmpty;
-        await _firestore.collection('invoices').doc(invoiceId).update({
-          'transactionStatus': remainingConfirmed ? InvoiceTransactionStatus.created.name : InvoiceTransactionStatus.notCreated.name,
-          'updatedAt': DateTime.now().toIso8601String(),
-        });
-      }
+      invoiceIdToUpdate = data?['invoiceId'] as String?;
     }
     await _collection.doc(id).delete();
+    await _updateInvoiceTransactionStatus(invoiceIdToUpdate);
   }
 
   @override
   Future<void> restore(String id) async {
     if (_uid.isEmpty) return;
     final oldDoc = await _collection.doc(id).get();
+    String? invoiceIdToUpdate;
     if (oldDoc.exists) {
       final data = oldDoc.data() as Map<String, dynamic>?;
       final oldStatus = data?['status'] as String?;
       if (oldStatus == TransactionStatus.confirmed.name && _role != 'financeManager') {
         throw Exception("Giao dịch đã xác nhận. Chỉ Quản lý mới có quyền thao tác!");
       }
-      final invoiceId = data?['invoiceId'] as String?;
-      if (invoiceId != null && invoiceId.isNotEmpty) {
-        final confirmedQuery = await _collection
-            .where('invoiceId', isEqualTo: invoiceId)
-            .where('status', isEqualTo: TransactionStatus.confirmed.name)
-            .get();
-        final hasConfirmed = confirmedQuery.docs.isNotEmpty;
-        await _firestore.collection('invoices').doc(invoiceId).update({
-          'transactionStatus': hasConfirmed ? InvoiceTransactionStatus.created.name : InvoiceTransactionStatus.notCreated.name,
-          'updatedAt': DateTime.now().toIso8601String(),
-        });
-      }
+      invoiceIdToUpdate = data?['invoiceId'] as String?;
     }
     
     await _collection.doc(id).update({
       'status': TransactionStatus.draft.name,
       'updatedAt': DateTime.now().toIso8601String(),
     });
+    await _updateInvoiceTransactionStatus(invoiceIdToUpdate);
   }
 
   @override
@@ -295,5 +272,33 @@ class TransactionRepositoryImpl implements TransactionRepository {
       batch.delete(doc.reference);
     }
     await batch.commit();
+  }
+
+  Future<void> _updateInvoiceTransactionStatus(String? invoiceId) async {
+    if (invoiceId == null || invoiceId.isEmpty) return;
+    
+    QuerySnapshot txsQuery;
+    try {
+      txsQuery = await _collection.where('invoiceId', isEqualTo: invoiceId).get().timeout(const Duration(seconds: 1));
+    } catch (_) {
+      txsQuery = await _collection.where('invoiceId', isEqualTo: invoiceId).get(const GetOptions(source: Source.cache));
+    }
+    
+    final activeTxs = txsQuery.docs
+        .map((doc) => doc.data() as Map<String, dynamic>)
+        .where((tx) => tx['status'] != TransactionStatus.deleted.name)
+        .toList();
+    
+    InvoiceTransactionStatus newStatus = InvoiceTransactionStatus.notCreated;
+    if (activeTxs.any((tx) => tx['status'] == TransactionStatus.confirmed.name)) {
+      newStatus = InvoiceTransactionStatus.confirmedCreated;
+    } else if (activeTxs.isNotEmpty) {
+      newStatus = InvoiceTransactionStatus.draftCreated;
+    }
+    
+    await _firestore.collection('invoices').doc(invoiceId).update({
+      'transactionStatus': newStatus.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'dart:ui';
+import 'dart:async';
+import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -20,9 +22,14 @@ import '../../../core/utils/money_formatter.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/transaction_providers.dart';
+import '../../invoices/providers/invoice_provider.dart';
+import '../../invoices/presentation/invoice_preview_screen.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
 import '../../../domain/entities/attachment_entity.dart';
+import '../../../core/sync/sync_item.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import 'package:collection/collection.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../data/repositories/storage_repository.dart';
@@ -153,7 +160,26 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final repo = ref.read(transactionRepositoryProvider);
       final list = await repo.getAll();
       final index = list.indexWhere((tx) => tx.id == widget.transactionId);
-      if (index != -1) {
+      final queueService = ref.read(syncQueueServiceProvider);
+      final syncItem = queueService.queue.firstWhereOrNull((e) => e.entityId == widget.transactionId);
+      final hasError = syncItem != null && syncItem.status == SyncStatus.error;
+      final payload = syncItem?.payload;
+
+      if (payload != null) {
+        setState(() {
+          _titleController.text = payload['title'];
+          _amountController.text = NumberFormat.decimalPattern('vi_VN').format(payload['amount']);
+          _noteController.text = payload['note'] ?? '';
+          _type = payload['type'] == 'income' ? TransactionType.income : TransactionType.expense;
+          _categoryId = payload['categoryId'];
+          final statusStr = payload['status'];
+          _status = statusStr == 'confirmed' ? TransactionStatus.confirmed : (statusStr == 'deleted' ? TransactionStatus.deleted : TransactionStatus.draft);
+          _invoiceId = payload['invoiceId'];
+          _transactionDate = DateTime.parse(payload['transactionDate']);
+          _createdAt = DateTime.parse(payload['createdAt']);
+          _isReadOnly = widget.readOnly || ((_status == TransactionStatus.confirmed || _status == TransactionStatus.deleted) && !hasError);
+        });
+      } else if (index != -1) {
         final tx = list[index];
         setState(() {
           _titleController.text = tx.title;
@@ -165,9 +191,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           _invoiceId = tx.invoiceId;
           _transactionDate = tx.transactionDate;
           _createdAt = tx.createdAt;
-          _isReadOnly = tx.status == TransactionStatus.confirmed || tx.status == TransactionStatus.deleted;
+          _isReadOnly = widget.readOnly || ((tx.status == TransactionStatus.confirmed || tx.status == TransactionStatus.deleted) && !hasError);
         });
-
+      }
         // Also fetch attachment if exists
         final attachmentRepo = ref.read(attachmentRepositoryProvider);
         final attachments = await attachmentRepo.getByOwnerId(widget.transactionId!);
@@ -179,7 +205,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             _selectedAttachmentMimeType = att.mimeType;
           });
         }
-      }
     }
     
     // If we have an invoice linked, fetch its image
@@ -688,35 +713,56 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         tags: const [],
       );
 
-      if (widget.transactionId == null) {
-        await repo.create(transaction);
-        if (finalImagePath != null) {
-          final attachmentRepo = ref.read(attachmentRepositoryProvider);
-          final attachment = AttachmentEntity(
-            id: const Uuid().v4(),
-            ownerId: id,
-            ownerType: 'transaction',
-            filePath: finalImagePath,
-            fileName: attachmentFileName,
-            mimeType: attachmentMimeType,
-            createdAt: DateTime.now(),
-          );
-          await attachmentRepo.create(attachment);
+      final queueService = ref.read(syncQueueServiceProvider);
+      final syncItem = SyncItem(
+        id: const Uuid().v4(),
+        entityId: transaction.id,
+        collection: 'transactions',
+        action: widget.transactionId == null ? SyncAction.create : SyncAction.update,
+        payload: {
+          'id': transaction.id,
+          'amount': transaction.amount,
+          'type': transaction.type.name,
+          'categoryId': transaction.categoryId,
+          'transactionDate': transaction.transactionDate.toIso8601String(),
+          'status': transaction.status.name,
+          'title': transaction.title,
+          'note': transaction.note,
+          'invoiceId': transaction.invoiceId,
+          'createdAt': transaction.createdAt.toIso8601String(),
+          'updatedAt': transaction.updatedAt.toIso8601String(),
+          'tags': transaction.tags,
+        },
+      );
+      await queueService.enqueue(syncItem);
+
+      try {
+        final futures = <Future>[];
+        if (widget.transactionId == null) {
+          futures.add(repo.create(transaction));
+        } else {
+          futures.add(repo.update(transaction));
         }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Tạo giao dịch thành công!'), backgroundColor: Colors.green),
-          );
-        }
-      } else {
-        await repo.update(transaction);
+        final attachmentRepo = ref.read(attachmentRepositoryProvider);
         if (finalImagePath != null) {
-          final attachmentRepo = ref.read(attachmentRepositoryProvider);
-          final existing = await attachmentRepo.getByOwnerId(id);
-          if (existing.isEmpty || existing.first.filePath != finalImagePath) {
-            if (existing.isNotEmpty) {
-              await attachmentRepo.delete(existing.first.id);
+          if (widget.transactionId != null) {
+            final existing = await attachmentRepo.getByOwnerId(id);
+            if (existing.isNotEmpty && existing.first.filePath != finalImagePath) {
+              futures.add(attachmentRepo.delete(existing.first.id));
             }
+            if (existing.isEmpty || existing.first.filePath != finalImagePath) {
+              final attachment = AttachmentEntity(
+                id: const Uuid().v4(),
+                ownerId: id,
+                ownerType: 'transaction',
+                filePath: finalImagePath,
+                fileName: attachmentFileName,
+                mimeType: attachmentMimeType,
+                createdAt: DateTime.now(),
+              );
+              futures.add(attachmentRepo.create(attachment));
+            }
+          } else {
             final attachment = AttachmentEntity(
               id: const Uuid().v4(),
               ownerId: id,
@@ -726,20 +772,38 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               mimeType: attachmentMimeType,
               createdAt: DateTime.now(),
             );
-            await attachmentRepo.create(attachment);
+            futures.add(attachmentRepo.create(attachment));
           }
-        } else {
-          final attachmentRepo = ref.read(attachmentRepositoryProvider);
+        } else if (widget.transactionId != null) {
           final existing = await attachmentRepo.getByOwnerId(id);
           if (existing.isNotEmpty) {
-            await attachmentRepo.delete(existing.first.id);
+            futures.add(attachmentRepo.delete(existing.first.id));
           }
         }
+
+        await Future.wait(futures).timeout(const Duration(seconds: 3));
+        await queueService.removeItem(syncItem.id);
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cập nhật giao dịch thành công!'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(widget.transactionId == null ? 'Tạo giao dịch thành công!' : 'Cập nhật giao dịch thành công!'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
+      } on TimeoutException {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã lưu ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        await queueService.removeItem(syncItem.id);
+        throw e;
       }
 
 
@@ -748,13 +812,12 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       ref.invalidate(allTransactionsProvider);
       ref.invalidate(incomeTransactionsProvider);
       ref.invalidate(expenseTransactionsProvider);
+      if (_invoiceId != null) {
+        ref.invalidate(allInvoicesProvider);
+      }
 
       if (mounted) {
-        if (Navigator.canPop(context)) {
-          context.pop(true);
-        } else {
-          context.go('/transactions');
-        }
+        context.go('/transactions');
       }
     } catch (e) {
       if (mounted) {
@@ -781,24 +844,61 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       confirmText: 'Xóa giao dịch',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.softDelete(widget.transactionId!);
+        final queueService = ref.read(syncQueueServiceProvider);
 
+        final payload = {
+          'id': widget.transactionId,
+          'amount': int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0,
+          'type': _type.name,
+          'categoryId': _categoryId,
+          'transactionDate': _transactionDate.toIso8601String(),
+          'status': TransactionStatus.deleted.name,
+          'title': _titleController.text.trim(),
+          'note': _noteController.text.trim(),
+          'invoiceId': _invoiceId,
+          'createdAt': _createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': const [],
+        };
 
-        
-        // Refresh list
-        ref.invalidate(allTransactionsProvider);
-        ref.invalidate(incomeTransactionsProvider);
-        ref.invalidate(expenseTransactionsProvider);
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
-          );
-          if (Navigator.canPop(context)) {
-            context.pop();
-          } else {
-            context.go('/transactions');
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: widget.transactionId!,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.softDelete(widget.transactionId!).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
+            );
           }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          ref.invalidate(allTransactionsProvider);
+          ref.invalidate(incomeTransactionsProvider);
+          ref.invalidate(expenseTransactionsProvider);
+          if (_invoiceId != null) {
+            ref.invalidate(allInvoicesProvider);
+          }
+          if (mounted) context.go('/transactions');
         }
       },
     );
@@ -814,18 +914,61 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       confirmText: 'Khôi phục',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.restore(widget.transactionId!);
+        final queueService = ref.read(syncQueueServiceProvider);
 
+        final payload = {
+          'id': widget.transactionId,
+          'amount': int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0,
+          'type': _type.name,
+          'categoryId': _categoryId,
+          'transactionDate': _transactionDate.toIso8601String(),
+          'status': TransactionStatus.draft.name,
+          'title': _titleController.text.trim(),
+          'note': _noteController.text.trim(),
+          'invoiceId': _invoiceId,
+          'createdAt': _createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': const [],
+        };
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
-          );
-          if (Navigator.canPop(context)) {
-            context.pop();
-          } else {
-            context.go('/transactions');
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: widget.transactionId!,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.restore(widget.transactionId!).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
+            );
           }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã khôi phục ngoại tuyến. Sẽ đồng bộ khi có mạng.'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          ref.invalidate(allTransactionsProvider);
+          ref.invalidate(incomeTransactionsProvider);
+          ref.invalidate(expenseTransactionsProvider);
+          if (_invoiceId != null) {
+            ref.invalidate(allInvoicesProvider);
+          }
+          if (mounted) context.go('/transactions');
         }
       },
     );
@@ -1191,11 +1334,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         leading: Center(
           child: ScaleOnTap(
             onTap: () {
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              } else {
-                context.go('/transactions');
-              }
+              context.go('/transactions');
             },
             child: Container(
               padding: const EdgeInsets.all(8),

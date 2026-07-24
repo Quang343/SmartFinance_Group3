@@ -14,7 +14,20 @@ import '../../domain/repositories/attachment_repository.dart';
 import '../../data/repositories/partner_repository_impl.dart';
 import '../../data/repositories/partner_repository.dart';
 import '../../domain/entities/partner_entity.dart';
+import '../sync/sync_queue_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_provider.dart';
+
+// --- Offline Sync Providers ---
+final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+  throw UnimplementedError('sharedPreferencesProvider must be overridden in main.dart');
+});
+
+final syncQueueServiceProvider = ChangeNotifierProvider<SyncQueueService>((ref) {
+  return SyncQueueService(ref.watch(sharedPreferencesProvider));
+});
+// ------------------------------
+
 
 final categoryRepositoryProvider = Provider<CategoryRepository>((ref) {
   final user = ref.watch(currentUserProvider);

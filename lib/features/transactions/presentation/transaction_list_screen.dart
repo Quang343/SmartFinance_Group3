@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -5,16 +6,22 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/transaction_providers.dart';
 import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
+import '../../../core/sync/sync_item.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import 'package:collection/collection.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../../../core/widgets/app_dialogs.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import '../../../core/widgets/horizontal_scroll_wrapper.dart';
 
 class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
@@ -67,14 +74,60 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       confirmText: 'Xóa giao dịch',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.softDelete(tx.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã xóa giao dịch thành công!'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final payload = {
+          'id': tx.id,
+          'amount': tx.amount,
+          'type': tx.type.name,
+          'categoryId': tx.categoryId,
+          'transactionDate': tx.transactionDate.toIso8601String(),
+          'status': TransactionStatus.deleted.name,
+          'title': tx.title,
+          'note': tx.note,
+          'invoiceId': tx.invoiceId,
+          'createdAt': tx.createdAt.toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': tx.tags,
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.softDelete(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã chuyển giao dịch vào thùng rác!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
           _refreshData();
         }
       },
@@ -91,14 +144,60 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       confirmText: 'Khôi phục',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.restore(tx.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final payload = {
+          'id': tx.id,
+          'amount': tx.amount,
+          'type': tx.type.name,
+          'categoryId': tx.categoryId,
+          'transactionDate': tx.transactionDate.toIso8601String(),
+          'status': TransactionStatus.draft.name,
+          'title': tx.title,
+          'note': tx.note,
+          'invoiceId': tx.invoiceId,
+          'createdAt': tx.createdAt.toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': tx.tags,
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.restore(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã khôi phục ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
           _refreshData();
         }
       },
@@ -115,21 +214,52 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
       confirmText: 'Xóa vĩnh viễn',
       onConfirm: () async {
         final repo = ref.read(transactionRepositoryProvider);
-        await repo.hardDelete(tx.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã xóa vĩnh viễn giao dịch'),
-              backgroundColor: Colors.red,
-            ),
-          );
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.delete,
+          payload: {},
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.hardDelete(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa vĩnh viễn giao dịch'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
           _refreshData();
         }
       },
     );
   }
 
-  Widget _buildStatusChip(String value, String label, bool isDark) {
+  Widget _buildStatusChip(String value, String label, bool isDark, int count) {
     final isSelected = _selectedStatus == value;
     return InkWell(
       onTap: () {
@@ -147,7 +277,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
-          label,
+          '$label ($count)',
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
@@ -271,6 +401,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
+    final syncQueueService = ref.watch(syncQueueServiceProvider);
+    final queueItems = syncQueueService.queue;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(
       locale: 'vi_VN',
@@ -366,52 +498,31 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                   ),
                 ),
               ),
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E382B)
-                      : const Color(0xFFE8F6F1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF00D09E).withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF00D09E),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      currentRole == UserRole.expenseAccountant
-                          ? 'Kế toán Chi phí'
-                          : currentRole == UserRole.revenueAccountant
-                          ? 'Kế toán Doanh thu'
-                          : 'Quản lý',
-                      style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF00D09E),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.red),
+            tooltip: 'Xóa toàn bộ data',
+            onPressed: () {
+              AppDialogs.showConfirmDialog(
+                context: context,
+                title: 'Xóa toàn bộ dữ liệu',
+                message: 'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu hóa đơn và giao dịch không? Hành động này không thể hoàn tác.',
+                icon: Icons.warning_amber_rounded,
+                color: Colors.redAccent,
+                confirmText: 'Xóa toàn bộ',
+                onConfirm: () async {
+                  final db = FirebaseFirestore.instance;
+                  final invs = await db.collection('invoices').get();
+                  for(var doc in invs.docs) { await doc.reference.delete(); }
+                  final trans = await db.collection('transactions').get();
+                  for(var doc in trans.docs) { await doc.reference.delete(); }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa toàn bộ data!')));
+                  }
+                  _refreshData();
+                },
+              );
+            },
+          )
         ],
       ),
       body: Builder(
@@ -461,8 +572,14 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
           final catMap = {for (var c in allCats) c.id: c};
 
+          // Pre-filter by time period to calculate accurate status counts
+          var timeFilteredList = allTxs.where((tx) => _isWithinPeriod(tx.transactionDate)).toList();
+          final allCount = timeFilteredList.where((tx) => tx.status != TransactionStatus.deleted).length;
+          final confirmedCount = timeFilteredList.where((tx) => tx.status == TransactionStatus.confirmed).length;
+          final draftCount = timeFilteredList.where((tx) => tx.status == TransactionStatus.draft).length;
+
           // Filter by status and handle 'deleted' explicitly
-          var list = allTxs;
+          var list = timeFilteredList;
           if (_selectedStatus == 'deleted') {
             list = list
                 .where((tx) => tx.status == TransactionStatus.deleted)
@@ -475,11 +592,6 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           }
 
           // Note: No need to filter by role here because the Provider already filtered it!
-
-          // Filter by time period
-          list = list
-              .where((tx) => _isWithinPeriod(tx.transactionDate))
-              .toList();
 
           // Filter by status
           if (_selectedStatus == 'confirmed') {
@@ -579,12 +691,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                           : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      _buildPeriodTab('all', 'Tất cả'),
-                      _buildPeriodTab('today', 'Hôm nay'),
-                      _buildPeriodTab('month', 'Tháng này'),
-                      _buildPeriodTab('year', 'Năm nay'),
+                  child: HorizontalScrollWrapper(
+child: Row(
+                      children: [
+                        _buildPeriodTab('all', 'Tất cả'),
+                        _buildPeriodTab('today', 'Hôm nay'),
+                        _buildPeriodTab('month', 'Tháng này'),
+                        _buildPeriodTab('year', 'Năm nay'),
                       Container(
                         height: 20,
                         width: 1,
@@ -713,9 +826,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                       ),
                     ],
                   ),
-                ),
+                ), // end SingleChildScrollView
               ),
-              // Header balance layout matching the user request
+              ),
+                // Header balance layout matching the user request
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1069,19 +1183,19 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: HorizontalScrollWrapper(
+child: Row(
                           children: [
-                            _buildStatusChip('all', 'Tất cả', isDark),
+                            _buildStatusChip('all', 'Tất cả', isDark, allCount),
                             const SizedBox(width: 8),
                             _buildStatusChip(
                               'confirmed',
                               'Đã xác nhận',
                               isDark,
+                              confirmedCount,
                             ),
                             const SizedBox(width: 8),
-                            _buildStatusChip('draft', 'Bản nháp', isDark),
+                            _buildStatusChip('draft', 'Bản nháp', isDark, draftCount),
                           ],
                         ),
                       ),
@@ -1108,9 +1222,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: HorizontalScrollWrapper(
+child: Row(
                           children: [
                             _buildCategoryChip('all', 'Tất cả', isDark, primaryColor),
                             ...allCats.map((cat) {
@@ -1123,6 +1236,27 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               );
                             }),
                           ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Note about editing
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 12, color: primaryColor.withOpacity(0.8)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Chỉ có thể sửa hoặc xóa đối với giao dịch "Bản nháp"',
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
@@ -1147,9 +1281,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
+                        child: HorizontalScrollWrapper(
+child: Row(
                             children: [
                               _buildTypeChip('all', 'Tất cả', isDark),
                               const SizedBox(width: 8),
@@ -1366,16 +1499,42 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   CrossAxisAlignment.start,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Text(
-                                                  tx.title,
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    color: isDark
-                                                        ? Colors.white
-                                                        : Colors.black87,
-                                                  ),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        tx.title,
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 15,
+                                                          color: isDark ? Colors.white : Colors.black87,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    Builder(builder: (context) {
+                                                      final syncItem = queueItems.firstWhereOrNull((e) => e.entityId == tx.id);
+                                                      if (syncItem != null) {
+                                                        if (syncItem.status == SyncStatus.pending) {
+                                                          return const Icon(Icons.sync, color: Colors.blue, size: 16);
+                                                        } else {
+                                                          return const Icon(Icons.error_outline, color: Colors.red, size: 16);
+                                                        }
+                                                      } else {
+                                                        return const Icon(Icons.cloud_done_outlined, color: Colors.green, size: 16);
+                                                      }
+                                                    }),
+                                                  ],
                                                 ),
+                                                if (queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 4),
+                                                    child: Text(
+                                                      queueItems.firstWhereOrNull((e) => e.entityId == tx.id)?.errorMessage ?? 'Lỗi đồng bộ',
+                                                      style: const TextStyle(color: Colors.red, fontSize: 11, fontStyle: FontStyle.italic),
+                                                    ),
+                                                  ),
                                                 const SizedBox(height: 6),
                                                 Wrap(
                                                   spacing: 6,
@@ -1471,7 +1630,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   fontSize: 14,
                                                 ),
                                               ),
-                                              if (!isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) ...[
+                                              if (!isMobile && currentRole.canEditTransactions && (tx.status != TransactionStatus.confirmed || queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))) ...[
                                                 const SizedBox(width: 4),
                                                 PopupMenuButton<String>(
                                                   icon: Icon(
@@ -1602,7 +1761,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                               );
 
-                              if (isMobile && currentRole.canEditTransactions && tx.status != TransactionStatus.confirmed) {
+                              if (isMobile && currentRole.canEditTransactions && (tx.status != TransactionStatus.confirmed || queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))) {
                                 card = Slidable(
                                   key: ValueKey(tx.id),
                                   endActionPane: ActionPane(
@@ -1772,7 +1931,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     final isSelected = _selectedPeriod == id;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Expanded(
+    return Padding(
+      padding: EdgeInsets.zero,
       child: GestureDetector(
         onTap: () {
           setState(() {
@@ -1780,7 +1940,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFF00D09E) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -1974,17 +2134,19 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           if (isCompact) {
             return Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 10,
                   children: [
                     infoText,
                     itemsPerPageDropdown,
                   ],
                 ),
                 const SizedBox(height: 10),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+                HorizontalScrollWrapper(
+child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: pageButtons,
                   ),
