@@ -55,47 +55,16 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         final queueService = ref.read(syncQueueServiceProvider);
         final invoiceRepo = ref.read(invoiceRepositoryProvider);
         
-        final updatedModel = InvoiceModel(
-          id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          formNumber: invoice.formNumber,
-          serialNumber: invoice.serialNumber,
-          sellerName: invoice.sellerName,
-          sellerTaxCode: invoice.sellerTaxCode,
-          sellerAddress: invoice.sellerAddress,
-          sellerPhone: invoice.sellerPhone,
-          sellerBankName: invoice.sellerBankName,
-          sellerBankAccount: invoice.sellerBankAccount,
-          buyerContactName: invoice.buyerContactName,
-          buyerName: invoice.buyerName,
-          buyerTaxCode: invoice.buyerTaxCode,
-          buyerAddress: invoice.buyerAddress,
-          buyerBankName: invoice.buyerBankName,
-          buyerBankAccount: invoice.buyerBankAccount,
-          paymentMethod: invoice.paymentMethod,
-          items: invoice.items,
-          subtotal: invoice.subtotal,
-          vatRate: invoice.vatRate,
-          vatAmount: invoice.vatAmount,
-          totalAmount: invoice.totalAmount,
-          ocrStatus: invoice.ocrStatus,
-          transactionStatus: invoice.transactionStatus,
-          ocrConfidence: invoice.ocrConfidence,
-          type: invoice.type,
-          issuedDate: invoice.issuedDate,
-          createdAt: invoice.createdAt,
-          updatedAt: DateTime.now(),
-          imagePath: invoice.imagePath,
-          status: InvoiceStatus.deleted, // Update status
-        );
-
-        final syncItem = SyncItem(
-          id: const Uuid().v4(),
-          collection: 'invoices',
-          action: SyncAction.update,
-          entityId: invoice.id,
-          payload: updatedModel.toJson(),
-        );
+                  final syncItem = SyncItem(
+            id: const Uuid().v4(),
+            collection: 'invoices',
+            action: SyncAction.update,
+            entityId: invoice.id,
+            payload: {
+              'status': InvoiceStatus.deleted.name,
+              'updatedAt': DateTime.now().toIso8601String(),
+            },
+          );
 
         await queueService.enqueue(syncItem);
 
@@ -139,47 +108,16 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         final queueService = ref.read(syncQueueServiceProvider);
         final invoiceRepo = ref.read(invoiceRepositoryProvider);
         
-        final updatedModel = InvoiceModel(
-          id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          formNumber: invoice.formNumber,
-          serialNumber: invoice.serialNumber,
-          sellerName: invoice.sellerName,
-          sellerTaxCode: invoice.sellerTaxCode,
-          sellerAddress: invoice.sellerAddress,
-          sellerPhone: invoice.sellerPhone,
-          sellerBankName: invoice.sellerBankName,
-          sellerBankAccount: invoice.sellerBankAccount,
-          buyerContactName: invoice.buyerContactName,
-          buyerName: invoice.buyerName,
-          buyerTaxCode: invoice.buyerTaxCode,
-          buyerAddress: invoice.buyerAddress,
-          buyerBankName: invoice.buyerBankName,
-          buyerBankAccount: invoice.buyerBankAccount,
-          paymentMethod: invoice.paymentMethod,
-          items: invoice.items,
-          subtotal: invoice.subtotal,
-          vatRate: invoice.vatRate,
-          vatAmount: invoice.vatAmount,
-          totalAmount: invoice.totalAmount,
-          ocrStatus: invoice.ocrStatus,
-          transactionStatus: invoice.transactionStatus,
-          ocrConfidence: invoice.ocrConfidence,
-          type: invoice.type,
-          issuedDate: invoice.issuedDate,
-          createdAt: invoice.createdAt,
-          updatedAt: DateTime.now(),
-          imagePath: invoice.imagePath,
-          status: InvoiceStatus.active, // Khôi phục
-        );
-
-        final syncItem = SyncItem(
-          id: const Uuid().v4(),
-          collection: 'invoices',
-          action: SyncAction.update,
-          entityId: invoice.id,
-          payload: updatedModel.toJson(),
-        );
+                  final syncItem = SyncItem(
+            id: const Uuid().v4(),
+            collection: 'invoices',
+            action: SyncAction.update,
+            entityId: invoice.id,
+            payload: {
+              'status': InvoiceStatus.active.name,
+              'updatedAt': DateTime.now().toIso8601String(),
+            },
+          );
 
         await queueService.enqueue(syncItem);
 

@@ -21,6 +21,7 @@ import 'package:collection/collection.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../../../core/widgets/app_dialogs.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import '../../../core/widgets/horizontal_scroll_wrapper.dart';
 
 class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
@@ -690,12 +691,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                           : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      _buildPeriodTab('all', 'Tất cả'),
-                      _buildPeriodTab('today', 'Hôm nay'),
-                      _buildPeriodTab('month', 'Tháng này'),
-                      _buildPeriodTab('year', 'Năm nay'),
+                  child: HorizontalScrollWrapper(
+child: Row(
+                      children: [
+                        _buildPeriodTab('all', 'Tất cả'),
+                        _buildPeriodTab('today', 'Hôm nay'),
+                        _buildPeriodTab('month', 'Tháng này'),
+                        _buildPeriodTab('year', 'Năm nay'),
                       Container(
                         height: 20,
                         width: 1,
@@ -824,9 +826,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                       ),
                     ],
                   ),
-                ),
+                ), // end SingleChildScrollView
               ),
-              // Header balance layout matching the user request
+              ),
+                // Header balance layout matching the user request
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1180,9 +1183,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: HorizontalScrollWrapper(
+child: Row(
                           children: [
                             _buildStatusChip('all', 'Tất cả', isDark, allCount),
                             const SizedBox(width: 8),
@@ -1220,9 +1222,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: HorizontalScrollWrapper(
+child: Row(
                           children: [
                             _buildCategoryChip('all', 'Tất cả', isDark, primaryColor),
                             ...allCats.map((cat) {
@@ -1280,9 +1281,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
+                        child: HorizontalScrollWrapper(
+child: Row(
                             children: [
                               _buildTypeChip('all', 'Tất cả', isDark),
                               const SizedBox(width: 8),
@@ -1931,7 +1931,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     final isSelected = _selectedPeriod == id;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Expanded(
+    return Padding(
+      padding: EdgeInsets.zero,
       child: GestureDetector(
         onTap: () {
           setState(() {
@@ -1939,7 +1940,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFF00D09E) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -2133,17 +2134,19 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           if (isCompact) {
             return Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 10,
                   children: [
                     infoText,
                     itemsPerPageDropdown,
                   ],
                 ),
                 const SizedBox(height: 10),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+                HorizontalScrollWrapper(
+child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: pageButtons,
                   ),
