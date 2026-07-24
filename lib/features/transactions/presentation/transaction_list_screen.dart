@@ -399,7 +399,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) { 
     final currentRole = ref.watch(roleProvider);
     final syncQueueService = ref.watch(syncQueueServiceProvider);
     final queueItems = syncQueueService.queue;
