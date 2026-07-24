@@ -172,6 +172,31 @@ class ResponsiveLayout extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(connectivityProvider, (previous, next) {
+      final wasConnected = previous?.value ?? true;
+      final isConnected = next.value ?? true;
+      
+      if (wasConnected && !isConnected) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+      } else if (!wasConnected && isConnected) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.wifi, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(child: Text('Đã khôi phục kết nối mạng. Đang đồng bộ...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+
     final currentRole = ref.watch(roleProvider);
     final navItems = _getNavigationItems(currentRole);
 
@@ -309,25 +334,8 @@ class _MobileScaffoldState extends ConsumerState<_MobileScaffold> {
           },
           child: Column(
             children: [
-              Consumer(
-                builder: (context, ref, child) {
-                  final isConnected = ref.watch(connectivityProvider).value ?? true;
-                  if (isConnected) return const SizedBox.shrink();
-                  return SafeArea(
-                    bottom: false,
-                    child: Container(
-                      width: double.infinity,
-                      color: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: const Text(
-                        'Không có kết nối mạng. Đang hoạt động ngoại tuyến.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              const _OfflineBanner(),
+              // Connectivity Banner has been replaced by global SnackBar listener
               Expanded(child: widget.child),
             ],
           ),
@@ -726,8 +734,62 @@ class _DesktopScaffold extends ConsumerWidget {
             },
           ),
           const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: child),
+          Expanded(
+            child: Column(
+              children: [
+                const _OfflineBanner(),
+                Expanded(child: child),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _OfflineBanner extends ConsumerWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isConnected = ref.watch(connectivityProvider).value ?? true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return AnimatedCrossFade(
+      duration: const Duration(milliseconds: 300),
+      crossFadeState: isConnected ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+      firstChild: const SizedBox(width: double.infinity, height: 0),
+      secondChild: SafeArea(
+        bottom: false,
+        child: Container(
+          width: double.infinity,
+          color: isDark ? Colors.red.shade900 : Colors.red.shade600,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.cloud_off_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Đang hoạt động ngoại tuyến. Dữ liệu sẽ được đồng bộ khi có mạng.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

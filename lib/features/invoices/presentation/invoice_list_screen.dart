@@ -20,6 +20,7 @@ import 'dart:math';
 import 'package:uuid/uuid.dart';
 import '../../../core/sync/sync_item.dart';
 import '../../../data/models/invoice_model.dart';
+import '../../../core/widgets/horizontal_scroll_wrapper.dart';
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
   final String type; // 'incoming' or 'outgoing'
@@ -437,7 +438,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         
         int startIndex = (_currentPage - 1) * _itemsPerPage;
         int endIndex = min(startIndex + _itemsPerPage, totalCount);
-        List<InvoiceEntity> displayList = isDesktopOrWeb ? list.sublist(startIndex, endIndex) : list;
+        List<InvoiceEntity> displayList = isDesktopOrWeb
+            ? list.sublist(startIndex, endIndex)
+            : list.sublist(0, min(_displayLimit, list.length));
 
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
@@ -547,13 +550,28 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               )
             ],
           ),
-          body: RefreshIndicator(
+          body: Builder(
+            builder: (context) {
+              final scrollable = RefreshIndicator(
             onRefresh: _refreshInvoices,
             color: primaryColor,
-            child: SingleChildScrollView(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (ScrollNotification scrollInfo) {
+                if (!isDesktopOrWeb && scrollInfo.metrics.extentAfter < 50 && list.length > _displayLimit) {
+                  if (_displayLimit < list.length) {
+                    setState(() {
+                      _displayLimit = min(_displayLimit + 15, list.length);
+                    });
+                  }
+                  return true;
+                }
+                return false;
+              },
+              child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 children: [
+
               // Period Filter Tabs
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -839,8 +857,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
+                      child: HorizontalScrollWrapper(
                         child: Row(
                           children: [
                             _buildFilterChip('all', 'Tất cả', isDark, primaryColor, allCount),
@@ -900,12 +917,68 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
-                          itemCount: displayList.length,
-                          itemBuilder: (context, index) {
-                            final isMobile = MediaQuery.of(context).size.width < 600;
-                            final inv = displayList[index];
-                            Widget card = Container(
+                      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
+                      itemCount: displayList.length + (isDesktopOrWeb ? 0 : 1),
+                      itemBuilder: (context, index) {
+                        // Footer item for Mobile infinite scroll
+                        if (!isDesktopOrWeb && index == displayList.length) {
+                          if (_displayLimit < list.length) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20.0),
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF0F2C20) : const Color(0xFFF0FDF4),
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: primaryColor.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 18, height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2.5, color: primaryColor),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        'Đang tải thêm hóa đơn...',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? primaryColor : const Color(0xFF065F46),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20.0),
+                            child: Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle_outline_rounded, size: 16, color: isDark ? Colors.white38 : Colors.grey),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Đã hiển thị tất cả ${list.length} hóa đơn',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? Colors.white38 : Colors.grey,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        final isMobile = MediaQuery.of(context).size.width < 600;
+                        final inv = displayList[index];
+                        Widget card = Container(
                               margin: const EdgeInsets.only(bottom: 12),
                               decoration: BoxDecoration(
                                 color: isDark ? const Color(0xFF0E2219) : Colors.white,
@@ -934,6 +1007,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                       context.push('/invoices/outgoing/${inv.id}');
                                     }
                                   },
+
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
                                     child: Row(
@@ -1172,21 +1246,34 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                             return card;
                             },
                           ),
-                    if (isDesktopOrWeb)
-                      _buildPaginationBar(
-                        context: context,
-                        totalCount: totalCount,
-                        totalPages: totalPages,
-                        currentPage: _currentPage,
-                        startIndex: startIndex,
-                        endIndex: endIndex,
-                        primaryColor: primaryColor,
-                        isDark: isDark,
-                      ),
+                      // Pagination for Desktop is sticky outside the scroll area
                   ],
                 ),
               ),
-            ),
+              ),  // closes NotificationListener
+              );
+
+              // Desktop: sticky pagination bar below the scrollable list
+              if (isDesktopOrWeb) {
+                return Column(
+                  children: [
+                    Expanded(child: scrollable),
+                    _buildPaginationBar(
+                      context: context,
+                      totalCount: totalCount,
+                      totalPages: totalPages,
+                      currentPage: _currentPage,
+                      startIndex: startIndex,
+                      endIndex: endIndex,
+                      primaryColor: primaryColor,
+                      isDark: isDark,
+                    ),
+                  ],
+                );
+              }
+              return scrollable;
+            },
+          ),
           floatingActionButton: !isDesktopOrWeb && canManage
               ? ScaleOnTap(
                   onTap: () {
