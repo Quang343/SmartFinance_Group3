@@ -17,13 +17,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToNext();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigateToNext();
+    });
   }
 
   Future<void> _navigateToNext() async {
-    // Wait for splash timeout to show off the cool logo
-    await Future.delayed(const Duration(milliseconds: 2200));
-    
     if (mounted) {
       // Auto-login (Offline persistence support)
       final firebaseUser = ref.read(firebaseAuthProvider).currentUser;

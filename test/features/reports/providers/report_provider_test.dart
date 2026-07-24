@@ -12,9 +12,9 @@ void main() {
   late FakeTransactionRepository fake;
   late ProviderContainer container;
   final txns = [
-    TransactionEntity(id: '1', amount: 1000, type: TransactionType.income, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026)),
-    TransactionEntity(id: '2', amount: 400, type: TransactionType.expense, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026)),
-    TransactionEntity(id: '3', amount: 999, type: TransactionType.income, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.draft, createdAt: DateTime(2026), updatedAt: DateTime(2026)),
+    TransactionEntity(id: '1', title: 'Test 1', amount: 1000, type: TransactionType.income, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026)),
+    TransactionEntity(id: '2', title: 'Test 2', amount: 400, type: TransactionType.expense, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.confirmed, createdAt: DateTime(2026), updatedAt: DateTime(2026)),
+    TransactionEntity(id: '3', title: 'Test 3', amount: 999, type: TransactionType.income, categoryId: 'c', transactionDate: DateTime(2026), status: TransactionStatus.draft, createdAt: DateTime(2026), updatedAt: DateTime(2026)),
   ];
 
   setUp(() {

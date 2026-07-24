@@ -3,34 +3,55 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'dart:ui';
+import 'dart:async';
+import 'dart:typed_data';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:printing/printing.dart';
+import '../../../core/utils/number_to_text.dart';
+import '../../../core/utils/money_formatter.dart';
 
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/transaction_providers.dart';
+import '../../invoices/providers/invoice_provider.dart';
+import '../../invoices/presentation/invoice_preview_screen.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import 'package:smart_finance/core/constants/route_names.dart';
 import '../../../domain/entities/attachment_entity.dart';
+import '../../../core/sync/sync_item.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import 'package:collection/collection.dart';
 import '../../../domain/entities/category_entity.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../data/repositories/storage_repository.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/widgets/app_dialogs.dart';
 
 class TransactionFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
+  final String? initialTitle;
   final int? initialAmount;
   final String? initialNote;
   final String? invoiceId;
+  final bool readOnly;
 
   const TransactionFormScreen({
     super.key, 
     this.transactionId,
+    this.initialTitle,
     this.initialAmount,
     this.initialNote,
     this.invoiceId,
+    this.readOnly = false,
   });
 
   @override
@@ -39,6 +60,7 @@ class TransactionFormScreen extends ConsumerStatefulWidget {
 
 class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   
@@ -50,6 +72,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   String? _invoiceImagePath;
   final _picker = ImagePicker();
   String? _selectedImagePath;
+  String? _selectedAttachmentFileName;
+  String? _selectedAttachmentMimeType;
   
   DateTime _transactionDate = DateTime.now();
   DateTime? _createdAt;
@@ -58,16 +82,24 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   bool _isLoadingCategories = true;
 
   bool _showCategoryError = false;
+  final _titleKey = GlobalKey();
   final _amountKey = GlobalKey();
   final _categoryKey = GlobalKey();
 
   bool _isSaving = false;
+  late bool _isReadOnly;
+  String _amountText = '';
 
   @override
   void initState() {
     super.initState();
+    _isReadOnly = widget.readOnly;
+    _amountController.addListener(_updateAmountText);
+    if (widget.initialTitle != null) {
+      _titleController.text = widget.initialTitle!;
+    }
     if (widget.initialAmount != null) {
-      _amountController.text = widget.initialAmount.toString();
+      _amountController.text = NumberFormat.decimalPattern('vi_VN').format(widget.initialAmount);
     }
     if (widget.initialNote != null) {
       _noteController.text = widget.initialNote!;
@@ -76,6 +108,34 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  void _updateAmountText() {
+    final text = _amountController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.isEmpty) {
+      if (_amountText.isNotEmpty) {
+        setState(() {
+          _amountText = '';
+        });
+      }
+      return;
+    }
+    
+    final number = int.tryParse(text);
+    if (number != null && number > 0) {
+      final newText = NumberToText.convert(number);
+      if (_amountText != newText) {
+        setState(() {
+          _amountText = newText;
+        });
+      }
+    } else {
+      if (_amountText.isNotEmpty) {
+        setState(() {
+          _amountText = '';
+        });
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -100,10 +160,30 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final repo = ref.read(transactionRepositoryProvider);
       final list = await repo.getAll();
       final index = list.indexWhere((tx) => tx.id == widget.transactionId);
-      if (index != -1) {
+      final queueService = ref.read(syncQueueServiceProvider);
+      final syncItem = queueService.queue.firstWhereOrNull((e) => e.entityId == widget.transactionId);
+      final hasError = syncItem != null && syncItem.status == SyncStatus.error;
+      final payload = syncItem?.payload;
+
+      if (payload != null) {
+        setState(() {
+          _titleController.text = payload['title'];
+          _amountController.text = NumberFormat.decimalPattern('vi_VN').format(payload['amount']);
+          _noteController.text = payload['note'] ?? '';
+          _type = payload['type'] == 'income' ? TransactionType.income : TransactionType.expense;
+          _categoryId = payload['categoryId'];
+          final statusStr = payload['status'];
+          _status = statusStr == 'confirmed' ? TransactionStatus.confirmed : (statusStr == 'deleted' ? TransactionStatus.deleted : TransactionStatus.draft);
+          _invoiceId = payload['invoiceId'];
+          _transactionDate = DateTime.parse(payload['transactionDate']);
+          _createdAt = DateTime.parse(payload['createdAt']);
+          _isReadOnly = widget.readOnly || ((_status == TransactionStatus.confirmed || _status == TransactionStatus.deleted) && !hasError);
+        });
+      } else if (index != -1) {
         final tx = list[index];
         setState(() {
-          _amountController.text = tx.amount.toString();
+          _titleController.text = tx.title;
+          _amountController.text = NumberFormat.decimalPattern('vi_VN').format(tx.amount);
           _noteController.text = tx.note ?? '';
           _type = tx.type;
           _categoryId = tx.categoryId;
@@ -111,17 +191,20 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           _invoiceId = tx.invoiceId;
           _transactionDate = tx.transactionDate;
           _createdAt = tx.createdAt;
+          _isReadOnly = widget.readOnly || ((tx.status == TransactionStatus.confirmed || tx.status == TransactionStatus.deleted) && !hasError);
         });
-
+      }
         // Also fetch attachment if exists
         final attachmentRepo = ref.read(attachmentRepositoryProvider);
         final attachments = await attachmentRepo.getByOwnerId(widget.transactionId!);
         if (attachments.isNotEmpty) {
+          final att = attachments.first;
           setState(() {
-            _selectedImagePath = attachments.first.filePath;
+            _selectedImagePath = att.filePath;
+            _selectedAttachmentFileName = att.fileName;
+            _selectedAttachmentMimeType = att.mimeType;
           });
         }
-      }
     }
     
     // If we have an invoice linked, fetch its image
@@ -138,6 +221,322 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
+  bool get _isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  bool _isWebOrNetworkPath(String? path) {
+    if (path == null || path.isEmpty) return false;
+    return kIsWeb || path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:');
+  }
+
+  bool _isPdfFile(String path, {String? fileName, String? mimeType}) {
+    if (mimeType == 'application/pdf') return true;
+    if (fileName != null && fileName.toLowerCase().endsWith('.pdf')) return true;
+    final lower = path.toLowerCase();
+    return lower.endsWith('.pdf') || lower.contains('.pdf') || lower.startsWith('data:application/pdf');
+  }
+
+  void _openPdfFile(String path) async {
+    try {
+      if (path.startsWith('data:application/pdf;base64,')) {
+        final base64Str = path.split(',').last;
+        final bytes = base64Decode(base64Str);
+        if (kIsWeb) {
+          await Printing.sharePdf(bytes: bytes, filename: 'HoaDon_DinhKem.pdf');
+        } else {
+          final tempDir = await getTemporaryDirectory();
+          final fileName = _selectedAttachmentFileName ?? 'HoaDon_DinhKem.pdf';
+          final safeName = fileName.endsWith('.pdf') ? fileName : '$fileName.pdf';
+          final tempFile = File('${tempDir.path}/$safeName');
+          await tempFile.writeAsBytes(bytes);
+          final result = await OpenFilex.open(tempFile.path);
+          if (result.type != ResultType.done && mounted) {
+            await Printing.layoutPdf(onLayout: (_) async => bytes, name: safeName);
+          }
+        }
+      } else if (kIsWeb) {
+        final response = await http.get(Uri.parse(path));
+        if (response.statusCode == 200) {
+          await Printing.sharePdf(bytes: response.bodyBytes, filename: 'HoaDon_DinhKem.pdf');
+        }
+      } else {
+        final result = await OpenFilex.open(path);
+        if (result.type != ResultType.done && mounted) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            await Printing.layoutPdf(onLayout: (_) async => bytes);
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi mở file PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildAttachmentPreview({
+    required String path,
+    String? customFileName,
+    String? customMimeType,
+    required bool isDark,
+    required Color inputBorderColor,
+    required bool isReadOnly,
+    required VoidCallback onRemove,
+  }) {
+    final isPdf = _isPdfFile(path, fileName: customFileName, mimeType: customMimeType);
+    final displayFileName = (customFileName != null && customFileName.isNotEmpty)
+        ? customFileName
+        : path.split(RegExp(r'[/\\]')).last.split('?').first;
+
+    if (isPdf) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F261C) : const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF00D09E).withValues(alpha: 0.35),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF00D09E).withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00D09E), Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00D09E).withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.picture_as_pdf_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Tệp đính kèm PDF',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : const Color(0xFF064E3B),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    displayFileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            ScaleOnTap(
+              onTap: () => _openPdfFile(path),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00D09E), Color(0xFF059669)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00D09E).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.visibility_rounded, size: 16, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text(
+                      'Xem PDF',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (!isReadOnly) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: onRemove,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.redAccent,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final isNet = _isWebOrNetworkPath(path);
+    return Stack(
+      alignment: Alignment.topRight,
+      children: [
+        GestureDetector(
+          onTap: () => _showFullScreenImage(path, isNetwork: isNet),
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 240),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B1712) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? const Color(0xFF00D09E).withValues(alpha: 0.3) : const Color(0xFFE2E8F0),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  isNet
+                      ? Image.network(
+                          path,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null
+                                  ? child
+                                  : const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFF00D09E),
+                                      ),
+                                    ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                                child: Icon(
+                                  Icons.broken_image_rounded,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                        )
+                      : Image.file(
+                          File(path),
+                          fit: BoxFit.contain,
+                        ),
+                  Positioned(
+                    bottom: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.zoom_in_rounded, color: Color(0xFF00D09E), size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Xem chi tiết',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (!isReadOnly)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: InkWell(
+              onTap: onRemove,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(source: source);
@@ -148,12 +547,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = 'Lỗi chọn ảnh: $e';
-        if (e.toString().contains('cameraDelegate')) {
-          errorMsg = 'Tính năng chụp ảnh chưa được hỗ trợ trên thiết bị này (Windows/Desktop). Vui lòng chọn từ Thư viện!';
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+          SnackBar(content: Text('Lỗi chọn ảnh: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -164,11 +559,41 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: kIsWeb,
       );
-      if (result != null && result.files.single.path != null) {
-        setState(() {
-          _selectedImagePath = result.files.single.path;
-        });
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        final bool isPdf = (file.extension?.toLowerCase() == 'pdf') ||
+            file.name.toLowerCase().endsWith('.pdf') ||
+            (file.path != null && file.path!.toLowerCase().endsWith('.pdf'));
+        _selectedAttachmentFileName = file.name;
+        _selectedAttachmentMimeType = isPdf ? 'application/pdf' : 'image/png';
+
+        if (isPdf) {
+          Uint8List? bytes = file.bytes;
+          if (bytes == null && file.path != null) {
+            bytes = await File(file.path!).readAsBytes();
+          }
+          if (bytes != null) {
+            final dataUrl = Uri.dataFromBytes(bytes, mimeType: 'application/pdf').toString();
+            setState(() {
+              _selectedImagePath = dataUrl;
+            });
+            return;
+          }
+        }
+
+        if (kIsWeb && file.bytes != null) {
+          final mime = isPdf ? 'application/pdf' : 'image/png';
+          final dataUrl = Uri.dataFromBytes(file.bytes!, mimeType: mime).toString();
+          setState(() {
+            _selectedImagePath = dataUrl;
+          });
+        } else if (file.path != null) {
+          setState(() {
+            _selectedImagePath = file.path;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -181,6 +606,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   @override
   void dispose() {
+    _amountController.removeListener(_updateAmountText);
+    _titleController.dispose();
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
@@ -197,12 +624,33 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     });
 
     if (!isAmountValid || !isCategoryValid) {
-      if (!isAmountValid && _amountKey.currentContext != null) {
-        Scrollable.ensureVisible(_amountKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      if (!isAmountValid) {
+        // Simple check to see which one failed by checking their text. 
+        // Form validate doesn't tell us WHICH field failed, but we can guess.
+        if (_titleController.text.trim().isEmpty && _titleKey.currentContext != null) {
+          Scrollable.ensureVisible(_titleKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        } else if (_amountKey.currentContext != null) {
+          Scrollable.ensureVisible(_amountKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        }
       } else if (!isCategoryValid && _categoryKey.currentContext != null) {
         Scrollable.ensureVisible(_categoryKey.currentContext!, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
       return;
+    }
+
+    if (_status == TransactionStatus.confirmed) {
+      final hasAttachment = _selectedImagePath != null || _invoiceId != null;
+      if (!hasAttachment) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Vui lòng tải lên ảnh đính kèm chứng từ để Xác nhận giao dịch!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
     }
 
     setState(() {
@@ -214,33 +662,41 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       final storageRepo = ref.read(storageRepositoryProvider);
       
       final String id = widget.transactionId ?? const Uuid().v4();
-      final int amount = int.parse(_amountController.text);
+      final int amount = int.parse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), ''));
 
       // Verify file existence right before saving to prevent ghost paths
-      if (_selectedImagePath != null && !File(_selectedImagePath!).existsSync() && !_selectedImagePath!.startsWith('http')) {
+      if (_selectedImagePath != null && !kIsWeb && !_isWebOrNetworkPath(_selectedImagePath) && !File(_selectedImagePath!).existsSync()) {
         _selectedImagePath = null;
       }
 
-      // Upload image if it is a local file
+      final bool isPdf = _selectedImagePath != null && _isPdfFile(_selectedImagePath!, fileName: _selectedAttachmentFileName, mimeType: _selectedAttachmentMimeType);
       String? finalImagePath = _selectedImagePath;
-      if (_selectedImagePath != null && !_selectedImagePath!.startsWith('http')) {
+      final bool isRemoteUrl = _selectedImagePath != null && (_selectedImagePath!.startsWith('http://') || _selectedImagePath!.startsWith('https://'));
+
+      // Upload image to ImgBB ONLY IF IT IS NOT A PDF FILE
+      if (_selectedImagePath != null && !isRemoteUrl && !isPdf) {
         try {
-          final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
-          if (uploadedUrl != null) {
-            finalImagePath = uploadedUrl;
+          if (kIsWeb) {
+            final response = await http.get(Uri.parse(_selectedImagePath!));
+            if (response.statusCode == 200) {
+              final uploadedUrl = await storageRepo.uploadTransactionImage(id, webFile: response.bodyBytes, fileName: 'transaction.png');
+              if (uploadedUrl != null) {
+                finalImagePath = uploadedUrl;
+              }
+            }
+          } else {
+            final uploadedUrl = await storageRepo.uploadTransactionImage(id, file: File(_selectedImagePath!));
+            if (uploadedUrl != null) {
+              finalImagePath = uploadedUrl;
+            }
           }
         } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Không thể tải ảnh đính kèm lên Cloud: $e'), backgroundColor: Colors.red),
-            );
-          }
-          setState(() {
-            _isSaving = false;
-          });
-          return;
+          debugPrint('Không thể tải ảnh đính kèm lên ImgBB (giữ đường dẫn local/fallback): $e');
         }
       }
+
+      final String attachmentFileName = _selectedAttachmentFileName ?? (_selectedImagePath != null ? _selectedImagePath!.split(RegExp(r'[/\\]')).last.split('?').first : 'Attachment');
+      final String attachmentMimeType = isPdf ? 'application/pdf' : 'image/png';
 
       final transaction = TransactionEntity(
         id: id,
@@ -249,6 +705,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         categoryId: _categoryId,
         transactionDate: _transactionDate,
         status: _status,
+        title: _titleController.text,
         note: _noteController.text,
         invoiceId: _invoiceId,
         createdAt: _createdAt ?? DateTime.now(),
@@ -256,101 +713,111 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         tags: const [],
       );
 
-      if (widget.transactionId == null) {
-        await repo.create(transaction);
-        if (finalImagePath != null) {
-          final attachmentRepo = ref.read(attachmentRepositoryProvider);
-          final attachment = AttachmentEntity(
-            id: const Uuid().v4(),
-            ownerId: id,
-            ownerType: 'transaction',
-            filePath: finalImagePath,
-            createdAt: DateTime.now(),
-          );
-          await attachmentRepo.create(attachment);
+      final queueService = ref.read(syncQueueServiceProvider);
+      final syncItem = SyncItem(
+        id: const Uuid().v4(),
+        entityId: transaction.id,
+        collection: 'transactions',
+        action: widget.transactionId == null ? SyncAction.create : SyncAction.update,
+        payload: {
+          'id': transaction.id,
+          'amount': transaction.amount,
+          'type': transaction.type.name,
+          'categoryId': transaction.categoryId,
+          'transactionDate': transaction.transactionDate.toIso8601String(),
+          'status': transaction.status.name,
+          'title': transaction.title,
+          'note': transaction.note,
+          'invoiceId': transaction.invoiceId,
+          'createdAt': transaction.createdAt.toIso8601String(),
+          'updatedAt': transaction.updatedAt.toIso8601String(),
+          'tags': transaction.tags,
+        },
+      );
+      await queueService.enqueue(syncItem);
+
+      try {
+        final futures = <Future>[];
+        if (widget.transactionId == null) {
+          futures.add(repo.create(transaction));
+        } else {
+          futures.add(repo.update(transaction));
         }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Tạo giao dịch thành công!'), backgroundColor: Colors.green),
-          );
-        }
-      } else {
-        await repo.update(transaction);
+        final attachmentRepo = ref.read(attachmentRepositoryProvider);
         if (finalImagePath != null) {
-          final attachmentRepo = ref.read(attachmentRepositoryProvider);
-          final existing = await attachmentRepo.getByOwnerId(id);
-          if (existing.isEmpty || existing.first.filePath != finalImagePath) {
-            if (existing.isNotEmpty) {
-              await attachmentRepo.delete(existing.first.id);
+          if (widget.transactionId != null) {
+            final existing = await attachmentRepo.getByOwnerId(id);
+            if (existing.isNotEmpty && existing.first.filePath != finalImagePath) {
+              futures.add(attachmentRepo.delete(existing.first.id));
             }
+            if (existing.isEmpty || existing.first.filePath != finalImagePath) {
+              final attachment = AttachmentEntity(
+                id: const Uuid().v4(),
+                ownerId: id,
+                ownerType: 'transaction',
+                filePath: finalImagePath,
+                fileName: attachmentFileName,
+                mimeType: attachmentMimeType,
+                createdAt: DateTime.now(),
+              );
+              futures.add(attachmentRepo.create(attachment));
+            }
+          } else {
             final attachment = AttachmentEntity(
               id: const Uuid().v4(),
               ownerId: id,
               ownerType: 'transaction',
               filePath: finalImagePath,
+              fileName: attachmentFileName,
+              mimeType: attachmentMimeType,
               createdAt: DateTime.now(),
             );
-            await attachmentRepo.create(attachment);
+            futures.add(attachmentRepo.create(attachment));
           }
-        } else {
-          final attachmentRepo = ref.read(attachmentRepositoryProvider);
+        } else if (widget.transactionId != null) {
           final existing = await attachmentRepo.getByOwnerId(id);
           if (existing.isNotEmpty) {
-            await attachmentRepo.delete(existing.first.id);
+            futures.add(attachmentRepo.delete(existing.first.id));
           }
         }
+
+        await Future.wait(futures).timeout(const Duration(seconds: 3));
+        await queueService.removeItem(syncItem.id);
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cập nhật giao dịch thành công!'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(widget.transactionId == null ? 'Tạo giao dịch thành công!' : 'Cập nhật giao dịch thành công!'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
+      } on TimeoutException {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã lưu ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        await queueService.removeItem(syncItem.id);
+        throw e;
       }
 
+
+
+      // Refresh list
+      ref.invalidate(allTransactionsProvider);
+      ref.invalidate(incomeTransactionsProvider);
+      ref.invalidate(expenseTransactionsProvider);
       if (_invoiceId != null) {
-        final invoiceRepo = ref.read(invoiceRepositoryProvider);
-        final invoice = await invoiceRepo.getById(_invoiceId!);
-        if (invoice != null) {
-          final updatedInvoice = InvoiceEntity(
-            id: invoice.id,
-            invoiceNumber: invoice.invoiceNumber,
-            sellerName: invoice.sellerName,
-            sellerTaxCode: invoice.sellerTaxCode,
-            sellerAddress: invoice.sellerAddress,
-            sellerPhone: invoice.sellerPhone,
-            sellerBankName: invoice.sellerBankName,
-            sellerBankAccount: invoice.sellerBankAccount,
-            buyerName: invoice.buyerName,
-            buyerTaxCode: invoice.buyerTaxCode,
-            buyerAddress: invoice.buyerAddress,
-            buyerBankName: invoice.buyerBankName,
-            buyerBankAccount: invoice.buyerBankAccount,
-            paymentMethod: invoice.paymentMethod,
-            items: invoice.items,
-            subtotal: invoice.subtotal,
-            vatRate: invoice.vatRate,
-            vatAmount: invoice.vatAmount,
-            totalAmount: invoice.totalAmount,
-            ocrStatus: invoice.ocrStatus,
-            paymentStatus: PaymentStatus.paid,
-            issuedDate: invoice.issuedDate,
-            createdAt: invoice.createdAt,
-            updatedAt: invoice.updatedAt,
-            type: invoice.type,
-            imagePath: invoice.imagePath,
-            createdByUid: invoice.createdByUid,
-            company: invoice.company,
-            ocrConfidence: invoice.ocrConfidence,
-          );
-          await invoiceRepo.update(updatedInvoice);
-        }
+        ref.invalidate(allInvoicesProvider);
       }
 
       if (mounted) {
-        if (Navigator.canPop(context)) {
-          context.pop(true);
-        } else {
-          context.go('/transactions');
-        }
+        context.go('/transactions');
       }
     } catch (e) {
       if (mounted) {
@@ -368,47 +835,152 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _confirmDelete() {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: const Text('Xác nhận xóa', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.softDelete(widget.transactionId!);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
-                );
-              if (Navigator.canPop(context)) {
-                context.pop();
-              } else {
-                context.go('/transactions');
-              }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa giao dịch này không? Giao dịch sẽ được chuyển vào thùng rác.',
+      icon: Icons.delete_outline_rounded,
+      color: Colors.redAccent,
+      confirmText: 'Xóa giao dịch',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        final queueService = ref.read(syncQueueServiceProvider);
+
+        final payload = {
+          'id': widget.transactionId,
+          'amount': int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0,
+          'type': _type.name,
+          'categoryId': _categoryId,
+          'transactionDate': _transactionDate.toIso8601String(),
+          'status': TransactionStatus.deleted.name,
+          'title': _titleController.text.trim(),
+          'note': _noteController.text.trim(),
+          'invoiceId': _invoiceId,
+          'createdAt': _createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': const [],
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: widget.transactionId!,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.softDelete(widget.transactionId!).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa giao dịch thành công!'), backgroundColor: Colors.red),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          ref.invalidate(allTransactionsProvider);
+          ref.invalidate(incomeTransactionsProvider);
+          ref.invalidate(expenseTransactionsProvider);
+          if (_invoiceId != null) {
+            ref.invalidate(allInvoicesProvider);
+          }
+          if (mounted) context.go('/transactions');
+        }
+      },
+    );
+  }
+
+  void _confirmRestore() {
+    AppDialogs.showConfirmDialog(
+      context: context,
+      title: 'Khôi phục giao dịch',
+      message: 'Bạn có chắc chắn muốn khôi phục giao dịch này? Giao dịch sẽ được chuyển về trạng thái Bản nháp.',
+      icon: Icons.restore_rounded,
+      color: const Color(0xFF00D09E),
+      confirmText: 'Khôi phục',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        final queueService = ref.read(syncQueueServiceProvider);
+
+        final payload = {
+          'id': widget.transactionId,
+          'amount': int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0,
+          'type': _type.name,
+          'categoryId': _categoryId,
+          'transactionDate': _transactionDate.toIso8601String(),
+          'status': TransactionStatus.draft.name,
+          'title': _titleController.text.trim(),
+          'note': _noteController.text.trim(),
+          'invoiceId': _invoiceId,
+          'createdAt': _createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': const [],
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: widget.transactionId!,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.restore(widget.transactionId!).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã khôi phục giao dịch thành Bản nháp!'), backgroundColor: Colors.green),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Đã khôi phục ngoại tuyến. Sẽ đồng bộ khi có mạng.'), backgroundColor: Colors.orange),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          ref.invalidate(allTransactionsProvider);
+          ref.invalidate(incomeTransactionsProvider);
+          ref.invalidate(expenseTransactionsProvider);
+          if (_invoiceId != null) {
+            ref.invalidate(allInvoicesProvider);
+          }
+          if (mounted) context.go('/transactions');
+        }
+      },
     );
   }
 
   Future<void> _selectDateTime() async {
+    final now = DateTime.now();
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: _transactionDate,
+      initialDate: _transactionDate.isAfter(now) ? now : _transactionDate,
       firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
+      lastDate: now,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -436,14 +1008,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         },
       );
       if (pickedTime != null && mounted) {
-        setState(() {
-          _transactionDate = DateTime(
-            pickedDate.year,
-            pickedDate.month,
-            pickedDate.day,
-            pickedTime.hour,
-            pickedTime.minute,
+        DateTime finalDateTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+        
+        final currentTime = DateTime.now();
+        if (finalDateTime.isAfter(currentTime)) {
+          finalDateTime = currentTime;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Không thể chọn thời gian trong tương lai. Đã tự động chuyển về hiện tại.'),
+              backgroundColor: Colors.orange,
+            ),
           );
+        }
+
+        setState(() {
+          _transactionDate = finalDateTime;
         });
       }
     }
@@ -495,6 +1080,17 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       case TransactionStatus.confirmed: return const Color(0xFF00D09E);
       case TransactionStatus.deleted: return const Color(0xFFEF4444);
     }
+  }
+
+  void _showFullScreenImage(String path, {bool isNetwork = false}) {
+    showDialog(
+      context: context,
+      useSafeArea: false,
+      builder: (context) => _FullScreenImageViewer(
+        path: path,
+        isNetwork: isNetwork,
+      ),
+    );
   }
 
   @override
@@ -738,11 +1334,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         leading: Center(
           child: ScaleOnTap(
             onTap: () {
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              } else {
-                context.go('/transactions');
-              }
+              context.go('/transactions');
             },
             child: Container(
               padding: const EdgeInsets.all(8),
@@ -777,7 +1369,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             end: Alignment.bottomRight,
           ).createShader(bounds),
           child: Text(
-            widget.transactionId == null ? 'Thêm Giao dịch' : 'Sửa Giao dịch',
+            widget.transactionId == null ? 'Thêm Giao dịch' : (_isReadOnly ? 'Chi tiết Giao dịch' : 'Sửa Giao dịch'),
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: Colors.white,
@@ -787,8 +1379,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           ),
         ),
         actions: [
-
-          if (widget.transactionId != null)
+          if (widget.transactionId != null && !_isReadOnly)
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
               tooltip: 'Xóa giao dịch',
@@ -799,14 +1390,63 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           children: [
+            // Title
+            TextFormField(
+              key: _titleKey,
+              controller: _titleController,
+              readOnly: _isReadOnly,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Tiêu đề giao dịch (*)',
+                labelStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 14),
+                prefixIcon: const Icon(Icons.title_rounded, color: Color(0xFF00D09E)),
+                filled: true,
+                fillColor: inputFillColor,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: inputBorderColor, width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: primaryColor, width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
+                ),
+              ),
+              validator: (val) {
+                if (val == null || val.trim().isEmpty) {
+                  return 'Vui lòng nhập tiêu đề giao dịch';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 24),
+
             // Amount
             TextFormField(
               key: _amountKey,
               controller: _amountController,
+              readOnly: _isReadOnly,
               keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9\.]')),
+                CurrencyInputFormatter(),
+                LengthLimitingTextInputFormatter(19),
+              ],
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -852,6 +1492,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 return null;
               },
             ),
+            if (_amountText.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Text(
+                  _amountText,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    color: Color(0xFF00D09E),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
 
             // Transaction Date Picker
@@ -865,7 +1520,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             ScaleOnTap(
-              onTap: _selectDateTime,
+              onTap: _isReadOnly ? () {} : () => _selectDateTime(),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 decoration: BoxDecoration(
@@ -910,7 +1565,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   child: Opacity(
                     opacity: currentRole == UserRole.expenseAccountant ? 0.5 : 1.0,
                     child: ScaleOnTap(
-                      onTap: currentRole == UserRole.expenseAccountant
+                      onTap: (_isReadOnly || currentRole == UserRole.expenseAccountant)
                           ? () {}
                           : () => setState(() {
                               _type = TransactionType.income;
@@ -960,7 +1615,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   child: Opacity(
                     opacity: currentRole == UserRole.revenueAccountant ? 0.5 : 1.0,
                     child: ScaleOnTap(
-                      onTap: currentRole == UserRole.revenueAccountant
+                      onTap: (_isReadOnly || currentRole == UserRole.revenueAccountant)
                           ? () {}
                           : () => setState(() {
                               _type = TransactionType.expense;
@@ -1021,7 +1676,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             const SizedBox(height: 10),
             InkWell(
               key: _categoryKey,
-              onTap: () {
+              onTap: _isReadOnly ? null : () {
                 setState(() => _showCategoryError = false);
                 showCategoryPicker();
               },
@@ -1082,6 +1737,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
              // Notes
             TextFormField(
               controller: _noteController,
+              readOnly: _isReadOnly,
               maxLines: 3,
               style: TextStyle(
                 fontSize: 15,
@@ -1116,7 +1772,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             ),
             const SizedBox(height: 10),
             InkWell(
-              onTap: showStatusPicker,
+              onTap: _isReadOnly ? null : showStatusPicker,
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -1228,7 +1884,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                         ),
                       ),
                     ),
-                  ] else if (_invoiceImagePath != null && (_invoiceImagePath!.startsWith('http') || File(_invoiceImagePath!).existsSync())) ...[
+                  ] else if (_invoiceImagePath != null && (_isWebOrNetworkPath(_invoiceImagePath) || (!kIsWeb && File(_invoiceImagePath!).existsSync()))) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -1242,7 +1898,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Ảnh đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
+                              'Chứng từ đính kèm đã được liên kết tự động từ Hóa đơn gốc.',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: isDark ? Colors.white70 : const Color(0xFF093021),
@@ -1253,120 +1909,58 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: inputFillColor,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: inputBorderColor, width: 1.5),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _invoiceImagePath!.startsWith('http')
-                            ? Image.network(
-                                _invoiceImagePath!,
-                                fit: BoxFit.contain,
-                                loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                              )
-                            : Image.file(
-                                File(_invoiceImagePath!),
-                                fit: BoxFit.contain,
-                              ),
-                      ),
+                    _buildAttachmentPreview(
+                      path: _invoiceImagePath!,
+                      isDark: isDark,
+                      inputBorderColor: inputBorderColor,
+                      isReadOnly: true,
+                      onRemove: () {},
                     ),
                   ],
                 ],
               )
-            else if (_selectedImagePath != null && (_selectedImagePath!.startsWith('http') || File(_selectedImagePath!).existsSync()))
-              Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: inputFillColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: inputBorderColor, width: 1.5),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: _selectedImagePath!.toLowerCase().endsWith('.pdf')
-                          ? Container(
-                              color: isDark ? const Color(0xFF0D251C) : const Color(0xFFF1F8F5),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.picture_as_pdf_rounded, size: 64, color: Color(0xFF00D09E)),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _selectedImagePath!.split(Platform.pathSeparator).last,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white70 : const Color(0xFF093021),
-                                      fontSize: 14,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : _selectedImagePath!.startsWith('http')
-                              ? Image.network(
-                                  _selectedImagePath!,
-                                  fit: BoxFit.contain,
-                                  loadingBuilder: (context, child, progress) => progress == null ? child : const Center(child: CircularProgressIndicator(color: Color(0xFF00D09E))),
-                                  errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                                )
-                              : Image.file(
-                                  File(_selectedImagePath!),
-                                  fit: BoxFit.contain,
-                                ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: InkWell(
-                      onTap: () => setState(() => _selectedImagePath = null),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
-                      ),
-                    ),
-                  ),
-                ],
+            else if (_selectedImagePath != null && (_isWebOrNetworkPath(_selectedImagePath) || (!kIsWeb && File(_selectedImagePath!).existsSync())))
+              _buildAttachmentPreview(
+                path: _selectedImagePath!,
+                customFileName: _selectedAttachmentFileName,
+                customMimeType: _selectedAttachmentMimeType,
+                isDark: isDark,
+                inputBorderColor: inputBorderColor,
+                isReadOnly: _isReadOnly,
+                onRemove: () => setState(() {
+                  _selectedImagePath = null;
+                  _selectedAttachmentFileName = null;
+                  _selectedAttachmentMimeType = null;
+                }),
               )
-            else
+            else if (!_isReadOnly)
               Row(
                 children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _pickImage(ImageSource.camera),
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: inputFillColor,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: inputBorderColor, width: 1.5),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
-                            SizedBox(width: 8),
-                            Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          ],
+                  if (_isMobile) ...[
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _pickImage(ImageSource.camera),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: inputFillColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: inputBorderColor, width: 1.5),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.camera_alt_rounded, color: Color(0xFF00D09E), size: 20),
+                              SizedBox(width: 8),
+                              Text('Chụp ảnh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: InkWell(
                       onTap: () => _pickImage(ImageSource.gallery),
@@ -1416,41 +2010,226 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
             const SizedBox(height: 40),
 
-            ScaleOnTap(
-              onTap: _saveTransaction,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: _isSaving 
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                      )
-                    : const Text(
-                        'Lưu Giao Dịch',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+            if (!_isReadOnly)
+              ScaleOnTap(
+                onTap: _saveTransaction,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
+                    ],
+                  ),
+                  child: Center(
+                    child: _isSaving 
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        )
+                      : const Text(
+                          'Lưu Giao Dịch',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                  ),
+                ),
+              ),
+            if (_isReadOnly && _status == TransactionStatus.deleted)
+              ScaleOnTap(
+                onTap: _confirmRestore,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Khôi phục Giao dịch',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (_isReadOnly)
+              const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FullScreenImageViewer extends StatefulWidget {
+  final String path;
+  final bool isNetwork;
+
+  const _FullScreenImageViewer({super.key, required this.path, required this.isNetwork});
+
+  @override
+  State<_FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
+  final TransformationController _controller = TransformationController();
+
+  void _zoomBy(double factor) {
+    final Matrix4 matrix = _controller.value.clone();
+    final double currentScale = matrix.getMaxScaleOnAxis();
+    final double targetScale = (currentScale * factor).clamp(1.0, 4.0);
+    final double actualFactor = targetScale / currentScale;
+
+    if (actualFactor == 1.0) return;
+
+    final Size screenSize = MediaQuery.of(context).size;
+    final Offset screenCenter = Offset(screenSize.width / 2, screenSize.height / 2);
+
+    final double currentDx = matrix.getTranslation().x;
+    final double currentDy = matrix.getTranslation().y;
+
+    final double newDx = screenCenter.dx - (screenCenter.dx - currentDx) * actualFactor;
+    final double newDy = screenCenter.dy - (screenCenter.dy - currentDy) * actualFactor;
+
+    matrix.scale(actualFactor);
+    matrix.setTranslationRaw(newDx, newDy, 0.0);
+
+    _controller.value = matrix;
+  }
+
+  void _zoomIn() => _zoomBy(1.5);
+  void _zoomOut() => _zoomBy(1 / 1.5);
+
+  void _resetZoom() {
+    _controller.value = Matrix4.identity();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _isMobile {
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: Colors.black.withOpacity(0.95),
+            ),
+          ),
+          InteractiveViewer(
+            transformationController: _controller,
+            panEnabled: true,
+            boundaryMargin: EdgeInsets.zero,
+            minScale: 1.0,
+            maxScale: 4.0,
+            child: Center(
+              child: (kIsWeb || widget.isNetwork || widget.path.startsWith('http://') || widget.path.startsWith('https://') || widget.path.startsWith('blob:') || widget.path.startsWith('data:'))
+                  ? Image.network(widget.path, fit: BoxFit.contain)
+                  : Image.file(File(widget.path), fit: BoxFit.contain),
+            ),
+          ),
+          if (!_isMobile)
+            Positioned(
+              bottom: 40,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildToolbarBtn(Icons.remove_rounded, _zoomOut, 'Thu nhỏ'),
+                      const SizedBox(width: 24),
+                      _buildToolbarBtn(Icons.fit_screen_rounded, _resetZoom, 'Khôi phục', isPrimary: true),
+                      const SizedBox(width: 24),
+                      _buildToolbarBtn(Icons.add_rounded, _zoomIn, 'Phóng to'),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
+          ),
+          Positioned(
+            top: 40,
+            right: 20,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbarBtn(IconData icon, VoidCallback onTap, String tooltip, {bool isPrimary = false}) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: isPrimary ? const Color(0xFF00D09E).withOpacity(0.8) : Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: Colors.white,
+            size: isPrimary ? 28 : 24,
+          ),
         ),
       ),
     );

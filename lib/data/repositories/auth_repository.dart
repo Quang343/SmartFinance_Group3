@@ -46,9 +46,17 @@ class AuthRepository {
       if (userCredential.user != null) {
         return await getUserData(userCredential.user!.uid);
       }
+    } on FirebaseAuthException catch (e) {
+      print('Login error (FirebaseAuth): ${e.code}');
+      if (e.code == 'invalid-credential' || e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-email') {
+        throw Exception('Tài khoản hoặc mật khẩu không đúng, vui lòng kiểm tra lại.');
+      } else if (e.code == 'user-disabled') {
+        throw Exception('Tài khoản này đã bị khóa.');
+      }
+      throw Exception('Đăng nhập thất bại. Vui lòng thử lại.');
     } catch (e) {
       print('Login error: $e');
-      throw Exception('Đăng nhập thất bại: $e');
+      throw Exception('Đăng nhập thất bại. Vui lòng thử lại sau.');
     }
     return null;
   }
@@ -198,7 +206,15 @@ class AuthRepository {
   
   // Đăng xuất
   Future<void> logout() async {
-    await _googleSignIn.signOut();
-    await _firebaseAuth.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (e) {
+      print('Google signout error: $e');
+    }
+    try {
+      await _firebaseAuth.signOut();
+    } catch (e) {
+      print('Firebase signout error: $e');
+    }
   }
 }

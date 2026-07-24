@@ -1,4 +1,4 @@
-import 'package:uuid/uuid.dart';
+
 import 'package:smart_finance/domain/entities/invoice_entity.dart';
 import 'package:smart_finance/features/invoices/domain/models/draft_invoice.dart';
 
@@ -15,28 +15,35 @@ class DraftInvoiceMapper {
     // Calculate vatAmount from subtotal and vatRate
     final int vatAmount = (draft.subtotal * draft.vatRate / 100).round();
     
-    final String generatedInvoiceNumber = 'OCR-INV-${now.year}-${Random().nextInt(9000) + 1000}';
+    final String sellerTax = draft.taxCode.trim();
+    final String formNum = draft.formNumber?.trim() ?? '';
+    final String serialNum = draft.serialNumber?.trim() ?? '';
+    final String seqNum = draft.invoiceNumber.trim();
+    
+    final String generatedInvoiceNumber = 'OCR-INV-$sellerTax-$formNum-$serialNum-$seqNum';
 
     return InvoiceEntity(
       id: id,
-      invoiceNumber: generatedInvoiceNumber, // Generated as fallback
+      invoiceNumber: generatedInvoiceNumber,
+      formNumber: formNum.isNotEmpty ? formNum : null,
+      serialNumber: serialNum.isNotEmpty ? serialNum : null,
       sellerName: draft.sellerName,
       sellerTaxCode: draft.taxCode,
       sellerAddress: draft.sellerAddress.isNotEmpty ? draft.sellerAddress : null,
       sellerPhone: draft.sellerPhone.isNotEmpty ? draft.sellerPhone : null,
-      sellerBankName: draft.sellerBankName.isNotEmpty ? draft.sellerBankName : null,
-      sellerBankAccount: draft.sellerBankAccount.isNotEmpty ? draft.sellerBankAccount : null,
-      buyerName: currentUser?.company.isNotEmpty == true ? currentUser!.company : 'Công ty TNHH SmartFinance',
-      buyerTaxCode: currentUser?.taxCode.isNotEmpty == true ? currentUser!.taxCode : '0101243150',
-      buyerAddress: '123 Đường Sáng Tạo, Cầu Giấy, Hà Nội', // UserModel currently doesn't have address
-      buyerContactName: 'Nguyễn Văn Tiến', // Mocked, as this would ideally come from OCR
+      sellerBankName: draft.sellerBankName?.isNotEmpty == true ? draft.sellerBankName : null,
+      sellerBankAccount: draft.sellerBankAccount?.isNotEmpty == true ? draft.sellerBankAccount : null,
+      buyerName: draft.buyerName?.isNotEmpty == true ? draft.buyerName! : (currentUser?.company ?? ''),
+      buyerTaxCode: draft.buyerTaxCode?.isNotEmpty == true ? draft.buyerTaxCode! : (currentUser?.taxCode ?? ''),
+      buyerAddress: draft.buyerAddress?.isNotEmpty == true ? draft.buyerAddress : (currentUser?.address ?? ''),
+      buyerContactName: draft.buyerContactName?.isNotEmpty == true ? draft.buyerContactName : (currentUser?.fullName ?? ''),
       items: draft.items, // ID for items will be preserved from Draft
       subtotal: draft.subtotal,
       vatRate: draft.vatRate,
       vatAmount: vatAmount,
       totalAmount: draft.totalAmount,
       ocrStatus: OcrStatus.extracted,
-      paymentStatus: PaymentStatus.unpaid,
+      transactionStatus: InvoiceTransactionStatus.notCreated,
       issuedDate: now,
       createdAt: now,
       updatedAt: now,

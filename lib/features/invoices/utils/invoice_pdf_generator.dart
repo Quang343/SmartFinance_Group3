@@ -59,20 +59,57 @@ class InvoicePdfGenerator {
                 ],
               ),
               pw.SizedBox(height: 30),
-
-              // Title
-              pw.Center(
-                child: pw.Text(
-                  'HÓA ĐƠN GIÁ TRỊ GIA TĂNG',
-                  style: pw.TextStyle(font: fontBold, fontSize: 24),
-                ),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Center(
-                child: pw.Text(
-                  'Số hóa đơn: ${invoice.invoiceNumber}',
-                  style: pw.TextStyle(font: fontItalic, fontSize: 14),
-                ),
+              // Title & Form/Serial Number
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text(
+                          'HÓA ĐƠN GIÁ TRỊ GIA TĂNG',
+                          style: pw.TextStyle(font: fontBold, fontSize: 22),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          '(Hóa đơn chuyển đổi từ hóa đơn điện tử)',
+                          style: pw.TextStyle(font: fontItalic, fontSize: 12),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          'Ngày ${invoice.issuedDate.day.toString().padLeft(2, '0')} tháng ${invoice.issuedDate.month.toString().padLeft(2, '0')} năm ${invoice.issuedDate.year}',
+                          style: pw.TextStyle(font: fontItalic, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (invoice.formNumber != null && invoice.serialNumber != null)
+                    pw.Container(
+                      width: 150,
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Mẫu số: ${invoice.formNumber}', style: pw.TextStyle(font: fontRegular, fontSize: 12)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('Ký hiệu: ${invoice.serialNumber}', style: pw.TextStyle(font: fontRegular, fontSize: 12)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('Số: ${invoice.invoiceNumber.split('-').last}', style: pw.TextStyle(font: fontRegular, fontSize: 12)),
+                        ],
+                      ),
+                    )
+                  else
+                    pw.Container(
+                      width: 150,
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text('Số hóa đơn:', style: pw.TextStyle(font: fontItalic, fontSize: 12)),
+                          pw.Text(invoice.invoiceNumber, style: pw.TextStyle(font: fontBold, fontSize: 12)),
+                        ]
+                      )
+                    )
+                ],
               ),
               pw.SizedBox(height: 30),
 

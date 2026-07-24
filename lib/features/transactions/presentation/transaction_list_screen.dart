@@ -1,15 +1,27 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/transaction_providers.dart';
 import '../../../core/providers/category_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
 import '../../../domain/entities/category_entity.dart';
+import '../../../core/sync/sync_item.dart';
+import '../../../core/sync/sync_queue_service.dart';
+import 'package:collection/collection.dart';
 import '../../../core/widgets/scale_on_tap.dart';
+import '../../../core/widgets/app_dialogs.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import '../../../core/widgets/horizontal_scroll_wrapper.dart';
 
 class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
@@ -24,8 +36,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   String _selectedPeriod = 'all'; // 'all', 'today', 'month', 'year', 'custom'
   String _selectedStatus = 'confirmed'; // 'all', 'confirmed', 'draft'
   String _selectedCategory = 'all'; 
+  String _selectedType = 'all'; // 'all', 'income', 'expense'
   DateTimeRange? _customDateRange;
   int _displayLimit = 15;
+  int _currentPage = 1;
+  int _itemsPerPage = 10;
 
   @override
   void initState() {
@@ -50,84 +65,201 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   }
 
   void _confirmDeleteFromList(TransactionEntity tx) {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Xóa giao dịch?'),
-        content: const Text(
-          'Bạn có chắc chắn muốn xóa giao dịch này không? Dữ liệu thống kê sẽ được cập nhật lại.',
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.softDelete(tx.id);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Đã xóa giao dịch thành công!'),
-                    backgroundColor: Colors.redAccent,
-                  ),
-                );
-                _refreshData();
-              }
-            },
-            child: const Text(
-              'Xóa',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa giao dịch này không? Dữ liệu thống kê sẽ được cập nhật lại.',
+      icon: Icons.delete_outline_rounded,
+      color: Colors.redAccent,
+      confirmText: 'Xóa giao dịch',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final payload = {
+          'id': tx.id,
+          'amount': tx.amount,
+          'type': tx.type.name,
+          'categoryId': tx.categoryId,
+          'transactionDate': tx.transactionDate.toIso8601String(),
+          'status': TransactionStatus.deleted.name,
+          'title': tx.title,
+          'note': tx.note,
+          'invoiceId': tx.invoiceId,
+          'createdAt': tx.createdAt.toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': tx.tags,
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.softDelete(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã chuyển giao dịch vào thùng rác!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          _refreshData();
+        }
+      },
     );
   }
 
   void _confirmRestoreFromList(TransactionEntity tx) {
-    showDialog(
+    AppDialogs.showConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Khôi phục giao dịch?'),
-        content: const Text(
-          'Giao dịch này sẽ được khôi phục về trạng thái Bản nháp để bạn kiểm tra lại trước khi xác nhận.',
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final repo = ref.read(transactionRepositoryProvider);
-              await repo.restore(tx.id);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                _refreshData();
-              }
-            },
-            child: const Text(
-              'Khôi phục',
-              style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      title: 'Khôi phục giao dịch',
+      message: 'Bạn có chắc chắn muốn khôi phục giao dịch này? Giao dịch sẽ được chuyển về trạng thái Bản nháp.',
+      icon: Icons.restore_rounded,
+      color: const Color(0xFF00D09E),
+      confirmText: 'Khôi phục',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final payload = {
+          'id': tx.id,
+          'amount': tx.amount,
+          'type': tx.type.name,
+          'categoryId': tx.categoryId,
+          'transactionDate': tx.transactionDate.toIso8601String(),
+          'status': TransactionStatus.draft.name,
+          'title': tx.title,
+          'note': tx.note,
+          'invoiceId': tx.invoiceId,
+          'createdAt': tx.createdAt.toIso8601String(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'tags': tx.tags,
+        };
+
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.update,
+          payload: payload,
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.restore(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã khôi phục giao dịch thành Bản nháp!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã khôi phục ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          _refreshData();
+        }
+      },
     );
   }
 
-  Widget _buildStatusChip(String value, String label, bool isDark) {
+  void _confirmHardDeleteFromList(TransactionEntity tx) {
+    AppDialogs.showConfirmDialog(
+      context: context,
+      title: 'Xóa vĩnh viễn',
+      message: 'Hành động này không thể hoàn tác! Bạn có chắc chắn muốn xóa vĩnh viễn giao dịch này khỏi cơ sở dữ liệu?',
+      icon: Icons.delete_forever_rounded,
+      color: Colors.red,
+      confirmText: 'Xóa vĩnh viễn',
+      onConfirm: () async {
+        final repo = ref.read(transactionRepositoryProvider);
+        final queueService = ref.read(syncQueueServiceProvider);
+        
+        final syncItem = SyncItem(
+          id: const Uuid().v4(),
+          entityId: tx.id,
+          collection: 'transactions',
+          action: SyncAction.delete,
+          payload: {},
+        );
+        await queueService.enqueue(syncItem);
+
+        try {
+          await repo.hardDelete(tx.id).timeout(const Duration(seconds: 3));
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa vĩnh viễn giao dịch'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } on TimeoutException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đã xóa ngoại tuyến. Sẽ đồng bộ khi có mạng.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } catch (e) {
+          await queueService.removeItem(syncItem.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          _refreshData();
+        }
+      },
+    );
+  }
+
+  Widget _buildStatusChip(String value, String label, bool isDark, int count) {
     final isSelected = _selectedStatus == value;
     return InkWell(
       onTap: () {
@@ -145,13 +277,47 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
-          label,
+          '$label ($count)',
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
             color: isSelected
                 ? Colors.white
                 : (isDark ? const Color(0xFF00D09E) : Colors.black54),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypeChip(String value, String label, bool isDark) {
+    final isSelected = _selectedType == value;
+    final color = value == 'income'
+        ? const Color(0xFF00D09E)
+        : (value == 'expense' ? const Color(0xFFEF4444) : Colors.blue);
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedType = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color
+              : (isDark ? const Color(0xFF152F23) : const Color(0xFFEDF2F7)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isDark ? color : Colors.black54),
           ),
         ),
       ),
@@ -235,6 +401,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
   @override
   Widget build(BuildContext context) {
     final currentRole = ref.watch(roleProvider);
+    final syncQueueService = ref.watch(syncQueueServiceProvider);
+    final queueItems = syncQueueService.queue;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormatter = NumberFormat.currency(
       locale: 'vi_VN',
@@ -280,52 +448,81 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E382B)
-                      : const Color(0xFFE8F6F1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF00D09E).withValues(alpha: 0.3),
+          if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900)
+            if (currentRole.canEditTransactions)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF00D09E), Color(0xFF34D399)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00D09E).withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        context.push('/transactions/form');
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add_rounded, size: 18, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Tạo Giao dịch',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF00D09E),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      currentRole == UserRole.expenseAccountant
-                          ? 'Kế toán Chi phí'
-                          : currentRole == UserRole.revenueAccountant
-                          ? 'Kế toán Doanh thu'
-                          : 'Quản lý',
-                      style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF00D09E),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-            ),
-          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.red),
+            tooltip: 'Xóa toàn bộ data',
+            onPressed: () {
+              AppDialogs.showConfirmDialog(
+                context: context,
+                title: 'Xóa toàn bộ dữ liệu',
+                message: 'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu hóa đơn và giao dịch không? Hành động này không thể hoàn tác.',
+                icon: Icons.warning_amber_rounded,
+                color: Colors.redAccent,
+                confirmText: 'Xóa toàn bộ',
+                onConfirm: () async {
+                  final db = FirebaseFirestore.instance;
+                  final invs = await db.collection('invoices').get();
+                  for(var doc in invs.docs) { await doc.reference.delete(); }
+                  final trans = await db.collection('transactions').get();
+                  for(var doc in trans.docs) { await doc.reference.delete(); }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã xóa toàn bộ data!')));
+                  }
+                  _refreshData();
+                },
+              );
+            },
+          )
         ],
       ),
       body: Builder(
@@ -342,13 +539,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ClipOval(
-                    child: Image.asset(
-                      'assets/images/loadingGif.gif',
-                      width: 150,
-                      height: 150,
-                      fit: BoxFit.cover,
-                    ),
+                  SpinKitWaveSpinner(
+                    color: const Color(0xFF00D09E),
+                    size: 100,
+                    trackColor: const Color(0xFF00D09E).withValues(alpha: 0.2),
+                    waveColor: const Color(0xFF00D09E).withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -377,8 +572,14 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
           final catMap = {for (var c in allCats) c.id: c};
 
+          // Pre-filter by time period to calculate accurate status counts
+          var timeFilteredList = allTxs.where((tx) => _isWithinPeriod(tx.transactionDate)).toList();
+          final allCount = timeFilteredList.where((tx) => tx.status != TransactionStatus.deleted).length;
+          final confirmedCount = timeFilteredList.where((tx) => tx.status == TransactionStatus.confirmed).length;
+          final draftCount = timeFilteredList.where((tx) => tx.status == TransactionStatus.draft).length;
+
           // Filter by status and handle 'deleted' explicitly
-          var list = allTxs;
+          var list = timeFilteredList;
           if (_selectedStatus == 'deleted') {
             list = list
                 .where((tx) => tx.status == TransactionStatus.deleted)
@@ -391,11 +592,6 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           }
 
           // Note: No need to filter by role here because the Provider already filtered it!
-
-          // Filter by time period
-          list = list
-              .where((tx) => _isWithinPeriod(tx.transactionDate))
-              .toList();
 
           // Filter by status
           if (_selectedStatus == 'confirmed') {
@@ -415,12 +611,21 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                 .toList();
           }
 
+          // Filter by type
+          if (_selectedType != 'all') {
+            final typeFilter = _selectedType == 'income'
+                ? TransactionType.income
+                : TransactionType.expense;
+            list = list.where((tx) => tx.type == typeFilter).toList();
+          }
+
           // Filter by search query
           if (_searchQuery.isNotEmpty) {
             list = list.where((tx) {
-              final note = (tx.note ?? '').toLowerCase();
+              final searchTitle = tx.title.toLowerCase();
+              final searchNote = (tx.note ?? '').toLowerCase();
               final catName = (catMap[tx.categoryId]?.name ?? '').toLowerCase();
-              return note.contains(_searchQuery) ||
+              return searchTitle.contains(_searchQuery) || searchNote.contains(_searchQuery) ||
                   catName.contains(_searchQuery);
             }).toList();
           }
@@ -437,19 +642,30 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               .fold<double>(0.0, (sum, item) => sum + item.amount);
           final netBalance = totalIncome - totalExpense;
 
-          return RefreshIndicator(
+          final isDesktopOrWeb = kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900;
+          final totalCount = list.length;
+          final totalPages = max(1, (totalCount / _itemsPerPage).ceil());
+          final currentPage = _currentPage.clamp(1, totalPages);
+          final startIndex = (currentPage - 1) * _itemsPerPage;
+          final endIndex = min(startIndex + _itemsPerPage, totalCount);
+          final displayList = isDesktopOrWeb
+              ? ((totalCount > 0) ? list.sublist(startIndex, endIndex) : <TransactionEntity>[])
+              : list;
+
+          // ---------- Shared scrollable body (Desktop wraps in Expanded + sticky pagination) ----------
+          final scrollable = RefreshIndicator(
             color: primaryColor,
             onRefresh: () async {
               _refreshData(showLoading: false);
             },
             child: NotificationListener<ScrollNotification>(
               onNotification: (ScrollNotification scrollInfo) {
-                if (scrollInfo.metrics.pixels ==
-                        scrollInfo.metrics.maxScrollExtent &&
-                    list.length > _displayLimit) {
-                  setState(() {
-                    _displayLimit += 15;
-                  });
+                if (!isDesktopOrWeb && scrollInfo.metrics.extentAfter < 50 && list.length > _displayLimit) {
+                  if (_displayLimit < list.length) {
+                    setState(() {
+                      _displayLimit = min(_displayLimit + 15, list.length);
+                    });
+                  }
                   return true;
                 }
                 return false;
@@ -475,12 +691,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                           : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      _buildPeriodTab('all', 'Tất cả'),
-                      _buildPeriodTab('today', 'Hôm nay'),
-                      _buildPeriodTab('month', 'Tháng này'),
-                      _buildPeriodTab('year', 'Năm nay'),
+                  child: HorizontalScrollWrapper(
+child: Row(
+                      children: [
+                        _buildPeriodTab('all', 'Tất cả'),
+                        _buildPeriodTab('today', 'Hôm nay'),
+                        _buildPeriodTab('month', 'Tháng này'),
+                        _buildPeriodTab('year', 'Năm nay'),
                       Container(
                         height: 20,
                         width: 1,
@@ -609,9 +826,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                       ),
                     ],
                   ),
-                ),
+                ), // end SingleChildScrollView
               ),
-              // Header balance layout matching the user request
+              ),
+                // Header balance layout matching the user request
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -670,7 +888,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        _getPeriodTitle('Tổng Số Dư'),
+                                        '${_getPeriodTitle('Tổng số dư')} (${list.length})',
                                         style: TextStyle(
                                           color: isDark
                                               ? Colors.white70
@@ -688,9 +906,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                     child: Text(
                                       currencyFormatter.format(netBalance),
                                       style: TextStyle(
-                                        color: isDark
-                                            ? const Color(0xFF00D09E)
-                                            : const Color(0xFF093021),
+                                        color: netBalance < 0
+                                            ? const Color(0xFFEF4444)
+                                            : (isDark
+                                                ? const Color(0xFF00D09E)
+                                                : const Color(0xFF093021)),
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 0.5,
@@ -795,8 +1015,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  _getPeriodTitle('Tổng Chi Tiêu'),
-                                  style: TextStyle(
+                                '${_getPeriodTitle('Tổng chi tiêu')} (${list.length})',
+                                style: TextStyle(
                                     color: isDark
                                         ? Colors.white70
                                         : Colors.black54,
@@ -871,8 +1091,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  _getPeriodTitle('Tổng Doanh Thu'),
-                                  style: TextStyle(
+                                '${_getPeriodTitle('Tổng doanh thu')} (${list.length})',
+                                style: TextStyle(
                                     color: isDark
                                         ? Colors.white70
                                         : Colors.black54,
@@ -963,19 +1183,19 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: HorizontalScrollWrapper(
+child: Row(
                           children: [
-                            _buildStatusChip('all', 'Tất cả', isDark),
+                            _buildStatusChip('all', 'Tất cả', isDark, allCount),
                             const SizedBox(width: 8),
                             _buildStatusChip(
                               'confirmed',
                               'Đã xác nhận',
                               isDark,
+                              confirmedCount,
                             ),
                             const SizedBox(width: 8),
-                            _buildStatusChip('draft', 'Bản nháp', isDark),
+                            _buildStatusChip('draft', 'Bản nháp', isDark, draftCount),
                           ],
                         ),
                       ),
@@ -1002,9 +1222,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: HorizontalScrollWrapper(
+child: Row(
                           children: [
                             _buildCategoryChip('all', 'Tất cả', isDark, primaryColor),
                             ...allCats.map((cat) {
@@ -1023,7 +1242,62 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 4),
+              // Note about editing
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 12, color: primaryColor.withOpacity(0.8)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Chỉ có thể sửa hoặc xóa đối với giao dịch "Bản nháp"',
+                        style: TextStyle(
+                          color: isDark ? Colors.white54 : Colors.black54,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 8),
+
+              // Type Filter
+              if (currentRole == UserRole.financeManager)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Loại dòng tiền: ',
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black54,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: HorizontalScrollWrapper(
+child: Row(
+                            children: [
+                              _buildTypeChip('all', 'Tất cả', isDark),
+                              const SizedBox(width: 8),
+                              _buildTypeChip('income', 'Nhận (Thu)', isDark),
+                              const SizedBox(width: 8),
+                              _buildTypeChip('expense', 'Mất đi (Chi)', isDark),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (currentRole == UserRole.financeManager)
+                const SizedBox(height: 8),
 
               if (_selectedStatus == 'deleted')
                 Container(
@@ -1083,27 +1357,73 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                            itemCount:
-                                min(_displayLimit, list.length) +
-                                (list.length > _displayLimit ? 1 : 0),
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                            itemBuilder: (context, index) {
-                              if (index == _displayLimit) {
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: isDesktopOrWeb ? displayList.length : min(_displayLimit, list.length) + 1,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          itemBuilder: (context, index) {
+                            if (!isDesktopOrWeb && index == min(_displayLimit, list.length)) {
+                              if (_displayLimit < list.length) {
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16.0,
-                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 20.0),
                                   child: Center(
-                                    child: CircularProgressIndicator(
-                                      color: primaryColor,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF0F2C20) : const Color(0xFFF0FDF4),
+                                        borderRadius: BorderRadius.circular(24),
+                                        border: Border.all(color: const Color(0xFF00D09E).withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF00D09E)),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            'Đang tải thêm giao dịch...',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? const Color(0xFF00D09E) : const Color(0xFF065F46),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
                               }
-                              final tx = list[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.check_circle_outline_rounded, size: 16, color: isDark ? Colors.white38 : Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Đã hiển thị tất cả ${list.length} giao dịch',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark ? Colors.white38 : Colors.grey,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                            final isMobile = MediaQuery.of(context).size.width < 600;
+                            final tx = displayList[index];
                               final isIncome =
                                   tx.type == TransactionType.income;
                               final cat = catMap[tx.categoryId];
@@ -1116,8 +1436,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 if (code != null) catIcon = IconData(code, fontFamily: 'MaterialIcons');
                               }
 
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
+                              Widget card = Container(
                                 decoration: BoxDecoration(
                                   color: isDark
                                       ? const Color(0xFF0E2219)
@@ -1143,12 +1462,13 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(16),
                                     onTap: () {
-                                      if (currentRole.canEditTransactions) {
-                                        context.push(
-                                          '/transactions/form',
-                                          extra: {'transactionId': tx.id},
-                                        );
-                                      }
+                                      context.push(
+                                        '/transactions/form',
+                                        extra: {
+                                          'transactionId': tx.id,
+                                          'readOnly': !currentRole.canEditTransactions,
+                                        },
+                                      );
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -1179,16 +1499,42 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   CrossAxisAlignment.start,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Text(
-                                                  tx.note ?? 'Không có ghi chú',
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    color: isDark
-                                                        ? Colors.white
-                                                        : Colors.black87,
-                                                  ),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        tx.title,
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 15,
+                                                          color: isDark ? Colors.white : Colors.black87,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    Builder(builder: (context) {
+                                                      final syncItem = queueItems.firstWhereOrNull((e) => e.entityId == tx.id);
+                                                      if (syncItem != null) {
+                                                        if (syncItem.status == SyncStatus.pending) {
+                                                          return const Icon(Icons.sync, color: Colors.blue, size: 16);
+                                                        } else {
+                                                          return const Icon(Icons.error_outline, color: Colors.red, size: 16);
+                                                        }
+                                                      } else {
+                                                        return const Icon(Icons.cloud_done_outlined, color: Colors.green, size: 16);
+                                                      }
+                                                    }),
+                                                  ],
                                                 ),
+                                                if (queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 4),
+                                                    child: Text(
+                                                      queueItems.firstWhereOrNull((e) => e.entityId == tx.id)?.errorMessage ?? 'Lỗi đồng bộ',
+                                                      style: const TextStyle(color: Colors.red, fontSize: 11, fontStyle: FontStyle.italic),
+                                                    ),
+                                                  ),
                                                 const SizedBox(height: 6),
                                                 Wrap(
                                                   spacing: 6,
@@ -1284,8 +1630,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                   fontSize: 14,
                                                 ),
                                               ),
-                                              if (currentRole
-                                                  .canEditTransactions) ...[
+                                              if (!isMobile && currentRole.canEditTransactions && (tx.status != TransactionStatus.confirmed || queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))) ...[
                                                 const SizedBox(width: 4),
                                                 PopupMenuButton<String>(
                                                   icon: Icon(
@@ -1319,26 +1664,9 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                                       );
                                                     } else if (action ==
                                                         'hard_delete') {
-                                                      final repo = ref.read(
-                                                        transactionRepositoryProvider,
+                                                      _confirmHardDeleteFromList(
+                                                        tx,
                                                       );
-                                                      await repo.hardDelete(
-                                                        tx.id,
-                                                      );
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Đã xóa vĩnh viễn giao dịch',
-                                                            ),
-                                                            backgroundColor:
-                                                                Colors.red,
-                                                          ),
-                                                        );
-                                                        _refreshData();
-                                                      }
                                                     }
                                                   },
                                                   itemBuilder: (context) {
@@ -1432,16 +1760,105 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                   ),
                                 ),
                               );
+
+                              if (isMobile && currentRole.canEditTransactions && (tx.status != TransactionStatus.confirmed || queueItems.any((e) => e.entityId == tx.id && e.status == SyncStatus.error))) {
+                                card = Slidable(
+                                  key: ValueKey(tx.id),
+                                  endActionPane: ActionPane(
+                                    motion: const ScrollMotion(),
+                                    children: [
+                                      if (tx.status == TransactionStatus.deleted) ...[
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmRestoreFromList(tx),
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.restore_rounded,
+                                          label: 'Khôi phục',
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            bottomLeft: Radius.circular(16),
+                                          ),
+                                        ),
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmHardDeleteFromList(tx),
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_forever_rounded,
+                                          label: 'Xóa vĩnh viễn',
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        SlidableAction(
+                                          onPressed: (context) {
+                                            context.go('/transactions/form', extra: {'transactionId': tx.id});
+                                          },
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.edit_rounded,
+                                          label: 'Sửa',
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            bottomLeft: Radius.circular(16),
+                                          ),
+                                        ),
+                                        SlidableAction(
+                                          onPressed: (context) => _confirmDeleteFromList(tx),
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_outline_rounded,
+                                          label: 'Xóa',
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  child: card,
+                                );
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: card,
+                              );
                             },
                           ),
+                        // Pagination for Desktop is rendered sticky outside the scroll area
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
           );
+
+          // Desktop: sticky pagination bar below the scrollable list
+          if (isDesktopOrWeb) {
+            return Column(
+              children: [
+                Expanded(child: scrollable),
+                _buildPaginationBar(
+                  context: context,
+                  totalCount: totalCount,
+                  totalPages: totalPages,
+                  currentPage: currentPage,
+                  startIndex: startIndex,
+                  endIndex: endIndex,
+                  primaryColor: primaryColor,
+                  isDark: isDark,
+                ),
+              ],
+            );
+          }
+          return scrollable;
         },
       ),
-      floatingActionButton: currentRole.canEditTransactions
+      floatingActionButton: (currentRole.canEditTransactions && !(kIsWeb || (!Platform.isAndroid && !Platform.isIOS) || MediaQuery.of(context).size.width >= 900))
           ? ScaleOnTap(
               onTap: () {
                 context.push('/transactions/form');
@@ -1514,7 +1931,8 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     final isSelected = _selectedPeriod == id;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Expanded(
+    return Padding(
+      padding: EdgeInsets.zero,
       child: GestureDetector(
         onTap: () {
           setState(() {
@@ -1522,7 +1940,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
           });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFF00D09E) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -1541,6 +1959,239 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationBar({
+    required BuildContext context,
+    required int totalCount,
+    required int totalPages,
+    required int currentPage,
+    required int startIndex,
+    required int endIndex,
+    required Color primaryColor,
+    required bool isDark,
+  }) {
+    if (totalCount == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0E2219) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1A382B) : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 650;
+
+          final infoText = Text(
+            'Hiển thị ${totalCount > 0 ? startIndex + 1 : 0} - $endIndex trên tổng số $totalCount mục',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          );
+
+          final itemsPerPageDropdown = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Số dòng:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _itemsPerPage,
+                    isDense: true,
+                    dropdownColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    items: const [10, 15, 30, 50].map((val) {
+                      return DropdownMenuItem<int>(
+                        value: val,
+                        child: Text('$val dòng'),
+                      );
+                    }).toList(),
+                    onChanged: (newVal) {
+                      if (newVal != null) {
+                        setState(() {
+                          _itemsPerPage = newVal;
+                          _currentPage = 1;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          );
+
+          List<Widget> pageButtons = [];
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.first_page_rounded,
+              enabled: currentPage > 1,
+              onTap: () => setState(() => _currentPage = 1),
+              isDark: isDark,
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 4));
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.chevron_left_rounded,
+              enabled: currentPage > 1,
+              onTap: () => setState(() => _currentPage = currentPage - 1),
+              isDark: isDark,
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 6));
+
+          for (int p = 1; p <= totalPages; p++) {
+            if (totalPages > 7) {
+              if (p != 1 && p != totalPages && (p < currentPage - 1 || p > currentPage + 1)) {
+                if (p == currentPage - 2 || p == currentPage + 2) {
+                  pageButtons.add(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: Text('...', style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
+                    ),
+                  );
+                }
+                continue;
+              }
+            }
+            final isSelected = p == currentPage;
+            pageButtons.add(
+              GestureDetector(
+                onTap: () => setState(() => _currentPage = p),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? primaryColor : (isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$p',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          pageButtons.add(const SizedBox(width: 6));
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.chevron_right_rounded,
+              enabled: currentPage < totalPages,
+              onTap: () => setState(() => _currentPage = currentPage + 1),
+              isDark: isDark,
+            ),
+          );
+          pageButtons.add(const SizedBox(width: 4));
+          pageButtons.add(
+            _buildPageIconButton(
+              icon: Icons.last_page_rounded,
+              enabled: currentPage < totalPages,
+              onTap: () => setState(() => _currentPage = totalPages),
+              isDark: isDark,
+            ),
+          );
+
+          if (isCompact) {
+            return Column(
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 16,
+                  runSpacing: 10,
+                  children: [
+                    infoText,
+                    itemsPerPageDropdown,
+                  ],
+                ),
+                const SizedBox(height: 10),
+                HorizontalScrollWrapper(
+child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: pageButtons,
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              infoText,
+              Row(
+                children: [
+                  itemsPerPageDropdown,
+                  const SizedBox(width: 16),
+                  Row(children: pageButtons),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPageIconButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF13362A) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: enabled ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.white24 : Colors.grey.shade400),
         ),
       ),
     );

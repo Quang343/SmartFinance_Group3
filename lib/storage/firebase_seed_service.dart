@@ -182,19 +182,19 @@ class FirebaseSeedService {
           id: const Uuid().v4(), amount: 3000000, type: TransactionType.expense,
           categoryId: 'cat_office', transactionDate: now.subtract(const Duration(days: 1)),
           status: TransactionStatus.confirmed, createdByUid: uid, company: company,
-          note: 'Mua văn phòng phẩm', createdAt: now, updatedAt: now,
+          title: 'Mua văn phòng phẩm', createdAt: now, updatedAt: now,
         ),
         TransactionModel(
           id: const Uuid().v4(), amount: 15000000, type: TransactionType.expense,
           categoryId: 'cat_salary', transactionDate: now.subtract(const Duration(days: 2)),
           status: TransactionStatus.confirmed, createdByUid: uid, company: company,
-          note: 'Lương nhân viên tháng 6', createdAt: now, updatedAt: now,
+          title: 'Lương nhân viên tháng 6', createdAt: now, updatedAt: now,
         ),
         TransactionModel(
           id: const Uuid().v4(), amount: 2000000, type: TransactionType.expense,
           categoryId: 'cat_utility', transactionDate: now.subtract(const Duration(days: 4)),
           status: TransactionStatus.confirmed, createdByUid: uid, company: company,
-          note: 'Tiền internet tháng 6', createdAt: now, updatedAt: now,
+          title: 'Tiền internet tháng 6', createdAt: now, updatedAt: now,
         ),
       ]);
     } else if (role == 'revenueAccountant') {
@@ -203,13 +203,13 @@ class FirebaseSeedService {
           id: const Uuid().v4(), amount: 35000000, type: TransactionType.income,
           categoryId: 'cat_revenue', transactionDate: now.subtract(const Duration(days: 1)),
           status: TransactionStatus.confirmed, createdByUid: uid, company: company,
-          note: 'Doanh thu từ khách hàng A', createdAt: now, updatedAt: now,
+          title: 'Doanh thu từ khách hàng A', createdAt: now, updatedAt: now,
         ),
         TransactionModel(
           id: const Uuid().v4(), amount: 18000000, type: TransactionType.income,
           categoryId: 'cat_service', transactionDate: now.subtract(const Duration(days: 3)),
           status: TransactionStatus.confirmed, createdByUid: uid, company: company,
-          note: 'Phí dịch vụ tháng 6', createdAt: now, updatedAt: now,
+          title: 'Phí dịch vụ tháng 6', createdAt: now, updatedAt: now,
         ),
       ]);
     }

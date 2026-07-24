@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/transaction_entity.dart';
@@ -56,6 +57,130 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
       default:
         return 'Tất cả';
     }
+  }
+
+  void _showCashFlowDetail(
+    BuildContext context,
+    String type,
+    List<TransactionEntity> txs,
+    List<CategoryEntity> allCats,
+    bool isDark,
+    NumberFormat fmt,
+  ) {
+    final catMap = {for (var c in allCats) c.id: c};
+    final filtered = type == 'net'
+        ? List<TransactionEntity>.from(txs)
+        : txs.where((tx) => tx.type == (type == 'income' ? TransactionType.income : TransactionType.expense)).toList();
+    filtered.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
+    final total = filtered.fold<int>(0, (s, tx) => s + tx.amount);
+    final title = type == 'net' ? 'Dòng tiền thuần' : type == 'income' ? 'Tổng thu' : 'Tổng chi';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: isDark ? Colors.white10 : Colors.grey.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                        const SizedBox(height: 2),
+                        Text('${fmt.format(total)} • ${filtered.length} giao dịch', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  ScaleOnTap(
+                    onTap: () => Navigator.pop(ctx),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade100, shape: BoxShape.circle),
+                      child: const Icon(Icons.close_rounded, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(child: Text('Không có giao dịch nào', style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)))
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final tx = filtered[i];
+                        final isInc = tx.type == TransactionType.income;
+                        final cat = catMap[tx.categoryId];
+                        return ScaleOnTap(
+                          onTap: () => context.push('/transactions/form', extra: {'transactionId': tx.id, 'readOnly': true}),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF06150F) : const Color(0xFFF4FAF7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: (isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444)).withOpacity(0.15),
+                                  child: Icon(isInc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                                      color: isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444), size: 16),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        cat?.name ?? 'Chưa phân loại',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        DateFormat('dd/MM/yyyy').format(tx.transactionDate),
+                                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '${isInc ? '+' : '-'}${fmt.format(tx.amount)}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: isInc ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -140,22 +265,30 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           final double savingRate = totalIncome > 0 ? (netBalance / totalIncome) * 100 : 0.0;
 
           // Calculate itemized sums based on categories
-          final Map<String, double> categorySums = {};
-          if (currentRole == UserRole.expenseAccountant) {
-            final expenses = filtered.where((tx) => tx.type == TransactionType.expense);
-            for (var tx in expenses) {
-              final cat = catMap[tx.categoryId];
-              final label = cat?.name ?? 'Chưa phân loại';
-              categorySums[label] = (categorySums[label] ?? 0.0) + tx.amount;
-            }
-          } else if (currentRole == UserRole.revenueAccountant) {
-            final incomes = filtered.where((tx) => tx.type == TransactionType.income);
-            for (var tx in incomes) {
-              final cat = catMap[tx.categoryId];
-              final label = cat?.name ?? 'Chưa phân loại';
-              categorySums[label] = (categorySums[label] ?? 0.0) + tx.amount;
-            }
+          final Map<String, double> incomeCategorySums = {};
+          final Map<String, double> expenseCategorySums = {};
+          
+          final incomes = filtered.where((tx) => tx.type == TransactionType.income);
+          for (var tx in incomes) {
+            final cat = catMap[tx.categoryId];
+            final label = cat?.name ?? 'Chưa phân loại';
+            incomeCategorySums[label] = (incomeCategorySums[label] ?? 0.0) + tx.amount;
           }
+          
+          final expenses = filtered.where((tx) => tx.type == TransactionType.expense);
+          for (var tx in expenses) {
+            final cat = catMap[tx.categoryId];
+            final label = cat?.name ?? 'Chưa phân loại';
+            expenseCategorySums[label] = (expenseCategorySums[label] ?? 0.0) + tx.amount;
+          }
+
+          final sortedIncomeCategories = incomeCategorySums.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          final sortedExpenseCategories = expenseCategorySums.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+          // Retain `categorySums` for existing logic of accountants
+          final Map<String, double> categorySums = currentRole == UserRole.expenseAccountant 
+              ? expenseCategorySums 
+              : incomeCategorySums;
 
           final sortedCategories = categorySums.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value));
@@ -467,7 +600,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                       if (currentRole == UserRole.financeManager) ...[
                                         _buildLegendItem(
                                           label: 'Doanh thu',
-                                          percentage: '${(incomeRatio * 100).toStringAsFixed(0)}%',
+                                          percentage: incomeRatio * 100 < 1 && incomeRatio > 0 ? '<1%' : '${(incomeRatio * 100).toStringAsFixed(1).replaceAll('.0', '')}%',
                                           value: currencyFormatter.format(totalIncome),
                                           color: const Color(0xFF00D09E),
                                           isDark: isDark,
@@ -475,7 +608,7 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                         const SizedBox(height: 14),
                                         _buildLegendItem(
                                           label: 'Chi phí',
-                                          percentage: '${(expenseRatio * 100).toStringAsFixed(0)}%',
+                                          percentage: expenseRatio * 100 < 1 && expenseRatio > 0 ? '<1%' : '${(expenseRatio * 100).toStringAsFixed(1).replaceAll('.0', '')}%',
                                           value: currencyFormatter.format(totalExpense),
                                           color: const Color(0xFFEF4444),
                                           isDark: isDark,
@@ -485,7 +618,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                           if (i > 0) const SizedBox(height: 10),
                                           _buildLegendItem(
                                             label: displayCategories[i].key,
-                                            percentage: '${(displayCategories[i].value / roleTotal * 100).toStringAsFixed(0)}%',
+                                            percentage: (displayCategories[i].value / roleTotal * 100) > 0 && (displayCategories[i].value / roleTotal * 100) < 1 
+                                                ? '<1%' 
+                                                : '${(displayCategories[i].value / roleTotal * 100).toStringAsFixed(1).replaceAll('.0', '')}%',
                                             value: currencyFormatter.format(displayCategories[i].value),
                                             color: segmentColors[i],
                                             isDark: isDark,
@@ -572,6 +707,21 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                       const SizedBox(height: 16),
                     ],
                     if (currentRole == UserRole.financeManager) ...[
+                      // Admin Detailed Metrics
+                      _buildAdminDetailedMetrics(
+                        totalIncome: totalIncome.toDouble(),
+                        totalExpense: totalExpense.toDouble(),
+                        netBalance: netBalance.toDouble(),
+                        txCount: filtered.length,
+                        sortedIncomeCats: sortedIncomeCategories,
+                        sortedExpenseCats: sortedExpenseCategories,
+                        transactions: filtered,
+                        period: _selectedPeriod,
+                        isDark: isDark,
+                        fmt: currencyFormatter,
+                      ),
+                      const SizedBox(height: 16),
+
                       // Net cash flow card
                       Container(
                         padding: const EdgeInsets.all(20),
@@ -592,21 +742,33 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Dòng tiền thuần doanh nghiệp',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: isDark ? Colors.white : const Color(0xFF093021),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              currencyFormatter.format(netBalance),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 24,
-                                color: netBalance >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                            ScaleOnTap(
+                              onTap: () => _showCashFlowDetail(context, 'net', filtered, categories, isDark, currencyFormatter),
+                              child: Container(
+                                width: double.infinity,
+                                color: Colors.transparent,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Dòng tiền thuần doanh nghiệp',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: isDark ? Colors.white : const Color(0xFF093021),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      currencyFormatter.format(netBalance),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 24,
+                                        color: netBalance >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -619,7 +781,9 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
                                     totalIncome: totalIncome,
                                     totalExpense: totalExpense,
                                     netBalance: netBalance,
-                                    categories: displayCategories,
+                                    incomeCategories: sortedIncomeCategories,
+                                    expenseCategories: sortedExpenseCategories,
+                                    transactionCount: filtered.length,
                                     periodLabel: _periodLabel(),
                                   );
                                   final bytes = await doc.save();
@@ -673,6 +837,259 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildAdminDetailedMetrics({
+    required double totalIncome,
+    required double totalExpense,
+    required double netBalance,
+    required int txCount,
+    required List<MapEntry<String, double>> sortedIncomeCats,
+    required List<MapEntry<String, double>> sortedExpenseCats,
+    required List<TransactionEntity> transactions,
+    required String period,
+    required bool isDark,
+    required NumberFormat fmt,
+  }) {
+    final profitMargin = totalIncome > 0 ? (netBalance / totalIncome) * 100 : 0.0;
+    final expenseRatio = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0.0;
+    final avgPerTx = txCount > 0 ? (totalIncome + totalExpense) / txCount : 0.0;
+
+    // Trend calculation
+    final Map<int, double> incomeByGroup = {};
+    final Map<int, double> expenseByGroup = {};
+
+    for (var tx in transactions) {
+      final int key = period == 'year' ? tx.transactionDate.month : tx.transactionDate.day;
+
+      if (tx.type == TransactionType.income) {
+        incomeByGroup[key] = (incomeByGroup[key] ?? 0) + tx.amount.toDouble();
+      } else {
+        expenseByGroup[key] = (expenseByGroup[key] ?? 0) + tx.amount.toDouble();
+      }
+    }
+
+    List<FlSpot> incomeSpots = [];
+    List<FlSpot> expenseSpots = [];
+    double maxVal = 1000;
+    
+    final keys = {...incomeByGroup.keys, ...expenseByGroup.keys}.toList()..sort();
+    if (keys.isNotEmpty) {
+      for (var k in keys) {
+        final inc = incomeByGroup[k] ?? 0.0;
+        final exp = expenseByGroup[k] ?? 0.0;
+        if (inc > maxVal) maxVal = inc;
+        if (exp > maxVal) maxVal = exp;
+        incomeSpots.add(FlSpot(k.toDouble(), inc));
+        expenseSpots.add(FlSpot(k.toDouble(), exp));
+      }
+    } else {
+      incomeSpots = [const FlSpot(0, 0)];
+      expenseSpots = [const FlSpot(0, 0)];
+    }
+
+    Widget _buildTrendChart() {
+      return Container(
+        height: 220,
+        margin: const EdgeInsets.only(top: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0D251C) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Biểu đồ xu hướng Thu / Chi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                ),
+                Icon(Icons.circle, size: 10, color: const Color(0xFF00D09E)),
+                const SizedBox(width: 4),
+                Text('Thu', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54)),
+                const SizedBox(width: 12),
+                Icon(Icons.circle, size: 10, color: const Color(0xFFEF4444)),
+                const SizedBox(width: 4),
+                Text('Chi', style: TextStyle(fontSize: 10, color: isDark ? Colors.white70 : Colors.black54)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: LineChart(
+                LineChartData(
+                  minY: 0,
+                  maxY: maxVal * 1.2,
+                  gridData: FlGridData(
+                    show: true, 
+                    drawVerticalLine: false, 
+                    getDrawingHorizontalLine: (v) => FlLine(color: isDark ? Colors.white10 : Colors.black12, strokeWidth: 1)
+                  ),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 22,
+                        getTitlesWidget: (val, meta) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(val.toInt().toString(), style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black54)),
+                          );
+                        },
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                        getTitlesWidget: (val, meta) {
+                          if (val == 0) return const SizedBox.shrink();
+                          return Text(NumberFormat.compactCurrency(locale: 'vi_VN', symbol: '').format(val), style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black54));
+                        },
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: incomeSpots,
+                      isCurved: true,
+                      color: const Color(0xFF00D09E),
+                      barWidth: 3,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(show: true, color: const Color(0xFF00D09E).withValues(alpha: 0.1)),
+                    ),
+                    LineChartBarData(
+                      spots: expenseSpots,
+                      isCurved: true,
+                      color: const Color(0xFFEF4444),
+                      barWidth: 3,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(show: true, color: const Color(0xFFEF4444).withValues(alpha: 0.1)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget _buildStatBox(String title, String value, Color color, IconData icon) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0D251C) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: isDark ? Colors.black.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 14, color: color),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(title, style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black54))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget _buildCatList(String title, List<MapEntry<String, double>> cats, Color color, double total) {
+      if (cats.isEmpty) return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.only(top: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0D251C) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+            const SizedBox(height: 12),
+            ...cats.take(3).map((e) {
+              final pct = total > 0 ? (e.value / total) * 100 : 0.0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(e.key, style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(fmt.format(e.value), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+                          const SizedBox(height: 4),
+                          LinearProgressIndicator(
+                            value: pct / 100,
+                            backgroundColor: color.withValues(alpha: 0.1),
+                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                            minHeight: 4,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _buildStatBox('Biên lợi nhuận', '${profitMargin.toStringAsFixed(1)}%', profitMargin >= 0 ? const Color(0xFF00D09E) : const Color(0xFFEF4444), Icons.show_chart_rounded),
+            const SizedBox(width: 8),
+            _buildStatBox('Tỷ lệ chi / thu', '${expenseRatio.toStringAsFixed(1)}%', const Color(0xFFF59E0B), Icons.pie_chart_outline_rounded),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _buildStatBox('Tổng số giao dịch', txCount.toString(), Colors.blue, Icons.receipt_long_rounded),
+            const SizedBox(width: 8),
+            _buildStatBox('Trung bình / GD', fmt.format(avgPerTx), const Color(0xFF8B5CF6), Icons.calculate_outlined),
+          ],
+        ),
+        _buildTrendChart(),
+        _buildCatList('Cơ cấu nguồn thu (Top 3)', sortedIncomeCats, const Color(0xFF00D09E), totalIncome),
+        _buildCatList('Cơ cấu khoản chi (Top 3)', sortedExpenseCats, const Color(0xFFEF4444), totalExpense),
+      ],
     );
   }
 

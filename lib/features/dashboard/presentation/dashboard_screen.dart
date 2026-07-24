@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/providers/role_provider.dart';
 import '../../../core/providers/app_providers.dart';
@@ -14,6 +15,7 @@ import '../../../core/providers/transaction_providers.dart';
 import '../../../core/providers/category_providers.dart';
 import '../../../core/widgets/scale_on_tap.dart';
 import '../../../core/services/offline_sync_service.dart';
+import 'widgets/dashboard_charts.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -23,8 +25,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  // Filter state: 'daily' | 'weekly' | 'monthly'
   String _timeFilter = 'monthly';
+  DateTimeRange? _customDateRange;
 
   @override
   void initState() {
@@ -52,6 +54,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
     final timeFormatter = DateFormat('HH:mm');
     final dateFormatter = DateFormat('dd/MM');
+    final isDesktop = MediaQuery.sizeOf(context).width >= 800;
 
     final transactionsAsync = currentRole == UserRole.expenseAccountant
         ? ref.watch(expenseTransactionsProvider)
@@ -61,7 +64,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     final categoriesAsync = ref.watch(allCategoriesProvider);
 
-    if (transactionsAsync.isLoading || categoriesAsync.isLoading) {
+    if (transactionsAsync.isLoading ||
+        categoriesAsync.isLoading ||
+        budgetLimitAsync.isLoading ||
+        revenueKpiAsync.isLoading) {
       return Scaffold(
         backgroundColor: isDark
             ? const Color(0xFF06150F)
@@ -70,13 +76,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ClipOval(
-                child: Image.asset(
-                  'assets/images/loadingGif.gif',
-                  width: 150,
-                  height: 150,
-                  fit: BoxFit.cover,
-                ),
+              SpinKitWaveSpinner(
+                color: const Color(0xFF00D09E),
+                size: 100,
+                trackColor: const Color(0xFF00D09E).withValues(alpha: 0.2),
+                waveColor: const Color(0xFF00D09E).withValues(alpha: 0.5),
               ),
               const SizedBox(height: 16),
               Text(
@@ -120,20 +124,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     // Note: No need to filter by role again because the Provider already did it!
 
-    // Apply selected time filter (Daily, Weekly, Monthly)
+    // Apply selected time filter (Daily, Weekly, Monthly, All)
     final now = DateTime.now();
     filteredTxs = filteredTxs.where((tx) {
-      final difference = now.difference(tx.transactionDate).inDays;
-      if (_timeFilter == 'daily') {
-        return difference == 0 && tx.transactionDate.day == now.day;
-      } else if (_timeFilter == 'weekly') {
-        return difference <= 7;
+      if (_timeFilter == 'all') {
+        return true;
+      } else if (_timeFilter == 'daily') {
+        return tx.transactionDate.year == now.year &&
+            tx.transactionDate.month == now.month &&
+            tx.transactionDate.day == now.day;
+      } else if (_timeFilter == 'yearly') {
+        return tx.transactionDate.year == now.year;
+      } else if (_timeFilter == 'custom') {
+        if (_customDateRange == null) return true;
+        final start = DateTime(
+          _customDateRange!.start.year,
+          _customDateRange!.start.month,
+          _customDateRange!.start.day,
+        );
+        final end = DateTime(
+          _customDateRange!.end.year,
+          _customDateRange!.end.month,
+          _customDateRange!.end.day,
+          23,
+          59,
+          59,
+        );
+        return tx.transactionDate.isAfter(
+              start.subtract(const Duration(seconds: 1)),
+            ) &&
+            tx.transactionDate.isBefore(end.add(const Duration(seconds: 1)));
       } else {
         // Monthly (Calendar month)
         return tx.transactionDate.month == now.month &&
             tx.transactionDate.year == now.year;
       }
     }).toList();
+
+    filteredTxs.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
 
     // Calculations for balance and stats
     final incomeSum = filteredTxs
@@ -171,8 +199,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .map((tx) => tx.amount)
         .fold(0, (sum, val) => sum + val);
 
-    final double budgetLimit = (budgetLimitAsync.valueOrNull ?? 20000000).toDouble();
-    final double revenueKPI = (revenueKpiAsync.valueOrNull ?? 500000000).toDouble();
+    final double budgetLimit = (budgetLimitAsync.valueOrNull ?? 20000000)
+        .toDouble();
+    final double revenueKPI = (revenueKpiAsync.valueOrNull ?? 500000000)
+        .toDouble();
 
     final double expensePercentage = monthlyExpenseSum / budgetLimit;
     final int expensePercentInt = (expensePercentage * 100).toInt();
@@ -182,7 +212,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     // Budget Insights
     final double remainingBudget = (budgetLimit - monthlyExpenseSum).toDouble();
-
 
     String highestExpenseCatName = 'chưa có dữ liệu';
     double highestExpenseAmount = 0;
@@ -332,6 +361,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (currentRole == UserRole.financeManager) ...[
+                          _buildHeaderFilter(),
+                          const SizedBox(height: 12),
                           // Dòng tiền thuần (Net Cash Flow)
                           Text(
                             'DÒNG TIỀN THUẦN (Net Cash Flow)',
@@ -343,20 +374,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              currencyFormatter.format(totalBalance),
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                                color: totalBalance >= 0
-                                    ? (isDark
-                                          ? const Color(0xFF86EFAC)
-                                          : const Color(0xFF008060))
-                                    : (isDark
-                                          ? const Color(0xFFFCA5A5)
-                                          : const Color(0xFFD32F2F)),
+                          ScaleOnTap(
+                            onTap: () => _showCashFlowDetail(
+                              context,
+                              'net',
+                              filteredTxs,
+                              allCats,
+                              isDark,
+                              currencyFormatter,
+                            ),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF0D281E)
+                                    : const Color(0xFFE6F4F0),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: isDesktop
+                                    ? Alignment.centerLeft
+                                    : Alignment.center,
+                                child: Text(
+                                  currencyFormatter.format(totalBalance),
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    color: totalBalance >= 0
+                                        ? (isDark
+                                              ? const Color(0xFF86EFAC)
+                                              : const Color(0xFF008060))
+                                        : (isDark
+                                              ? const Color(0xFFFCA5A5)
+                                              : const Color(0xFFD32F2F)),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -371,46 +425,66 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Row(
                             children: [
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                                child: ScaleOnTap(
+                                  onTap: () => _showCashFlowDetail(
+                                    context,
+                                    'income',
+                                    filteredTxs,
+                                    allCats,
+                                    isDark,
+                                    currencyFormatter,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? const Color(0xFF0D281E)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Icon(
-                                          Icons.arrow_upward_rounded,
-                                          size: 14,
-                                          color: isDark
-                                              ? const Color(0xFF86EFAC)
-                                              : const Color(0xFF008060),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.arrow_upward_rounded,
+                                              size: 14,
+                                              color: isDark
+                                                  ? const Color(0xFF86EFAC)
+                                                  : const Color(0xFF008060),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tổng thu',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : Colors.black,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Tổng thu',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? Colors.white
-                                                : Colors.black,
-                                            fontWeight: FontWeight.bold,
+                                        const SizedBox(height: 4),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            currencyFormatter.format(incomeSum),
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? const Color(0xFF86EFAC)
+                                                  : const Color(0xFF008060),
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        currencyFormatter.format(incomeSum),
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark
-                                              ? const Color(0xFF86EFAC)
-                                              : const Color(0xFF008060),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                               Container(
@@ -422,46 +496,68 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                                child: ScaleOnTap(
+                                  onTap: () => _showCashFlowDetail(
+                                    context,
+                                    'expense',
+                                    filteredTxs,
+                                    allCats,
+                                    isDark,
+                                    currencyFormatter,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? const Color(0xFF0D281E)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Icon(
-                                          Icons.arrow_downward_rounded,
-                                          size: 14,
-                                          color: isDark
-                                              ? const Color(0xFFFCA5A5)
-                                              : const Color(0xFFD32F2F),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.arrow_downward_rounded,
+                                              size: 14,
+                                              color: isDark
+                                                  ? const Color(0xFFFCA5A5)
+                                                  : const Color(0xFFD32F2F),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tổng chi',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : Colors.black,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Tổng chi',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? Colors.white
-                                                : Colors.black,
-                                            fontWeight: FontWeight.bold,
+                                        const SizedBox(height: 4),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            currencyFormatter.format(
+                                              expenseSum,
+                                            ),
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? const Color(0xFFFCA5A5)
+                                                  : const Color(0xFFD32F2F),
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        currencyFormatter.format(expenseSum),
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark
-                                              ? const Color(0xFFFCA5A5)
-                                              : const Color(0xFFD32F2F),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -472,8 +568,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Text(
                             _timeFilter == 'daily'
                                 ? 'TỔNG CHI TIÊU HÔM NAY'
-                                : _timeFilter == 'weekly'
-                                ? 'TỔNG CHI TIÊU TUẦN NÀY'
+                                : _timeFilter == 'yearly'
+                                ? 'TỔNG CHI TIÊU NĂM NAY'
+                                : _timeFilter == 'all'
+                                ? 'TỔNG CHI TIÊU TẤT CẢ'
+                                : _timeFilter == 'custom'
+                                ? 'TỔNG CHI TIÊU TÙY CHỈNH'
                                 : 'TỔNG CHI TIÊU HÀNG THÁNG',
                             style: TextStyle(
                               fontSize: 10,
@@ -483,16 +583,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              currencyFormatter.format(expenseSum),
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? const Color(0xFFFCA5A5)
-                                    : const Color(0xFFD32F2F),
+                          Container(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: isDesktop
+                                  ? Alignment.centerLeft
+                                  : Alignment.center,
+                              child: Text(
+                                currencyFormatter.format(expenseSum),
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? const Color(0xFFFCA5A5)
+                                      : const Color(0xFFD32F2F),
+                                ),
                               ),
                             ),
                           ),
@@ -509,16 +615,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              currencyFormatter.format(incomeSum),
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? const Color(0xFF86EFAC)
-                                    : const Color(0xFF008060),
+                          Container(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: isDesktop
+                                  ? Alignment.centerLeft
+                                  : Alignment.center,
+                              child: Text(
+                                currencyFormatter.format(incomeSum),
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? const Color(0xFF86EFAC)
+                                      : const Color(0xFF008060),
+                                ),
                               ),
                             ),
                           ),
@@ -528,34 +640,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             currentRole == UserRole.expenseAccountant) ...[
                           const SizedBox(height: 12),
                           _buildCompactBar(
-                            label: 'Ngân sách chi tiêu',
+                            label: 'Ngân sách hàng tháng',
                             percent: expensePercentInt,
                             used: monthlyExpenseSum,
                             target: budgetLimit,
                             remaining: remainingBudget,
                             currencyFormatter: currencyFormatter,
                             isDark: isDark,
-                            fillColor: const Color(0xFF1E293B),
-                            accentColor: const Color(0xFF059669),
+                            fillColor: isDark
+                                ? const Color(0xFF60A5FA)
+                                : const Color(0xFF3B82F6),
+                            accentColor: isDark
+                                ? const Color(0xFF3B82F6)
+                                : const Color(0xFF2563EB),
                             showEdit: currentRole == UserRole.financeManager,
-                            onEdit: () => _showEditValueDialog(context, isDark, 'Ngân sách tháng', budgetLimitAsync.valueOrNull ?? 20000000, (_) {}),
+                            onEdit: () => _showEditValueDialog(
+                              context,
+                              isDark,
+                              'Ngân sách hàng tháng',
+                              budgetLimitAsync.valueOrNull ?? 20000000,
+                              (_) {},
+                            ),
                           ),
                         ],
                         if (currentRole == UserRole.financeManager) ...[
                           const SizedBox(height: 12),
                           _buildCompactBar(
-                            label: 'KPI doanh thu',
+                            label: 'KPI hàng tháng',
                             percent: incomePercentInt,
                             used: monthlyIncomeSum,
                             target: revenueKPI,
                             remaining: revenueKPI - monthlyIncomeSum,
                             currencyFormatter: currencyFormatter,
                             isDark: isDark,
-                            fillColor: Colors.blueAccent,
-                            accentColor: Colors.amber,
+                            fillColor: isDark
+                                ? const Color(0xFFFBBF24)
+                                : const Color(0xFFF59E0B),
+                            accentColor: isDark
+                                ? const Color(0xFFF59E0B)
+                                : const Color(0xFFD97706),
                             showEdit: true,
                             overIsBad: false,
-                            onEdit: () => _showEditValueDialog(context, isDark, 'KPI doanh thu', revenueKpiAsync.valueOrNull ?? 500000000, (_) {}),
+                            onEdit: () => _showEditValueDialog(
+                              context,
+                              isDark,
+                              'KPI hàng tháng',
+                              revenueKpiAsync.valueOrNull ?? 500000000,
+                              (_) {},
+                            ),
                           ),
                         ],
                       ],
@@ -571,13 +703,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // Quick Action Row / Shortcuts
-                _buildQuickActions(
-                  context,
-                  currentRole,
-                  isDark,
-                  const Color(0xFF00D09E),
-                ),
+                // Quick Action Row / Shortcuts or Charts for Finance Manager
+                if (currentRole == UserRole.financeManager)
+                  DashboardCharts(
+                    allTxs: allTxs,
+                    filteredTxs: filteredTxs,
+                    allCats: allCats,
+                    isDark: isDark,
+                    currencyFormatter: currencyFormatter,
+                    timeFilter: _timeFilter,
+                    customDateRange: _customDateRange,
+                  )
+                else
+                  _buildQuickActions(
+                    context,
+                    currentRole,
+                    isDark,
+                    const Color(0xFF00D09E),
+                  ),
                 if (currentRole != UserRole.financeManager) ...[
                   const SizedBox(height: 24),
                   Container(
@@ -587,13 +730,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
+                          color: isDark
+                              ? Colors.black.withOpacity(0.3)
+                              : Colors.black.withOpacity(0.04),
                           blurRadius: 15,
                           offset: const Offset(0, 8),
                         ),
                       ],
                       border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+                        color: isDark
+                            ? Colors.white.withOpacity(0.05)
+                            : Colors.grey.shade100,
                         width: 1,
                       ),
                     ),
@@ -608,25 +755,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   width: 72,
                                   height: 72,
                                   child: CircularProgressIndicator(
-                                    value: currentRole == UserRole.revenueAccountant ? incomePercentage : expensePercentage,
+                                    value:
+                                        currentRole ==
+                                            UserRole.revenueAccountant
+                                        ? incomePercentage
+                                        : expensePercentage,
                                     strokeWidth: 6,
-                                    backgroundColor: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE8F6F1),
-                                    color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFF00D09E),
+                                    backgroundColor: isDark
+                                        ? Colors.white.withOpacity(0.1)
+                                        : const Color(0xFFE8F6F1),
+                                    color:
+                                        currentRole ==
+                                            UserRole.revenueAccountant
+                                        ? Colors.blueAccent
+                                        : const Color(0xFF00D09E),
                                     strokeCap: StrokeCap.round,
                                   ),
                                 ),
                                 Icon(
-                                  currentRole == UserRole.revenueAccountant ? Icons.emoji_events_rounded : Icons.savings_rounded,
-                                  color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFF00D09E),
+                                  currentRole == UserRole.revenueAccountant
+                                      ? Icons.emoji_events_rounded
+                                      : Icons.savings_rounded,
+                                  color:
+                                      currentRole == UserRole.revenueAccountant
+                                      ? Colors.blueAccent
+                                      : const Color(0xFF00D09E),
                                   size: 28,
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              currentRole == UserRole.revenueAccountant ? 'Tiến độ KPI' : 'Phân tích Ngân sách',
+                              currentRole == UserRole.revenueAccountant
+                                  ? 'Tiến độ KPI'
+                                  : 'Phân tích Ngân sách',
                               style: TextStyle(
-                                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                                color: isDark
+                                    ? Colors.white70
+                                    : const Color(0xFF1E293B),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -637,7 +803,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         Container(
                           height: 80,
                           width: 1,
-                          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.1)
+                              : Colors.grey.shade200,
                         ),
                         const SizedBox(width: 20),
                         Expanded(
@@ -645,9 +813,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                currentRole == UserRole.revenueAccountant ? 'Doanh thu' : 'Ngân sách còn lại',
+                                currentRole == UserRole.revenueAccountant
+                                    ? 'Doanh thu'
+                                    : 'Ngân sách còn lại',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.grey.shade600,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -660,22 +832,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 style: TextStyle(
                                   color: remainingBudget < 0
                                       ? const Color(0xFFE11D48)
-                                      : (isDark ? const Color(0xFF00D09E) : const Color(0xFF059669)),
+                                      : (isDark
+                                            ? const Color(0xFF00D09E)
+                                            : const Color(0xFF059669)),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
                                 child: Divider(
-                                  color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade100,
+                                  color: isDark
+                                      ? Colors.white.withOpacity(0.1)
+                                      : Colors.grey.shade100,
                                   height: 1,
                                 ),
                               ),
                               Text(
-                                currentRole == UserRole.revenueAccountant ? 'KPI cần đạt mỗi tháng' : 'Chi trung bình/ngày',
+                                currentRole == UserRole.revenueAccountant
+                                    ? 'KPI cần đạt mỗi tháng'
+                                    : 'Chi trung bình/ngày',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.grey.shade600,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -684,9 +866,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               Text(
                                 currentRole == UserRole.revenueAccountant
                                     ? currencyFormatter.format(revenueKPI)
-                                    : currencyFormatter.format(monthlyExpenseSum / (DateTime.now().day > 0 ? DateTime.now().day : 1)),
+                                    : currencyFormatter.format(
+                                        monthlyExpenseSum /
+                                            (DateTime.now().day > 0
+                                                ? DateTime.now().day
+                                                : 1),
+                                      ),
                                 style: TextStyle(
-                                  color: currentRole == UserRole.revenueAccountant ? Colors.blueAccent : const Color(0xFFE11D48),
+                                  color:
+                                      currentRole == UserRole.revenueAccountant
+                                      ? Colors.blueAccent
+                                      : const Color(0xFFE11D48),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
@@ -699,26 +889,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ],
 
-                const SizedBox(height: 24),
-
-                // Filter selector (Daily, Weekly, Monthly)
-                Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF0C2C1F)
-                        : const Color(0xFFE8F6F1),
-                    borderRadius: BorderRadius.circular(16),
+                if (currentRole != UserRole.financeManager) ...[
+                  const SizedBox(height: 24),
+                  // Filter selector (Daily, Monthly, Yearly, Custom)
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF0C2C1F)
+                          : const Color(0xFFE8F6F1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildFilterTab(id: 'daily', label: 'Hàng ngày'),
+                        _buildFilterTab(id: 'monthly', label: 'Hàng tháng'),
+                        _buildFilterTab(id: 'yearly', label: 'Hàng năm'),
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      _buildFilterTab(id: 'daily', label: 'Hàng ngày'),
-                      _buildFilterTab(id: 'weekly', label: 'Hàng tuần'),
-                      _buildFilterTab(id: 'monthly', label: 'Hàng tháng'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 20),
+                ],
 
                 // Header for transaction list
                 Row(
@@ -797,22 +988,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     final cat = catMap[tx.categoryId];
                     final catName = cat?.name ?? 'Khác';
 
-                    IconData leadingIcon = cat?.type == 'income' ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+                    IconData leadingIcon = cat?.type == 'income'
+                        ? Icons.trending_up_rounded
+                        : Icons.trending_down_rounded;
                     if (cat?.iconCode != null && cat!.iconCode!.isNotEmpty) {
                       final code = int.tryParse(cat.iconCode!);
-                      if (code != null) leadingIcon = IconData(code, fontFamily: 'MaterialIcons');
+                      if (code != null)
+                        leadingIcon = IconData(
+                          code,
+                          fontFamily: 'MaterialIcons',
+                        );
                     }
-                    Color iconColor = cat?.colorHex != null ? Color(int.parse(cat!.colorHex!.replaceFirst('#', '0xFF'))) : (isIncome ? Colors.blue : Colors.red);
+                    Color iconColor = cat?.colorHex != null
+                        ? Color(
+                            int.parse(cat!.colorHex!.replaceFirst('#', '0xFF')),
+                          )
+                        : (isIncome ? Colors.blue : Colors.red);
                     Color iconBgColor = iconColor.withOpacity(0.15);
 
                     return ScaleOnTap(
                       onTap: () {
-                        if (currentRole.canEditTransactions) {
-                          context.push(
-                            '/transactions/form',
-                            extra: {'transactionId': tx.id},
-                          );
-                        }
+                        context.push(
+                          '/transactions/form',
+                          extra: {'transactionId': tx.id, 'readOnly': true},
+                        );
                       },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -856,7 +1055,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    tx.note ?? catName,
+                                    tx.title,
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
@@ -868,7 +1067,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   const SizedBox(height: 4),
                                   Wrap(
                                     spacing: 8,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
                                     children: [
                                       Text(
                                         '${timeFormatter.format(tx.transactionDate)} - ${dateFormatter.format(tx.transactionDate)}',
@@ -878,10 +1078,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         ),
                                       ),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: iconBgColor,
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Text(
                                           catName,
@@ -948,6 +1153,326 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               fontSize: 13,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderFilter() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF06150F) : const Color(0xFFE8F6F1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _buildFilterChip(id: 'all', label: 'Tất cả'),
+          _buildFilterChip(id: 'daily', label: 'Ngày'),
+          _buildFilterChip(id: 'monthly', label: 'Tháng'),
+          _buildFilterChip(id: 'yearly', label: 'Năm'),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: _showCustomDatePicker,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _timeFilter == 'custom'
+                    ? const Color(0xFF00D09E)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.calendar_today_rounded,
+                size: 16,
+                color: _timeFilter == 'custom'
+                    ? Colors.white
+                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({required String id, required String label}) {
+    final isSelected = _timeFilter == id;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _timeFilter = id),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF00D09E) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCustomDatePicker() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = const Color(0xFF00D09E);
+    final picked = await showDateRangePicker(
+      context: context,
+      locale: const Locale('vi', 'VN'),
+      initialDateRange:
+          _customDateRange ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 30)),
+            end: DateTime.now(),
+          ),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      builder: (context, child) => Theme(
+        data: ThemeData(
+          useMaterial3: true,
+          brightness: isDark ? Brightness.dark : Brightness.light,
+          colorScheme: isDark
+              ? ColorScheme.dark(
+                  primary: primaryColor,
+                  onPrimary: Colors.white,
+                  surface: const Color(0xFF0D251C),
+                  onSurface: Colors.white,
+                )
+              : ColorScheme.light(
+                  primary: primaryColor,
+                  onPrimary: Colors.white,
+                  surface: Colors.white,
+                  onSurface: const Color(0xFF1E293B),
+                ),
+          appBarTheme: AppBarTheme(
+            backgroundColor: isDark ? const Color(0xFF0C2C1F) : primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          textButtonTheme: TextButtonThemeData(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+          ),
+          datePickerTheme: DatePickerThemeData(
+            headerBackgroundColor: isDark
+                ? const Color(0xFF0C2C1F)
+                : primaryColor,
+            headerForegroundColor: Colors.white,
+            backgroundColor: isDark ? const Color(0xFF0D251C) : Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _customDateRange = picked;
+        _timeFilter = 'custom';
+      });
+    }
+  }
+
+  void _showCashFlowDetail(
+    BuildContext context,
+    String type,
+    List<TransactionEntity> txs,
+    List<CategoryEntity> allCats,
+    bool isDark,
+    NumberFormat fmt,
+  ) {
+    final catMap = {for (var c in allCats) c.id: c};
+    final filtered = type == 'net'
+        ? List<TransactionEntity>.from(txs)
+        : txs
+              .where(
+                (tx) =>
+                    tx.type ==
+                    (type == 'income'
+                        ? TransactionType.income
+                        : TransactionType.expense),
+              )
+              .toList();
+    filtered.sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+
+    final total = filtered.fold<int>(0, (s, tx) => s + tx.amount);
+    final title = type == 'net'
+        ? 'Dòng tiền thuần'
+        : type == 'income'
+        ? 'Tổng thu'
+        : 'Tổng chi';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(ctx).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0C2C1F) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark ? Colors.white10 : Colors.grey.shade200,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${fmt.format(total)} • ${filtered.length} giao dịch',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.white60 : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ScaleOnTap(
+                    onTap: () => Navigator.pop(ctx),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close_rounded, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Không có giao dịch nào',
+                        style: TextStyle(
+                          color: isDark ? Colors.white38 : Colors.grey,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) {
+                        final tx = filtered[i];
+                        final isInc = tx.type == TransactionType.income;
+                        final cat = catMap[tx.categoryId];
+                        return ScaleOnTap(
+                          onTap: () => context.push(
+                            '/transactions/form',
+                            extra: {'transactionId': tx.id, 'readOnly': true},
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF06150F)
+                                  : const Color(0xFFF4FAF7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor:
+                                      (isInc
+                                              ? const Color(0xFF00D09E)
+                                              : const Color(0xFFEF4444))
+                                          .withOpacity(0.15),
+                                  child: Icon(
+                                    isInc
+                                        ? Icons.arrow_upward_rounded
+                                        : Icons.arrow_downward_rounded,
+                                    color: isInc
+                                        ? const Color(0xFF00D09E)
+                                        : const Color(0xFFEF4444),
+                                    size: 16,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        tx.title,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                      if (cat != null)
+                                        Text(
+                                          cat.name,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? Colors.white38
+                                                : Colors.grey,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '${isInc ? '+' : '-'}${fmt.format(tx.amount)}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: isInc
+                                        ? const Color(0xFF059669)
+                                        : const Color(0xFFE11D48),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -1154,6 +1679,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     VoidCallback? onEdit,
   }) {
     final displayPct = percent.clamp(0, 100);
+    final curTarget = displayPct / 100.0;
+
     final usedFmt = currencyFormatter.format(used);
     final targetFmt = currencyFormatter.format(target);
     final isOver = remaining < 0;
@@ -1194,25 +1721,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '$usedFmt / $targetFmt',
-                textAlign: TextAlign.right,
+                label,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  fontSize: 12,
+                  color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$usedFmt / $targetFmt',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
             if (showEdit && onEdit != null) ...[
@@ -1225,7 +1753,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     color: fillColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.edit_square, size: 16, color: isDark ? Colors.white54 : fillColor),
+                  child: Icon(
+                    Icons.edit_square,
+                    size: 16,
+                    color: isDark ? Colors.white54 : fillColor,
+                  ),
                 ),
               ),
             ],
@@ -1233,6 +1765,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         const SizedBox(height: 10),
         Container(
+          width: double.infinity,
           height: 24,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
@@ -1241,40 +1774,56 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: displayPct / 100),
-              duration: const Duration(milliseconds: 800),
+              tween: Tween<double>(begin: 0.0, end: curTarget),
+              duration: const Duration(milliseconds: 1000),
               curve: Curves.easeOutCubic,
               builder: (context, value, _) => Stack(
+                fit: StackFit.expand,
                 children: [
-                  FractionallySizedBox(
-                    widthFactor: value,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isOver && overIsBad
-                              ? [const Color(0xFFE11D48), const Color(0xFFFB7185)]
-                              : isOver && !overIsBad
-                                  ? [const Color(0xFF059669), const Color(0xFF34D399)]
-                                  : [fillColor, fillColor.withValues(alpha: 0.7)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: value,
+                      heightFactor: 1.0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isOver && overIsBad
+                                ? [
+                                    const Color(0xFFE11D48),
+                                    const Color(0xFFFB7185),
+                                  ]
+                                : isOver && !overIsBad
+                                ? [
+                                    const Color(0xFF059669),
+                                    const Color(0xFF34D399),
+                                  ]
+                                : [fillColor, accentColor],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   if (percent > 0)
-                    Positioned.fill(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 12),
-                          child: Text(
-                            '$percent%',
-                            style: TextStyle(
-                              color: displayPct > 20 ? Colors.white : (isDark ? Colors.white54 : const Color(0xFF64748B)),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Text(
+                          '$percent%',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                          style: TextStyle(
+                            color: displayPct >= 12
+                                ? Colors.white
+                                : (isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B)),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
@@ -1322,7 +1871,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: isDark ? const Color(0xFF0C2C1F) : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text(
             label,
             style: TextStyle(
@@ -1337,27 +1888,46 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               TextField(
                 controller: controller,
                 keyboardType: TextInputType.number,
-                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
                 decoration: InputDecoration(
                   suffixText: '₫',
-                  suffixStyle: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF64748B)),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  suffixStyle: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF00D09E), width: 2),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF00D09E),
+                      width: 2,
+                    ),
                   ),
                   filled: true,
-                  fillColor: isDark ? const Color(0xFF06150F) : const Color(0xFFF1F5F9),
+                  fillColor: isDark
+                      ? const Color(0xFF06150F)
+                      : const Color(0xFFF1F5F9),
                 ),
                 onChanged: (_) {
                   final v = int.tryParse(controller.text);
-                  final err = (v != null && v > maxValue) ? 'Số tiền tối đa là 99.999.999.999₫' : null;
+                  final err = (v != null && v > maxValue)
+                      ? 'Số tiền tối đa là 99.999.999.999₫'
+                      : null;
                   setDialogState(() => error = err);
                 },
               ),
               if (error != null) ...[
                 const SizedBox(height: 8),
-                Text(error!, style: const TextStyle(color: Color(0xFFE11D48), fontSize: 11)),
+                Text(
+                  error!,
+                  style: const TextStyle(
+                    color: Color(0xFFE11D48),
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ],
           ),
@@ -1374,13 +1944,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   return;
                 }
                 if (v > maxValue) {
-                  setDialogState(() => error = 'Số tiền tối đa là 99.999.999.999₫');
+                  setDialogState(
+                    () => error = 'Số tiền tối đa là 99.999.999.999₫',
+                  );
                   return;
                 }
                 Navigator.pop(context, v);
               },
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF00D09E)),
-              child: const Text('Lưu', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF00D09E),
+              ),
+              child: const Text(
+                'Lưu',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -1390,13 +1967,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final user = ref.read(currentUserProvider);
       final company = user?.company;
       if (company == null || company.isEmpty) return;
-      final currentBudget = ref.read(companyBudgetLimitProvider).valueOrNull ?? 20000000;
-      final currentKpi = ref.read(companyRevenueKpiProvider).valueOrNull ?? 500000000;
+      final currentBudget =
+          ref.read(companyBudgetLimitProvider).valueOrNull ?? 20000000;
+      final currentKpi =
+          ref.read(companyRevenueKpiProvider).valueOrNull ?? 500000000;
 
-      await FirebaseFirestore.instance.collection('companySettings').doc(company).set({
-        'budgetLimit': label == 'Ngân sách tháng' ? result : currentBudget,
-        'revenueKpi': label == 'KPI doanh thu' ? result : currentKpi,
-      });
+      await FirebaseFirestore.instance
+          .collection('companySettings')
+          .doc(company)
+          .set({
+            'budgetLimit': label == 'Ngân sách hàng tháng' ? result : currentBudget,
+            'revenueKpi': label == 'KPI hàng tháng' ? result : currentKpi,
+          });
       ref.invalidate(companyBudgetLimitProvider);
       ref.invalidate(companyRevenueKpiProvider);
     }

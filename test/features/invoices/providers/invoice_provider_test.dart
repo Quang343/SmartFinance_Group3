@@ -20,7 +20,7 @@ InvoiceEntity _inv(String id) => InvoiceEntity(
       vatAmount: 10,
       totalAmount: 110,
       ocrStatus: OcrStatus.extracted,
-      paymentStatus: PaymentStatus.unpaid,
+      transactionStatus: InvoiceTransactionStatus.notCreated,
       issuedDate: DateTime(2026),
       createdAt: DateTime(2026),
       updatedAt: DateTime(2026),
@@ -41,7 +41,7 @@ void main() {
   tearDown(() => container.dispose());
 
   test('allInvoicesProvider trả toàn bộ', () async {
-    when(() => fake.getAll()).thenAnswer((_) async => [_inv('1'), _inv('2')]);
+    when(() => fake.watchAll()).thenAnswer((_) => Stream.value([_inv('1'), _inv('2')]));
     final r = await container.read(allInvoicesProvider.future);
     expect(r.length, 2);
   });

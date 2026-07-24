@@ -8,6 +8,8 @@ import 'package:smart_finance/core/providers/auth_provider.dart';
 import 'package:smart_finance/data/repositories/auth_repository.dart';
 import 'package:smart_finance/data/models/user_model.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_finance/core/providers/app_providers.dart';
 
 // --- Mocks ---
 class MockFirebaseAuth extends Mock implements FirebaseAuth {}
@@ -20,6 +22,7 @@ void main() {
   late MockAuthRepository mockAuthRepository;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     mockFirebaseAuth = MockFirebaseAuth();
     mockAuthRepository = MockAuthRepository();
   });
@@ -47,6 +50,7 @@ void main() {
       overrides: [
         firebaseAuthProvider.overrideWithValue(mockFirebaseAuth),
         authRepositoryProvider.overrideWithValue(mockAuthRepository),
+        sharedPreferencesProvider.overrideWith((ref) => throw UnimplementedError('Not used')),
       ],
       child: MaterialApp.router(
         routerConfig: router,

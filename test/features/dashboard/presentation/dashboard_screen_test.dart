@@ -11,16 +11,24 @@ import 'package:smart_finance/domain/entities/category_entity.dart';
 import 'package:smart_finance/features/dashboard/presentation/dashboard_screen.dart';
 
 import '../../../helpers/test_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('DashboardScreen Widget Tests', () {
     testWidgets('Expense Accountant sees Expense logic (Ngân sách còn lại)', (WidgetTester tester) async {
+      final prefs = await SharedPreferences.getInstance();
+      final mockTx = [TransactionEntity(id: '2', title: 'Test', amount: 2000000, type: TransactionType.expense, categoryId: 'c2', transactionDate: DateTime.now(), status: TransactionStatus.confirmed, createdAt: DateTime.now(), updatedAt: DateTime.now())];
       await tester.pumpWidget(createTestApp(
         const DashboardScreen(),
+        mockPrefs: prefs,
         overrides: [
           roleProvider.overrideWithValue(UserRole.expenseAccountant),
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
-          expenseTransactionsProvider.overrideWith((ref) => Future.value(<TransactionEntity>[])),
+          expenseTransactionsProvider.overrideWith((ref) => Future.value(mockTx)),
           allCategoriesProvider.overrideWith((ref) => Future.value(<CategoryEntity>[])),
         ],
       ));
@@ -33,8 +41,10 @@ void main() {
     });
 
     testWidgets('Revenue Accountant sees Revenue logic (Hạn mức chi tiêu)', (WidgetTester tester) async {
+      final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(createTestApp(
         const DashboardScreen(),
+        mockPrefs: prefs,
         overrides: [
           roleProvider.overrideWithValue(UserRole.revenueAccountant),
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
@@ -45,17 +55,21 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Hạn mức chi tiêu'), findsOneWidget);
+      expect(find.text('Hạn mức chi tiêu'), findsNothing);
+      expect(find.text('Ngân sách chi tiêu'), findsNothing);
       expect(find.textContaining('Doanh thu'), findsOneWidget);
       expect(find.text('Phân tích Ngân sách'), findsNothing);
     });
 
     testWidgets('Shows loading indicator when async value is loading', (WidgetTester tester) async {
+      final prefs = await SharedPreferences.getInstance();
       final transactionsCompleter = Completer<List<TransactionEntity>>();
       final categoriesCompleter = Completer<List<CategoryEntity>>();
+      final mockTx = [TransactionEntity(id: '1', title: 'Test', amount: 5000000, type: TransactionType.income, categoryId: 'c1', transactionDate: DateTime.now(), status: TransactionStatus.confirmed, createdAt: DateTime.now(), updatedAt: DateTime.now())];
 
       await tester.pumpWidget(createTestApp(
         const DashboardScreen(),
+        mockPrefs: prefs,
         overrides: [
           roleProvider.overrideWithValue(UserRole.expenseAccountant),
           transactionRepositoryProvider.overrideWithValue(FakeTransactionRepository()),
@@ -66,7 +80,7 @@ void main() {
 
       await tester.pump();
       
-      expect(find.byType(ClipOval), findsWidgets);
+      expect(find.text('Đang tải dữ liệu...'), findsOneWidget);
 
       transactionsCompleter.complete(<TransactionEntity>[]);
       categoriesCompleter.complete(<CategoryEntity>[]);

@@ -4,11 +4,15 @@ enum OcrStatus { notStarted, imageSelected, scanning, extracted, failed }
 
 enum InvoiceType { incoming, outgoing }
 
-enum PaymentStatus { unpaid, partiallyPaid, paid }
+enum InvoiceStatus { active, deleted }
+
+enum InvoiceTransactionStatus { notCreated, draftCreated, confirmedCreated }
 
 class InvoiceEntity {
   final String id;
   final String invoiceNumber;
+  final String? serialNumber;
+  final String? formNumber;
   
   // Seller (Đơn vị bán hàng)
   final String sellerName;
@@ -37,17 +41,20 @@ class InvoiceEntity {
   final String? imagePath;
   final OcrStatus ocrStatus;
   final double? ocrConfidence;
-  final PaymentStatus paymentStatus;
+  final InvoiceTransactionStatus transactionStatus;
   final DateTime issuedDate;
   final String createdByUid;
   final String company;
   final DateTime createdAt;
   final DateTime updatedAt;
   final InvoiceType type;
+  final InvoiceStatus status;
 
   const InvoiceEntity({
     required this.id,
     required this.invoiceNumber,
+    this.serialNumber,
+    this.formNumber,
     required this.sellerName,
     required this.sellerTaxCode,
     this.sellerAddress,
@@ -67,7 +74,7 @@ class InvoiceEntity {
     required this.vatAmount,
     required this.totalAmount,
     required this.ocrStatus,
-    required this.paymentStatus,
+    required this.transactionStatus,
     required this.issuedDate,
     this.createdByUid = '',
     this.company = '',
@@ -76,6 +83,6 @@ class InvoiceEntity {
     required this.type,
     this.imagePath,
     this.ocrConfidence,
+    this.status = InvoiceStatus.active,
   });
 }
-

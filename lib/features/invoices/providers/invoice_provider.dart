@@ -3,8 +3,8 @@ import '../../../core/providers/app_providers.dart';
 import '../../../domain/entities/invoice_entity.dart';
 import '../../../domain/entities/transaction_entity.dart';
 
-final allInvoicesProvider = FutureProvider.autoDispose<List<InvoiceEntity>>((ref) async {
-  return ref.watch(invoiceRepositoryProvider).getAll();
+final allInvoicesProvider = StreamProvider.autoDispose<List<InvoiceEntity>>((ref) {
+  return ref.watch(invoiceRepositoryProvider).watchAll();
 });
 
 final invoiceByIdProvider =

@@ -25,43 +25,104 @@ class CategoryRepositoryImpl implements CategoryRepository {
     return query.where('createdByUid', isEqualTo: _uid);
   }
 
+  Future<QuerySnapshot> _getWithCacheFallback(Query query) async {
+    try {
+      return await query.get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => query.get(const GetOptions(source: Source.cache)),
+      );
+    } catch (e) {
+      return await query.get(const GetOptions(source: Source.cache));
+    }
+  }
+
   @override
   Future<List<CategoryEntity>> getAll() async {
     if (_uid.isEmpty) return [];
-    final snapshot = await _scopeQuery(_collection).get();
-    return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    final snapshot = await _getWithCacheFallback(_scopeQuery(_collection));
+    final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    return list;
   }
 
   @override
   Future<List<CategoryEntity>> getActive() async {
     if (_uid.isEmpty) return [];
-    final snapshot = await _scopeQuery(_collection).where('isActive', isEqualTo: true).get();
-    return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    final snapshot = await _getWithCacheFallback(_scopeQuery(_collection).where('isActive', isEqualTo: true));
+    final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    return list;
   }
 
   @override
   Future<List<CategoryEntity>> getByType(TransactionType type) async {
     if (_uid.isEmpty) return [];
-    final snapshot = await _scopeQuery(_collection).where('type', isEqualTo: type.name).where('isActive', isEqualTo: true).get();
-    return snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    final snapshot = await _getWithCacheFallback(_scopeQuery(_collection).where('type', isEqualTo: type.name).where('isActive', isEqualTo: true));
+    final list = snapshot.docs.map((doc) => CategoryModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    list.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    return list;
   }
 
   @override
   Future<CategoryEntity?> getById(String id) async {
     if (_uid.isEmpty) return null;
-    final doc = await _collection.doc(id).get();
-    if (doc.exists) {
-      return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
+    try {
+      final doc = await _collection.doc(id).get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => _collection.doc(id).get(const GetOptions(source: Source.cache)),
+      );
+      if (doc.exists) {
+        return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
+      }
+    } catch (e) {
+      try {
+        final doc = await _collection.doc(id).get(const GetOptions(source: Source.cache));
+        if (doc.exists) {
+          return CategoryModel.fromJson(doc.data() as Map<String, dynamic>);
+        }
+      } catch (_) {}
     }
     return null;
+  }
+
+  String _validateAndNormalizeName(String name) {
+    if (name.trim().isEmpty) {
+      throw Exception('Tên danh mục không được để trống.');
+    }
+    final normalized = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.length > 100) {
+      throw Exception('Tên danh mục vượt quá độ dài cho phép.');
+    }
+    final alphanumeric = normalized.replaceAll(RegExp(r'[^a-zA-Z0-9\p{L}]', unicode: true), '');
+    if (alphanumeric.isEmpty) {
+      throw Exception('Tên danh mục không hợp lệ.');
+    }
+    return normalized;
+  }
+
+  Future<void> _checkNameUniqueness(String normalizedName, String type, String excludeId) async {
+    if (_uid.isEmpty) return;
+    final lowerName = normalizedName.toLowerCase();
+    final snapshot = await _scopeQuery(_collection).where('type', isEqualTo: type).get();
+    for (final doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final existingId = data['id'] as String? ?? doc.id;
+      if (existingId == excludeId) continue;
+      final existingName = (data['name'] as String? ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      if (existingName == lowerName) {
+        throw Exception('Tên danh mục "$normalizedName" đã tồn tại trong hệ thống!');
+      }
+    }
   }
 
   @override
   Future<void> create(CategoryEntity category) async {
     if (_uid.isEmpty) return;
+    final normalizedName = _validateAndNormalizeName(category.name);
+    await _checkNameUniqueness(normalizedName, category.type, category.id);
     final model = CategoryModel(
       id: category.id,
-      name: category.name,
+      name: normalizedName,
       type: category.type,
       iconCode: category.iconCode,
       colorHex: category.colorHex,
@@ -79,9 +140,11 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Future<void> update(CategoryEntity category) async {
     if (_uid.isEmpty) return;
+    final normalizedName = _validateAndNormalizeName(category.name);
+    await _checkNameUniqueness(normalizedName, category.type, category.id);
     final model = CategoryModel(
       id: category.id,
-      name: category.name,
+      name: normalizedName,
       type: category.type,
       iconCode: category.iconCode,
       colorHex: category.colorHex,
@@ -93,21 +156,50 @@ class CategoryRepositoryImpl implements CategoryRepository {
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     );
-    await _collection.doc(category.id).update(model.toJson());
+    try {
+      await _collection.doc(category.id).update(model.toJson());
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'not-found') throw Exception('Không tìm thấy danh mục.');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> updateOrder(List<CategoryEntity> categories) async {
+    if (_uid.isEmpty) return;
+    final batch = _firestore.batch();
+    for (final cat in categories) {
+      final docRef = _collection.doc(cat.id);
+      batch.update(docRef, {
+        'orderIndex': cat.orderIndex,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+    }
+    await batch.commit();
   }
 
   @override
   Future<void> deactivate(String id) async {
     if (_uid.isEmpty) return;
-    await _collection.doc(id).update({
-      'isActive': false,
-      'updatedAt': DateTime.now().toIso8601String(),
-    });
+    try {
+      await _collection.doc(id).update({
+        'isActive': false,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'not-found') throw Exception('Không tìm thấy danh mục.');
+      rethrow;
+    }
   }
 
   @override
   Future<void> delete(String id) async {
     if (_uid.isEmpty) return;
-    await _collection.doc(id).delete();
+    try {
+      await _collection.doc(id).delete();
+    } on FirebaseException catch (e) {
+      if (e.code == 'not-found') throw Exception('Không tìm thấy danh mục.');
+      rethrow;
+    }
   }
 }

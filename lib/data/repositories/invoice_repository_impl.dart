@@ -14,41 +14,81 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
 
   String get _uid => _currentUser?.id ?? _auth.currentUser?.uid ?? '';
   String get _company => _currentUser?.company ?? '';
-  String get _role => _currentUser?.role ?? '';
   CollectionReference get _collection => _firestore.collection('invoices');
+
+  Future<QuerySnapshot> _getWithCacheFallback(Query query) async {
+    try {
+      return await query.get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => query.get(const GetOptions(source: Source.cache)),
+      );
+    } catch (e) {
+      return await query.get(const GetOptions(source: Source.cache));
+    }
+  }
 
   @override
   Future<List<InvoiceEntity>> getAll() async {
     if (_uid.isEmpty) return [];
-    Query query = _collection;
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
-    final snapshot = await query.get();
-    return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    Query query = _collection.where('company', isEqualTo: _company);
+    final snapshot = await _getWithCacheFallback(query);
+    return snapshot.docs
+        .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Stream<List<InvoiceEntity>> watchAll() {
+    if (_uid.isEmpty) return Stream.value([]);
+    return _collection
+        .where('company', isEqualTo: _company)
+        .snapshots(includeMetadataChanges: true)
+        .map((snapshot) => snapshot.docs
+            .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+            .toList());
+  }
+
+  Future<List<InvoiceEntity>> getDeletedInvoices() async {
+    if (_uid.isEmpty) return [];
+    Query query = _collection.where('company', isEqualTo: _company);
+    final snapshot = await _getWithCacheFallback(query);
+    return snapshot.docs
+        .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+        .where((invoice) => invoice.status == InvoiceStatus.deleted)
+        .toList();
   }
 
   @override
   Future<List<InvoiceEntity>> getByOcrStatus(OcrStatus status) async {
     if (_uid.isEmpty) return [];
-    Query query = _collection.where('ocrStatus', isEqualTo: status.name);
-    if (_role == 'financeManager') {
-      query = query.where('company', isEqualTo: _company);
-    } else {
-      query = query.where('createdByUid', isEqualTo: _uid);
-    }
-    final snapshot = await query.get();
-    return snapshot.docs.map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+    Query query = _collection
+        .where('company', isEqualTo: _company)
+        .where('ocrStatus', isEqualTo: status.name);
+    final snapshot = await _getWithCacheFallback(query);
+    return snapshot.docs
+        .map((doc) => InvoiceModel.fromJson(doc.data() as Map<String, dynamic>))
+        .where((invoice) => invoice.status == InvoiceStatus.active)
+        .toList();
   }
 
   @override
   Future<InvoiceEntity?> getById(String id) async {
     if (_uid.isEmpty) return null;
-    final doc = await _collection.doc(id).get();
-    if (doc.exists) {
-      return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+    try {
+      final doc = await _collection.doc(id).get().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => _collection.doc(id).get(const GetOptions(source: Source.cache)),
+      );
+      if (doc.exists) {
+        return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+      }
+    } catch (e) {
+      try {
+        final doc = await _collection.doc(id).get(const GetOptions(source: Source.cache));
+        if (doc.exists) {
+          return InvoiceModel.fromJson(doc.data() as Map<String, dynamic>);
+        }
+      } catch (_) {}
     }
     return null;
   }
@@ -59,6 +99,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     final model = InvoiceModel(
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      formNumber: invoice.formNumber,
+      serialNumber: invoice.serialNumber,
       sellerName: invoice.sellerName,
       sellerTaxCode: invoice.sellerTaxCode,
       sellerAddress: invoice.sellerAddress,
@@ -78,7 +120,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       vatAmount: invoice.vatAmount,
       totalAmount: invoice.totalAmount,
       ocrStatus: invoice.ocrStatus,
-      paymentStatus: invoice.paymentStatus,
+      transactionStatus: invoice.transactionStatus,
       issuedDate: invoice.issuedDate,
       createdByUid: _uid,
       company: _company,
@@ -97,6 +139,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     final model = InvoiceModel(
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      formNumber: invoice.formNumber,
+      serialNumber: invoice.serialNumber,
       sellerName: invoice.sellerName,
       sellerTaxCode: invoice.sellerTaxCode,
       sellerAddress: invoice.sellerAddress,
@@ -116,7 +160,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       vatAmount: invoice.vatAmount,
       totalAmount: invoice.totalAmount,
       ocrStatus: invoice.ocrStatus,
-      paymentStatus: invoice.paymentStatus,
+      transactionStatus: invoice.transactionStatus,
       issuedDate: invoice.issuedDate,
       createdByUid: invoice.createdByUid.isNotEmpty ? invoice.createdByUid : _uid,
       company: invoice.company.isNotEmpty ? invoice.company : _company,
@@ -133,5 +177,67 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<void> delete(String id) async {
     if (_uid.isEmpty) return;
     await _collection.doc(id).delete();
+  }
+
+  @override
+  Future<void> softDelete(String id) async {
+    if (_uid.isEmpty) return;
+    await _collection.doc(id).update({
+      'status': InvoiceStatus.deleted.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  @override
+  Future<void> restore(String id) async {
+    if (_uid.isEmpty) return;
+    await _collection.doc(id).update({
+      'status': InvoiceStatus.active.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  @override
+  Future<void> updateTransactionStatus(String id, InvoiceTransactionStatus status) async {
+    if (_uid.isEmpty) return;
+    await _collection.doc(id).update({
+      'transactionStatus': status.name,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  @override
+  Future<int> getNextSequentialId(InvoiceType type) async {
+    if (_uid.isEmpty) return 1;
+    // Để tối ưu, ta có thể query tất cả hóa đơn theo type và đếm số lượng
+    // Lấy count() của Firestore (hoặc query length)
+    try {
+      final AggregateQuerySnapshot snapshot = await _collection
+          .where('company', isEqualTo: _company)
+          .where('type', isEqualTo: type.name)
+          .count()
+          .get();
+      return (snapshot.count ?? 0) + 1;
+    } catch (e) {
+      // Fallback nếu count() bị lỗi
+      final snapshot = await _collection
+          .where('company', isEqualTo: _company)
+          .where('type', isEqualTo: type.name)
+          .get();
+      return snapshot.docs.length + 1;
+    }
+  }
+
+  @override
+  Future<bool> checkInvoiceExists(String sellerTaxCode, String formNumber, String serialNumber, String invoiceNumber) async {
+    if (_uid.isEmpty) return false;
+    // Check if the unique composite key exists
+    final snapshot = await _collection
+        .where('company', isEqualTo: _company)
+        .where('invoiceNumber', isEqualTo: invoiceNumber)
+        .limit(1)
+        .get();
+    
+    return snapshot.docs.isNotEmpty;
   }
 }

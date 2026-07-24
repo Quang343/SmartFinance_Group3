@@ -5,6 +5,8 @@ class InvoiceModel extends InvoiceEntity {
   const InvoiceModel({
     required super.id,
     required super.invoiceNumber,
+    super.serialNumber,
+    super.formNumber,
     required super.sellerName,
     required super.sellerTaxCode,
     super.sellerAddress,
@@ -24,7 +26,7 @@ class InvoiceModel extends InvoiceEntity {
     required super.vatAmount,
     required super.totalAmount,
     required super.ocrStatus,
-    required super.paymentStatus,
+    required super.transactionStatus,
     required super.issuedDate,
     super.createdByUid,
     super.company,
@@ -33,12 +35,15 @@ class InvoiceModel extends InvoiceEntity {
     required super.type,
     super.imagePath,
     super.ocrConfidence,
+    super.status = InvoiceStatus.active,
   });
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     return InvoiceModel(
       id: json['id'] as String? ?? '',
       invoiceNumber: json['invoiceNumber'] as String? ?? '',
+      serialNumber: json['serialNumber'] as String?,
+      formNumber: json['formNumber'] as String?,
       sellerName: json['sellerName'] as String? ?? '',
       sellerTaxCode: json['sellerTaxCode'] as String? ?? '',
       sellerAddress: json['sellerAddress'] as String?,
@@ -66,10 +71,14 @@ class InvoiceModel extends InvoiceEntity {
         orElse: () => OcrStatus.notStarted,
       ),
       ocrConfidence: (json['ocrConfidence'] as num?)?.toDouble(),
-      paymentStatus: PaymentStatus.values.firstWhere(
-        (e) => e.name == json['paymentStatus'],
-        orElse: () => PaymentStatus.unpaid,
-      ),
+      transactionStatus: () {
+        final ts = json['transactionStatus'] as String?;
+        if (ts == 'created') return InvoiceTransactionStatus.confirmedCreated;
+        return InvoiceTransactionStatus.values.firstWhere(
+          (e) => e.name == ts,
+          orElse: () => InvoiceTransactionStatus.notCreated,
+        );
+      }(),
       issuedDate: json['issuedDate'] != null
           ? DateTime.parse(json['issuedDate'] as String)
           : DateTime.now(),
@@ -85,6 +94,10 @@ class InvoiceModel extends InvoiceEntity {
         (e) => e.name == json['type'],
         orElse: () => InvoiceType.incoming,
       ),
+      status: InvoiceStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+        orElse: () => InvoiceStatus.active,
+      ),
     );
   }
 
@@ -92,6 +105,8 @@ class InvoiceModel extends InvoiceEntity {
     return {
       'id': id,
       'invoiceNumber': invoiceNumber,
+      'serialNumber': serialNumber,
+      'formNumber': formNumber,
       'sellerName': sellerName,
       'sellerTaxCode': sellerTaxCode,
       'sellerAddress': sellerAddress,
@@ -113,13 +128,14 @@ class InvoiceModel extends InvoiceEntity {
       'imagePath': imagePath,
       'ocrStatus': ocrStatus.name,
       'ocrConfidence': ocrConfidence,
-      'paymentStatus': paymentStatus.name,
+      'transactionStatus': transactionStatus.name,
       'issuedDate': issuedDate.toIso8601String(),
       'createdByUid': createdByUid,
       'company': company,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'type': type.name,
+      'status': status.name,
     };
   }
 }
