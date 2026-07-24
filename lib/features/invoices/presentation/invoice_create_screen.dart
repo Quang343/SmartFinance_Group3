@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,8 @@ import 'package:collection/collection.dart';
 import 'package:smart_finance/core/sync/sync_item.dart';
 import 'package:smart_finance/data/models/invoice_model.dart';
 import '../providers/invoice_provider.dart';
+import 'package:smart_finance/core/utils/money_formatter.dart';
+import 'package:smart_finance/core/utils/number_to_text.dart';
 class _ItemFormState {
   final TextEditingController nameController;
   final TextEditingController unitController;
@@ -28,9 +31,9 @@ class _ItemFormState {
       : nameController = TextEditingController(text: name),
         unitController = TextEditingController(text: unit),
         quantityController = TextEditingController(text: quantity.toString()),
-        priceController = TextEditingController(text: price > 0 ? price.toString() : '');
+        priceController = TextEditingController(text: price > 0 ? NumberFormat.decimalPattern('vi_VN').format(price) : '');
 
-  int get amount => (int.tryParse(quantityController.text) ?? 0) * (int.tryParse(priceController.text) ?? 0);
+  int get amount => (int.tryParse(quantityController.text) ?? 0) * (int.tryParse(priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0);
 
   void dispose() {
     nameController.dispose();
@@ -1047,13 +1050,50 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                             child: TextFormField(
                               controller: item.quantityController,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(5),
+                              ],
                               style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
-                              decoration: _buildInputDeco('Số lượng', null, isDark, primaryColor, inputFillColor, inputBorderColor),
+                              decoration: _buildInputDeco('Số lượng', null, isDark, primaryColor, inputFillColor, inputBorderColor).copyWith(
+                                suffixIcon: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        int current = int.tryParse(item.quantityController.text) ?? 1;
+                                        if (current > 1) {
+                                          item.quantityController.text = (current - 1).toString();
+                                          setState(() {});
+                                        }
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                        child: Icon(Icons.remove_circle_outline, size: 20, color: Color(0xFF00D09E)),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () {
+                                        int current = int.tryParse(item.quantityController.text) ?? 1;
+                                        if (current < 99999) {
+                                          item.quantityController.text = (current + 1).toString();
+                                          setState(() {});
+                                        }
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                        child: Icon(Icons.add_circle_outline, size: 20, color: Color(0xFF00D09E)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                ),
+                              ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) return 'Bắt buộc';
                                 final numVal = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
                                 if (numVal == null || numVal <= 0) return 'Không hợp lệ';
-                                if (numVal > 99999999) return 'Quá lớn';
+                                if (numVal > 99999) return 'Quá lớn';
                                 return null;
                               },
                               onChanged: (_) => setState(() {}),
@@ -1065,6 +1105,10 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                       TextFormField(
                         controller: item.priceController,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          CurrencyInputFormatter(),
+                          LengthLimitingTextInputFormatter(19),
+                        ],
                         style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black87),
                         decoration: _buildInputDeco('Đơn giá (VND)', Icons.attach_money_outlined, isDark, primaryColor, inputFillColor, inputBorderColor),
                         validator: (value) {
@@ -1076,13 +1120,31 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                         },
                         onChanged: (_) => setState(() {}),
                       ),
+                      if (item.priceController.text.isNotEmpty && (int.tryParse(item.priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0) > 0) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 4.0),
+                            child: Text(
+                              NumberToText.convert(int.tryParse(item.priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0),
+                              style: const TextStyle(
+                                color: Color(0xFF00D09E),
+                                fontStyle: FontStyle.italic,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       if (item.amount > 0) ...[
                         const SizedBox(height: 12),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Thành tiền:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                            Text('${item.amount} VND', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text('${NumberFormat.currency(locale: 'vi_VN', symbol: '').format(item.amount).trim()} VND', style: const TextStyle(fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ]
@@ -1170,6 +1232,21 @@ class _InvoiceCreateScreenState extends ConsumerState<InvoiceCreateScreen> {
                         ),
                       ],
                     ),
+                    if (_totalAmount > 0) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          NumberToText.convert(_totalAmount),
+                          style: const TextStyle(
+                            color: Color(0xFF00D09E),
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
