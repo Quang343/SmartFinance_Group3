@@ -52,6 +52,7 @@ void main() {
       createdAt: DateTime(2023),
       updatedAt: DateTime(2023),
     ));
+    registerFallbackValue(const GetOptions());
   });
 
   setUp(() {
@@ -298,7 +299,7 @@ void main() {
       final mockQuery1 = MockQuery();
       final mockQuerySnapshot = MockQuerySnapshot();
       when(() => mockCollection.where('createdByUid', isEqualTo: any(named: 'isEqualTo'))).thenReturn(mockQuery1);
-      when(() => mockQuery1.get()).thenAnswer((_) async => mockQuerySnapshot);
+      when(() => mockQuery1.get(any())).thenAnswer((_) async => mockQuerySnapshot);
       final mockDoc = MockQueryDocumentSnapshot();
       when(() => mockDoc.data()).thenReturn({'id': '1', 'name': 'A', 'type': 'expense'});
       when(() => mockDoc.id).thenReturn('1');
@@ -314,7 +315,7 @@ void main() {
       final mockQuery1 = MockQuery();
       final mockQuerySnapshot = MockQuerySnapshot();
       when(() => mockCollection.where('createdByUid', isEqualTo: any(named: 'isEqualTo'))).thenReturn(mockQuery1);
-      when(() => mockQuery1.get()).thenAnswer((_) async => mockQuerySnapshot);
+      when(() => mockQuery1.get(any())).thenAnswer((_) async => mockQuerySnapshot);
       when(() => mockQuerySnapshot.docs).thenReturn([]);
 
       final result = await repository.getAll();
@@ -328,7 +329,7 @@ void main() {
       final mockQuerySnapshot = MockQuerySnapshot();
       when(() => mockCollection.where('createdByUid', isEqualTo: any(named: 'isEqualTo'))).thenReturn(mockQuery1);
       when(() => mockQuery1.where('isActive', isEqualTo: true)).thenReturn(mockQuery2);
-      when(() => mockQuery2.get()).thenAnswer((_) async => mockQuerySnapshot);
+      when(() => mockQuery2.get(any())).thenAnswer((_) async => mockQuerySnapshot);
       final mockDoc = MockQueryDocumentSnapshot();
       when(() => mockDoc.data()).thenReturn({'id': '1', 'name': 'A', 'type': 'expense', 'isActive': true});
       when(() => mockDoc.id).thenReturn('1');
